@@ -39,6 +39,8 @@ app = FastAPI(
     redoc_url="/redoc",
     openapi_url="/openapi.json",
     lifespan=lifespan,
+    swagger_ui_parameters={"syntaxHighlight.theme": "monokai"},
+    redoc_js_url="https://cdn.jsdelivr.net/npm/redoc@latest/bundles/redoc.standalone.js",
     contact={
         "name": "B3 DateTime API",
         "url": "https://github.com/rlquilez/b3datetime"
