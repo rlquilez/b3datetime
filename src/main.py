@@ -37,6 +37,7 @@ app = FastAPI(
     title=settings.api_title,
     description=settings.api_description,
     version=settings.api_version,
+    root_path=settings.root_path,  # Para gerar paths corretos na documentação
     docs_url=None,  # Desabilitar docs padrão (vamos customizar)
     redoc_url=None,  # Desabilitar rota padrão do Redoc
     openapi_url="/openapi.json",  # Manter absoluto para o próprio FastAPI

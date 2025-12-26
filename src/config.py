@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     * **Timezone**: Todos os horários e datas utilizam timezone America/Sao_Paulo
     """
     api_version: str = "1.0.0"
+    root_path: str = os.getenv("ROOT_PATH", "")  # Ex: /b3datetime para proxy reverso
     
     class Config:
         env_file = ".env"
