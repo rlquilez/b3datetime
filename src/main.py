@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 
 from src.config import settings
 from src.routers import hours, dates, health
@@ -36,11 +37,10 @@ app = FastAPI(
     description=settings.api_description,
     version=settings.api_version,
     docs_url="/docs",
-    redoc_url="/redoc",
+    redoc_url=None,  # Desabilitar rota padrão do Redoc
     openapi_url="/openapi.json",
     lifespan=lifespan,
     swagger_ui_parameters={"syntaxHighlight.theme": "monokai"},
-    redoc_js_url="https://cdn.jsdelivr.net/npm/redoc@latest/bundles/redoc.standalone.js",
     contact={
         "name": "B3 DateTime API",
         "url": "https://github.com/rlquilez/b3datetime"
@@ -64,6 +64,32 @@ app.add_middleware(
 app.include_router(hours.router)
 app.include_router(dates.router)
 app.include_router(health.router)
+
+
+@app.get("/redoc", response_class=HTMLResponse, include_in_schema=False)
+async def redoc_html():
+    """Serve Redoc documentation locally without CDN."""
+    return f"""
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>{settings.api_title} - ReDoc</title>
+        <meta charset="utf-8"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link href="https://fonts.googleapis.com/css?family=Montserrat:300,400,700|Roboto:300,400,700" rel="stylesheet">
+        <style>
+          body {{
+            margin: 0;
+            padding: 0;
+          }}
+        </style>
+      </head>
+      <body>
+        <redoc spec-url="/openapi.json"></redoc>
+        <script src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"></script>
+      </body>
+    </html>
+    """
 
 
 @app.get(
