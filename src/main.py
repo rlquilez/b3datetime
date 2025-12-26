@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
+from fastapi.openapi.docs import get_swagger_ui_html
 
 from src.config import settings
 from src.routers import hours, dates, health
@@ -36,9 +37,9 @@ app = FastAPI(
     title=settings.api_title,
     description=settings.api_description,
     version=settings.api_version,
-    docs_url="/docs",
+    docs_url=None,  # Desabilitar docs padrão (vamos customizar)
     redoc_url=None,  # Desabilitar rota padrão do Redoc
-    openapi_url="./openapi.json",
+    openapi_url="/openapi.json",  # Manter absoluto para o próprio FastAPI
     lifespan=lifespan,
     swagger_ui_parameters={"syntaxHighlight.theme": "monokai"},
     contact={
@@ -64,6 +65,16 @@ app.add_middleware(
 app.include_router(hours.router)
 app.include_router(dates.router)
 app.include_router(health.router)
+
+
+@app.get("/docs", include_in_schema=False)
+async def custom_swagger_ui_html():
+    """Swagger UI com caminho relativo para openapi.json"""
+    return get_swagger_ui_html(
+        openapi_url="./openapi.json",  # Caminho relativo!
+        title=f"{settings.api_title} - Swagger UI",
+        swagger_ui_parameters={"syntaxHighlight.theme": "monokai"}
+    )
 
 
 @app.get("/redoc", response_class=HTMLResponse, include_in_schema=False)
