@@ -381,10 +381,11 @@ A aplicação possui pipeline automático via GitHub Actions:
 - `GIT_OWNER` - Owner/organização
 - `GIT_REGISTRY_USER` - Usuário do registry
 - `GIT_REGISTRY_PASSWORD` - Token/senha do registry
-
 ## 📄 Licença
 
-MIT
+Este projeto está sob a licença MIT - veja o arquivo [LICENSE](LICENSE) para mais detalhes.
+
+Você é livre para usar, copiar, modificar e distribuir este software para qualquer finalidade, incluindo uso comercial, desde que mantenha o aviso de copyright e a licença.
 
 ## 👤 Autor
 
