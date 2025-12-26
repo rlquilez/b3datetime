@@ -38,7 +38,7 @@ app = FastAPI(
     version=settings.api_version,
     docs_url="/docs",
     redoc_url=None,  # Desabilitar rota padrão do Redoc
-    openapi_url="/openapi.json",
+    openapi_url="./openapi.json",
     lifespan=lifespan,
     swagger_ui_parameters={"syntaxHighlight.theme": "monokai"},
     contact={
@@ -85,7 +85,7 @@ async def redoc_html():
         </style>
       </head>
       <body>
-        <redoc spec-url="/openapi.json"></redoc>
+        <redoc spec-url="./openapi.json"></redoc>
         <script src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"></script>
       </body>
     </html>
