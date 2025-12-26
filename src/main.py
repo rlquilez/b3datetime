@@ -107,7 +107,7 @@ async def root():
         "docs": {
             "swagger": "/docs",
             "redoc": "/redoc",
-            "openapi": "/openapi.json"
+            "openapi": "./openapi.json"
         },
         "endpoints": {
             "hours": {
