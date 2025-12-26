@@ -1,0 +1,49 @@
+<svg width="512" height="512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="iconGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1e40af;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:1" />
+    </linearGradient>
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="512" height="512" fill="#0f172a" rx="64"/>
+  
+  <!-- Main clock circle with gradient -->
+  <circle cx="256" cy="256" r="180" fill="url(#iconGradient)" filter="url(#shadow)"/>
+  
+  <!-- Clock face markers -->
+  <g stroke="white" stroke-width="8" stroke-linecap="round" opacity="0.3">
+    <!-- 12 o'clock -->
+    <line x1="256" y1="96" x2="256" y2="116"/>
+    <!-- 3 o'clock -->
+    <line x1="416" y1="256" x2="396" y2="256"/>
+    <!-- 6 o'clock -->
+    <line x1="256" y1="416" x2="256" y2="396"/>
+    <!-- 9 o'clock -->
+    <line x1="96" y1="256" x2="116" y2="256"/>
+  </g>
+  
+  <!-- Clock hands -->
+  <!-- Hour hand (pointing up-right) -->
+  <line x1="256" y1="256" x2="256" y2="160" stroke="white" stroke-width="16" stroke-linecap="round"/>
+  <!-- Minute hand (pointing right) -->
+  <line x1="256" y1="256" x2="340" y2="256" stroke="white" stroke-width="12" stroke-linecap="round"/>
+  
+  <!-- Center dot -->
+  <circle cx="256" cy="256" r="16" fill="white"/>
+  
+  <!-- B3 text -->
+  <text x="256" y="340" font-family="Arial, sans-serif" font-size="80" font-weight="bold" fill="white" text-anchor="middle">
+    B3
+  </text>
+  
+  <!-- Decorative corner accents -->
+  <circle cx="80" cy="80" r="8" fill="#3b82f6" opacity="0.5"/>
+  <circle cx="432" cy="80" r="8" fill="#60a5fa" opacity="0.5"/>
+  <circle cx="80" cy="432" r="8" fill="#60a5fa" opacity="0.5"/>
+  <circle cx="432" cy="432" r="8" fill="#3b82f6" opacity="0.5"/>
+</svg>
