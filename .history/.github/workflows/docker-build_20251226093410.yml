@@ -1,0 +1,53 @@
+name: Build and Push B3 DateTime Docker Image
+
+on:
+  push:
+    branches:
+      - main
+      - proxima
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    env:
+      RUNNER_TOOL_CACHE: /toolcache
+    
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Gerar metadados da imagem (tags e labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          # Nome base da imagem (inclui registry e owner)
+          images: |
+            ${{ secrets.GIT_REGISTRY }}/${{ secrets.GIT_OWNER }}/b3datetime
+          tags: |
+            type=raw,value=latest
+            type=sha,format=short
+            type=ref,event=branch
+
+      - name: Login no Container Registry
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.GIT_REGISTRY_USER }}
+          password: ${{ secrets.GIT_REGISTRY_PASSWORD }}
+          registry: ${{ secrets.GIT_REGISTRY }}
+
+      - name: Habilitar QEMU (multi-arquitetura)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Configurar Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Construir e enviar imagem multi-arch (amd64, arm64)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
