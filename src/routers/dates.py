@@ -17,7 +17,11 @@ router = APIRouter(
 
 # Inicializa o calendário BVMF (B3)
 try:
-    bvmf_calendar = xcals.get_calendar(settings.exchange_name)
+    bvmf_calendar = xcals.get_calendar(
+        settings.exchange_name,
+        start=f"{settings.min_date_year}-01-01",
+        end="2099-12-31",
+    )
 except Exception as e:
     raise RuntimeError(f"Erro ao carregar calendário {settings.exchange_name}: {e}")
 
