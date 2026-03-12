@@ -20,8 +20,6 @@ router = APIRouter(
 try:
     _today = pd.Timestamp.now(tz="America/Sao_Paulo").normalize().tz_localize(None)
     _start = _today - pd.DateOffset(years=10)
-    # Limpa cache para garantir que start/end sejam respeitados
-    xcals.clear_calendars()
     bvmf_calendar = xcals.get_calendar(
         settings.exchange_name,
         start=_start,
