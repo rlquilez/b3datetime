@@ -192,15 +192,12 @@ async def get_trading_days(
             detail="Data final deve ser >= data inicial"
         )
     
-    # Obtém schedule do calendário
-    try:
-        schedule = bvmf_calendar.sessions_in_range(start_date, end_date)
-        trading_days = [day.date() for day in schedule]
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Erro ao consultar calendário: {e}"
-        )
+    # Obtém schedule do calendário via DatetimeIndex (evita parse_date/DateOutOfBounds)
+    start_ts = pd.Timestamp(start_date)
+    end_ts = pd.Timestamp(end_date)
+    sessions = bvmf_calendar.sessions
+    mask = (sessions >= start_ts) & (sessions <= end_ts)
+    trading_days = [ts.date() for ts in sessions[mask]]
     
     # Se exclude=True, retorna dias que NÃO são de negociação
     if exclude:
