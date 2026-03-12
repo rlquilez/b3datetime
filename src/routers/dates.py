@@ -18,13 +18,10 @@ router = APIRouter(
 
 # Inicializa o calendário BVMF (B3)
 try:
-    _today = pd.Timestamp.now(tz="America/Sao_Paulo").normalize().tz_localize(None)
-    _start = _today - pd.DateOffset(years=10)
+    _start = pd.Timestamp.now(tz="America/Sao_Paulo").normalize().tz_localize(None) - pd.DateOffset(years=10)
     bvmf_calendar = xcals.get_calendar(
         settings.exchange_name,
         start=_start,
-        end=_today,
-        side="both",
     )
 except Exception as e:
     raise RuntimeError(f"Erro ao carregar calendário {settings.exchange_name}: {e}")
@@ -80,15 +77,7 @@ async def is_trading_day():
     """Verifica se hoje é dia de negociação na B3."""
     today = get_current_datetime().date()
     today_ts = pd.Timestamp(today)
-
-    if today_ts < bvmf_calendar.first_session or today_ts > bvmf_calendar.last_session:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Data {today.isoformat()} fora do range do calendário "
-                   f"({bvmf_calendar.first_session.date()} a {bvmf_calendar.last_session.date()})"
-        )
-
-    is_open = bvmf_calendar.is_session(today_ts)
+    is_open = today_ts in bvmf_calendar.sessions
 
     return TradingDayResponse(
         date=today.isoformat(),
