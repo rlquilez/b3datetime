@@ -5,6 +5,7 @@ from datetime import date, datetime, timedelta
 from typing import List, Optional
 
 import exchange_calendars as xcals
+import pandas as pd
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
@@ -17,11 +18,15 @@ router = APIRouter(
 
 # Inicializa o calendário BVMF (B3)
 try:
-    _today = date.today()
+    _today = pd.Timestamp.now(tz="America/Sao_Paulo").normalize().tz_localize(None)
+    _start = _today - pd.DateOffset(years=10)
+    # Limpa cache para garantir que start/end sejam respeitados
+    xcals.clear_calendars()
     bvmf_calendar = xcals.get_calendar(
         settings.exchange_name,
-        start=(_today - timedelta(days=365 * 10)).isoformat(),
-        end=_today.isoformat(),
+        start=_start,
+        end=_today,
+        side="both",
     )
 except Exception as e:
     raise RuntimeError(f"Erro ao carregar calendário {settings.exchange_name}: {e}")
@@ -76,8 +81,17 @@ class TradingDayResponse(BaseModel):
 async def is_trading_day():
     """Verifica se hoje é dia de negociação na B3."""
     today = get_current_datetime().date()
-    is_open = bvmf_calendar.is_session(today)
-    
+    today_ts = pd.Timestamp(today)
+
+    if today_ts < bvmf_calendar.first_session or today_ts > bvmf_calendar.last_session:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Data {today.isoformat()} fora do range do calendário "
+                   f"({bvmf_calendar.first_session.date()} a {bvmf_calendar.last_session.date()})"
+        )
+
+    is_open = bvmf_calendar.is_session(today_ts)
+
     return TradingDayResponse(
         date=today.isoformat(),
         is_trading_day=is_open
