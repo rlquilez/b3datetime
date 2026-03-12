@@ -1,7 +1,7 @@
 """
 Router para endpoints de dias de negociação da B3.
 """
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import List, Optional
 
 import exchange_calendars as xcals
@@ -17,10 +17,11 @@ router = APIRouter(
 
 # Inicializa o calendário BVMF (B3)
 try:
+    _today = date.today()
     bvmf_calendar = xcals.get_calendar(
         settings.exchange_name,
-        start=f"{settings.min_date_year}-01-01",
-        end="2099-12-31",
+        start=(_today - timedelta(days=365 * 10)).isoformat(),
+        end=_today.isoformat(),
     )
 except Exception as e:
     raise RuntimeError(f"Erro ao carregar calendário {settings.exchange_name}: {e}")
