@@ -14,12 +14,37 @@ RUN pip install --no-cache-dir --user -r requirements.txt
 # Stage 2: runtime
 FROM python:3.11-slim
 
+# Patches de segurança do sistema disponíveis no momento do build. A imagem base
+# costuma ficar atrás dos repositórios Debian (ex.: CVE-2026-53615 na família
+# util-linux), e sem este passo o Trivy reprova o build por vulnerabilidade
+# herdada e já corrigida upstream.
+RUN apt-get update && \
+    apt-get upgrade -y --no-install-recommends && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
 # Usuário sem privilégios. O container rodava como root, o que o Trivy sinaliza
 # como misconfiguração e amplia o impacto de qualquer execução indevida de código.
 RUN groupadd --system --gid 1001 app && \
     useradd --system --uid 1001 --gid app --create-home --home-dir /home/app app
 
 WORKDIR /app
+
+# Remove o ferramental de build da imagem de runtime. pip, setuptools e wheel não
+# são usados em execução — o uvicorn e as dependências vêm de /home/app/.local — e
+# são fonte recorrente de CVE de severidade alta herdada da imagem base
+# (CVE-2026-24049 em wheel e CVE-2026-23949 em jaraco.context, ambas apontadas
+# pelo Trivy). Removê-los resolve a classe do problema em vez de perseguir versão,
+# reduz a superfície de ataque e impede `pip install` dentro de um container
+# comprometido.
+RUN python -m pip uninstall -y pip setuptools wheel 2>/dev/null || true; \
+    rm -rf /usr/local/lib/python3.11/site-packages/pip* \
+           /usr/local/lib/python3.11/site-packages/setuptools* \
+           /usr/local/lib/python3.11/site-packages/wheel* \
+           /usr/local/lib/python3.11/site-packages/pkg_resources \
+           /usr/local/lib/python3.11/site-packages/_distutils_hack \
+           /usr/local/lib/python3.11/site-packages/distutils-precedence.pth \
+           /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.11
 
 COPY --from=builder --chown=app:app /root/.local /home/app/.local
 COPY --chown=app:app src/ ./src/

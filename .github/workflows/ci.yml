@@ -128,7 +128,7 @@ jobs:
       # (3) hotspots revisados e duplicação corrigida, (4) só então
       # qualitygate.wait=true e `sonar` entra no needs de docker-publish.
       - name: Análise (baseline, gate não bloqueante)
-        uses: SonarSource/sonarqube-scan-action@v5
+        uses: SonarSource/sonarqube-scan-action@v6
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
