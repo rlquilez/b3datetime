@@ -115,7 +115,7 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
 
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@v4
         with:
           registry: ${{ secrets.GIT_REGISTRY }}
           username: ${{ secrets.GIT_REGISTRY_USER }}
