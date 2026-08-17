@@ -1,197 +1,222 @@
-"""
-Router para endpoints de dias de negociação da B3.
+"""Endpoints de dias de negociação da B3.
+
+A validação de período é feita contra os **limites reais** do calendário carregado,
+lidos a cada requisição. A versão anterior validava contra a constante 2006 enquanto o
+calendário cobria apenas os últimos dez anos, e como o recorte era feito por máscara
+sobre o índice de sessões, um período fora da cobertura devolvia HTTP 200 com uma
+lista vazia — ou, com ``exclude=true``, com todos os dias do período marcados como
+"sem negociação". Os limites também eram congelados no import, então a resposta
+dependia de quando o processo havia subido.
 """
 
-from datetime import date, datetime, timedelta
-from typing import List, Optional
+from __future__ import annotations
 
-import exchange_calendars as xcals
-import pandas as pd
-from fastapi import APIRouter, HTTPException, Query
+from datetime import date
+from typing import Annotated
+
+from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
-from src.config import settings, TZ, get_current_datetime, get_min_allowed_date
+from src.config import get_current_datetime
+from src.dependencies import CalendarDep, SettingsDep
+from src.routers.openapi_examples import (
+    AUTH_NOTE,
+    RESPONSE_CALENDAR_UNAVAILABLE,
+    RESPONSE_RANGE_INVALID,
+    examples_response,
+)
+from src.services.calendar_service import CalendarRangeOutOfBoundsError, TradingCalendar
 
 router = APIRouter(prefix="/v1", tags=["Dias de Negociação"])
 
-# Inicializa o calendário BVMF (B3)
-try:
-    _start = pd.Timestamp.now(tz="America/Sao_Paulo").normalize().tz_localize(None) - pd.DateOffset(
-        years=10
-    )
-    bvmf_calendar = xcals.get_calendar(
-        settings.exchange_name,
-        start=_start,
-    )
-except Exception as e:
-    raise RuntimeError(f"Erro ao carregar calendário {settings.exchange_name}: {e}")
-
 
 class TradingDayResponse(BaseModel):
-    """Modelo para resposta de validação de dia de negociação."""
+    """Resultado da verificação de um dia de negociação."""
 
     date: str = Field(
-        ..., description="Data verificada no formato YYYY-MM-DD", example="2024-01-15"
+        ...,
+        description="Data verificada no formato YYYY-MM-DD",
+        json_schema_extra={"example": "2024-01-15"},
     )
-    is_trading_day: bool = Field(..., description="Se é um dia de negociação na B3", example=True)
+    is_trading_day: bool = Field(
+        ...,
+        description="Se é um dia de negociação na B3",
+        json_schema_extra={"example": True},
+    )
+
+
+class CalendarInfoResponse(BaseModel):
+    """Limites vigentes do calendário carregado."""
+
+    exchange: str = Field(..., json_schema_extra={"example": "BVMF"})
+    first_session: str = Field(..., json_schema_extra={"example": "2016-08-17"})
+    last_session: str = Field(..., json_schema_extra={"example": "2027-08-17"})
+    sessions_count: int = Field(..., json_schema_extra={"example": 2730})
+    max_range_days: int = Field(
+        ...,
+        description="Span máximo aceito por /v1/trading-days, em dias",
+        json_schema_extra={"example": 3660},
+    )
+
+
+def _bad_request(message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail={"error": "Bad Request", "message": message},
+    )
+
+
+def _validate_range(calendar: TradingCalendar, start: date, end: date, max_range_days: int) -> None:
+    """Valida ordem, span e cobertura do período pedido."""
+    if end < start:
+        raise _bad_request("A data final deve ser maior ou igual à data inicial")
+
+    span_days = (end - start).days
+    if span_days > max_range_days:
+        raise _bad_request(
+            f"O período pedido tem {span_days} dias e excede o máximo de "
+            f"{max_range_days} dias por requisição"
+        )
+
+    try:
+        calendar.require_coverage(start, end)
+    except CalendarRangeOutOfBoundsError as exc:
+        raise _bad_request(str(exc)) from exc
+
+
+@router.get(
+    "/calendar-info",
+    response_model=CalendarInfoResponse,
+    summary="Consultar os limites do calendário",
+    description=f"""
+    Retorna os limites vigentes do calendário carregado.
+
+    A janela do calendário é **móvel** e se desloca conforme o tempo passa, portanto
+    consulte este endpoint em vez de assumir uma data mínima fixa. Períodos fora destes
+    limites são rejeitados com 400 por `/v1/trading-days`.
+
+    {AUTH_NOTE}
+    """,
+    responses={503: RESPONSE_CALENDAR_UNAVAILABLE},
+)
+async def get_calendar_info(calendar: CalendarDep, settings: SettingsDep) -> CalendarInfoResponse:
+    """Limites vigentes do calendário."""
+    first, last = calendar.bounds
+    if first is None or last is None:  # pragma: no cover - calendário vazio
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"error": "Service Unavailable", "message": "Calendário vazio"},
+        )
+    return CalendarInfoResponse(
+        exchange=settings.exchange_name,
+        first_session=first.isoformat(),
+        last_session=last.isoformat(),
+        sessions_count=len(calendar),
+        max_range_days=settings.max_range_days,
+    )
 
 
 @router.get(
     "/is-trading-day",
     response_model=TradingDayResponse,
     summary="Verificar se hoje é dia de negociação",
-    description="""
-    Verifica se o dia atual é um dia de negociação na B3.
-    
-    Utiliza o calendário BVMF (B3/Bovespa) do exchange_calendars para determinar
-    se a bolsa opera no dia atual, considerando feriados e finais de semana.
-    
-    O "dia atual" é determinado usando o timezone America/Sao_Paulo.
-    
-    **Autenticação**: Requer header `apikey` configurado no Kong Gateway.
+    description=f"""
+    Verifica se o dia atual é um dia de negociação na B3, considerando feriados e finais
+    de semana do calendário BVMF.
+
+    O "dia atual" é determinado no timezone America/Sao_Paulo.
+
+    {AUTH_NOTE}
     """,
     responses={
-        200: {
-            "description": "Verificação realizada com sucesso",
-            "content": {
-                "application/json": {
-                    "examples": {
-                        "trading_day": {
-                            "summary": "Dia de negociação",
-                            "value": {"date": "2024-01-15", "is_trading_day": True},
-                        },
-                        "non_trading_day": {
-                            "summary": "Não é dia de negociação",
-                            "value": {"date": "2024-01-20", "is_trading_day": False},
-                        },
-                    }
-                }
+        200: examples_response(
+            "Verificação realizada com sucesso",
+            {
+                "trading_day": {
+                    "summary": "Dia de negociação",
+                    "value": {"date": "2024-01-15", "is_trading_day": True},
+                },
+                "non_trading_day": {
+                    "summary": "Não é dia de negociação",
+                    "value": {"date": "2024-01-20", "is_trading_day": False},
+                },
             },
-        }
+        ),
+        503: RESPONSE_CALENDAR_UNAVAILABLE,
     },
 )
-async def is_trading_day():
+async def is_trading_day(calendar: CalendarDep, settings: SettingsDep) -> TradingDayResponse:
     """Verifica se hoje é dia de negociação na B3."""
-    today = get_current_datetime().date()
-    today_ts = pd.Timestamp(today)
-    is_open = today_ts in bvmf_calendar.sessions
+    today = get_current_datetime(settings.tz).date()
+    # Sem esta checagem, um "hoje" fora da janela responderia `false` — indistinguível
+    # de um feriado legítimo.
+    try:
+        calendar.require_coverage(today, today)
+    except CalendarRangeOutOfBoundsError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"error": "Service Unavailable", "message": str(exc)},
+        ) from exc
 
-    return TradingDayResponse(date=today.isoformat(), is_trading_day=is_open)
+    return TradingDayResponse(date=today.isoformat(), is_trading_day=calendar.is_session(today))
 
 
 @router.get(
     "/trading-days",
-    response_model=List[str],
+    response_model=list[str],
     summary="Listar dias de negociação em um período",
-    description="""
-    Retorna uma lista de dias de negociação (ou não negociação) em um período específico.
-    
-    Utiliza o calendário BVMF (B3/Bovespa) do exchange_calendars.
-    
-    **Parâmetros**:
-    - `start`: Data inicial no formato YYYY-MM-DD (obrigatório, >= 2006-01-01)
-    - `end`: Data final no formato YYYY-MM-DD (obrigatório, >= start)
-    - `exclude`: Se True, retorna dias SEM negociação; se False, retorna dias COM negociação (padrão: False)
-    
-    **Restrições**:
-    - Data inicial deve ser >= 2006-01-01
-    - Data final deve ser >= data inicial
-    - Sem limite de dias no range
-    
-    **Autenticação**: Requer header `apikey` configurado no Kong Gateway.
+    description=f"""
+    Retorna os dias de negociação (ou de não-negociação) num período.
+
+    **Parâmetros**
+    - `start`: data inicial no formato YYYY-MM-DD
+    - `end`: data final no formato YYYY-MM-DD, maior ou igual a `start`
+    - `exclude`: se `true`, retorna os dias **sem** negociação; se `false` (padrão), os
+      dias **com** negociação
+
+    **Restrições**
+    - O período deve estar inteiramente dentro da janela do calendário. Consulte
+      `GET /v1/calendar-info` para os limites vigentes.
+    - O span máximo por requisição é limitado; períodos maiores são rejeitados com 400.
+
+    {AUTH_NOTE}
     """,
     responses={
-        200: {
-            "description": "Lista de datas obtida com sucesso",
-            "content": {
-                "application/json": {
-                    "examples": {
-                        "trading_days": {
-                            "summary": "Dias de negociação",
-                            "value": [
-                                "2024-01-02",
-                                "2024-01-03",
-                                "2024-01-04",
-                                "2024-01-05",
-                                "2024-01-08",
-                            ],
-                        },
-                        "non_trading_days": {
-                            "summary": "Dias sem negociação (exclude=true)",
-                            "value": ["2024-01-01", "2024-01-06", "2024-01-07"],
-                        },
-                    }
-                }
+        200: examples_response(
+            "Lista de datas obtida com sucesso",
+            {
+                "trading_days": {
+                    "summary": "Dias de negociação",
+                    "value": ["2024-01-02", "2024-01-03", "2024-01-04"],
+                },
+                "non_trading_days": {
+                    "summary": "Dias sem negociação (exclude=true)",
+                    "value": ["2024-01-01", "2024-01-06", "2024-01-07"],
+                },
             },
-        },
-        400: {
-            "description": "Parâmetros inválidos",
-            "content": {
-                "application/json": {"example": {"detail": "Data inicial deve ser >= 2006-01-01"}}
-            },
-        },
+        ),
+        400: RESPONSE_RANGE_INVALID,
+        503: RESPONSE_CALENDAR_UNAVAILABLE,
     },
 )
 async def get_trading_days(
-    start: str = Query(
-        ...,
-        description="Data inicial no formato YYYY-MM-DD (>= 2006-01-01)",
-        example="2024-01-01",
-        pattern=r"^\d{4}-\d{2}-\d{2}$",
-    ),
-    end: str = Query(
-        ...,
-        description="Data final no formato YYYY-MM-DD (>= start)",
-        example="2024-01-31",
-        pattern=r"^\d{4}-\d{2}-\d{2}$",
-    ),
-    exclude: bool = Query(
-        False,
-        description="Se True, retorna dias SEM negociação; se False, retorna dias COM negociação",
-    ),
-):
-    """
-    Lista dias de negociação (ou não negociação) em um período.
-    """
-    # Valida e converte datas
-    try:
-        start_date = date.fromisoformat(start)
-        end_date = date.fromisoformat(end)
-    except ValueError as e:
-        raise HTTPException(
-            status_code=400, detail=f"Formato de data inválido: {e}. Use YYYY-MM-DD"
-        )
+    calendar: CalendarDep,
+    settings: SettingsDep,
+    # Tipar como `date` deixa o FastAPI validar e responder 422 para formato inválido,
+    # em vez do parse manual que respondia 400 e aceitava datas como 2024-13-45.
+    start: Annotated[date, Query(description="Data inicial (YYYY-MM-DD)")],
+    end: Annotated[date, Query(description="Data final (YYYY-MM-DD)")],
+    exclude: Annotated[
+        bool,
+        Query(description="Se true, retorna dias SEM negociação; se false, dias COM negociação"),
+    ] = False,
+) -> list[str]:
+    """Lista dias de negociação (ou de não-negociação) num período."""
+    _validate_range(calendar, start, end, settings.max_range_days)
 
-    # Valida data mínima (2006-01-01)
-    min_date = get_min_allowed_date().date()
-    if start_date < min_date:
-        raise HTTPException(
-            status_code=400, detail=f"Data inicial deve ser >= {min_date.isoformat()}"
-        )
-
-    # Valida que end >= start
-    if end_date < start_date:
-        raise HTTPException(status_code=400, detail="Data final deve ser >= data inicial")
-
-    # Obtém schedule do calendário via DatetimeIndex (evita parse_date/DateOutOfBounds)
-    start_ts = pd.Timestamp(start_date)
-    end_ts = pd.Timestamp(end_date)
-    sessions = bvmf_calendar.sessions
-    mask = (sessions >= start_ts) & (sessions <= end_ts)
-    trading_days = [ts.date() for ts in sessions[mask]]
-
-    # Se exclude=True, retorna dias que NÃO são de negociação
-    if exclude:
-        # Gera todas as datas no range
-        all_days = []
-        current = start_date
-        while current <= end_date:
-            all_days.append(current)
-            current = date.fromordinal(current.toordinal() + 1)
-
-        # Filtra dias que não são de negociação
-        non_trading_days = [day for day in all_days if day not in trading_days]
-        return [day.isoformat() for day in non_trading_days]
-
-    # Retorna dias de negociação
-    return [day.isoformat() for day in trading_days]
+    days = (
+        calendar.non_sessions_in_range(start, end)
+        if exclude
+        else calendar.sessions_in_range(start, end)
+    )
+    return [day.isoformat() for day in days]
