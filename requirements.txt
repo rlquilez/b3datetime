@@ -1,10 +1,13 @@
-fastapi==0.115.0
-uvicorn[standard]==0.32.0
-redis==5.2.0
+fastapi==0.141.1
+# starlette pinado explicitamente: o fastapi declara apenas starlette>=0.46.0, sem
+# limite superior. As versões <1.0.1 têm sete advisories, incluindo SSRF em
+# StaticFiles (PYSEC-2026-2281), que este projeto usa para servir a documentação.
+starlette==1.6.0
+uvicorn[standard]==0.52.3
+redis==8.1.0
 exchange-calendars==4.5.6
 # Dependência direta (src/services/calendar_service.py, src/routers/dates.py).
 # exchange-calendars não impõe constraint, então o pin explícito é obrigatório.
 pandas==3.0.5
-pytz==2024.2
-pydantic==2.10.0
-pydantic-settings==2.6.1
+pydantic==2.13.4
+pydantic-settings==2.15.0

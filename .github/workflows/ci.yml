@@ -152,7 +152,7 @@ jobs:
       - run: pip install -r requirements-dev.txt
       - name: bandit
         run: bandit -r src -c pyproject.toml -f sarif -o bandit.sarif --exit-zero
-      - uses: github/codeql-action/upload-sarif@v3
+      - uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: bandit.sarif
           category: bandit
@@ -207,12 +207,12 @@ jobs:
       actions: read
     steps:
       - uses: actions/checkout@v4
-      - uses: github/codeql-action/init@v3
+      - uses: github/codeql-action/init@v4
         with:
           languages: python
           build-mode: none
           queries: security-extended
-      - uses: github/codeql-action/analyze@v3
+      - uses: github/codeql-action/analyze@v4
         with:
           category: "/language:python"
 
@@ -228,7 +228,7 @@ jobs:
       # Duas invocações: a primeira com exit-code 0 garante que o SARIF sempre
       # sobe; a segunda é a que efetivamente reprova o build.
       - name: Trivy (SARIF)
-        uses: aquasecurity/trivy-action@0.29.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scanners: vuln,secret,misconfig
@@ -237,13 +237,13 @@ jobs:
           exit-code: "0"
         env:
           TRIVY_SKIP_DB_UPDATE: false
-      - uses: github/codeql-action/upload-sarif@v3
+      - uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-fs.sarif
           category: trivy-fs
 
       - name: Trivy (bloqueante)
-        uses: aquasecurity/trivy-action@0.29.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scanners: vuln,misconfig
@@ -295,20 +295,20 @@ jobs:
           docker rm -f smoke
 
       - name: Trivy na imagem (SARIF)
-        uses: aquasecurity/trivy-action@0.29.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: image
           image-ref: b3datetime:ci
           format: sarif
           output: trivy-image.sarif
           exit-code: "0"
-      - uses: github/codeql-action/upload-sarif@v3
+      - uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-image.sarif
           category: trivy-image
 
       - name: Trivy na imagem (bloqueante)
-        uses: aquasecurity/trivy-action@0.29.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: image
           image-ref: b3datetime:ci

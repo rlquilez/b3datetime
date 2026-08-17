@@ -312,3 +312,21 @@ def test_timezone_property(settings: Settings, clock: FakeClock) -> None:
 
 async def test_get_values_com_lista_vazia(redis_service: RedisService) -> None:
     assert await redis_service.get_values([]) == []
+
+
+async def test_valores_em_bytes_sao_decodificados(settings: Settings, clock: FakeClock) -> None:
+    """Um cliente sem decode_responses devolveria bytes; sem normalizar, o valor
+    vazaria para a resposta como b'10:00'."""
+
+    class ClienteEmBytes:
+        async def ping(self) -> bool:
+            return True
+
+        async def mget(self, keys: list[str]) -> list[bytes | None]:
+            return [b"10:00", b"18:00"]
+
+        async def aclose(self) -> None:
+            return None
+
+    service = RedisService(settings, client_factory=lambda: ClienteEmBytes(), now_fn=clock)  # type: ignore[arg-type,return-value]
+    assert await service.get_trading_hours() == ("10:00", "18:00")

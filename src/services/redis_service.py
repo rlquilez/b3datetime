@@ -22,7 +22,7 @@ import asyncio
 import logging
 from collections.abc import Callable
 from datetime import datetime
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 import redis.asyncio as aioredis
 from redis.exceptions import RedisError
@@ -36,6 +36,19 @@ logger = logging.getLogger(__name__)
 
 NowFn = Callable[[], datetime]
 ClientFactory = Callable[[], "aioredis.Redis"]
+
+
+def _as_str(value: bytes | str | None) -> str | None:
+    """Normaliza um valor lido do Redis para ``str``.
+
+    O cliente é criado com ``decode_responses=True``, então na prática já vem
+    ``str`` — mas isso é uma opção de runtime que o tipo não expressa, e um cliente
+    injetado (em teste ou por configuração) pode devolver ``bytes``. Decodificar
+    aqui evita que um ``bytes`` vaze para a resposta como ``b'10:00'``.
+    """
+    if isinstance(value, bytes):
+        return value.decode("utf-8")
+    return value
 
 
 class KeyNotFoundError(LookupError):
@@ -118,15 +131,11 @@ class RedisService:
 
     def _default_client_factory(self) -> aioredis.Redis:
         timeout = self._settings.redis_socket_timeout_seconds
-        # cast: redis-py declara from_url como Any.
-        return cast(
-            "aioredis.Redis",
-            aioredis.from_url(
-                self._settings.redis_url,
-                decode_responses=True,
-                socket_connect_timeout=timeout,
-                socket_timeout=timeout,
-            ),
+        return aioredis.from_url(
+            self._settings.redis_url,
+            decode_responses=True,
+            socket_connect_timeout=timeout,
+            socket_timeout=timeout,
         )
 
     async def connect(self) -> None:
@@ -196,10 +205,13 @@ class RedisService:
             # chamada. Anulá-lo era o que travava a API em 503 permanente.
             return None
 
-        for key, value in zip(keys, values, strict=True):
+        decoded: list[str | None] = []
+        for key, raw in zip(keys, values, strict=True):
+            value = _as_str(raw)
             if value is not None:
                 self.local_cache.set(key, value)
-        return list(values)
+            decoded.append(value)
+        return decoded
 
     def _fallback(self, key: str) -> str:
         """Valor de cache local, ou exceção explicando por que não há resposta."""

@@ -34,7 +34,6 @@ markers = [
 # Warnings viram erro: é o que impede deprecações do pydantic de voltarem.
 filterwarnings = [
     "error",
-    "ignore::DeprecationWarning:pytz",
     "ignore::DeprecationWarning:dateutil",
 ]
 
