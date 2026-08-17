@@ -125,7 +125,7 @@ jobs:
 
       - name: Instalar crane
         if: ${{ github.event.inputs.rebuild != 'true' }}
-        uses: imjasonh/setup-crane@v0.4
+        uses: imjasonh/setup-crane@v0.7
 
       # `crane tag` adiciona uma tag ao manifest existente dentro do mesmo
       # repositório: preserva a lista multi-arch, não copia blob nenhum e leva
