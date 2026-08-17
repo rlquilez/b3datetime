@@ -135,20 +135,26 @@ jobs:
       # "manifest not found" confuso quando a tag aponta para um commit sem build.
       - name: Retaguear a partir do manifest de origem
         if: ${{ github.event.inputs.rebuild != 'true' }}
+        # A saída `tags` do metadata-action é separada por newline. Interpolá-la
+        # direto no script quebra a sintaxe do shell, então vem por env var e é
+        # lida linha a linha.
+        env:
+          IMAGE: ${{ secrets.GIT_REGISTRY }}/${{ secrets.GIT_OWNER }}/b3datetime
+          TAGS: ${{ steps.meta.outputs.tags }}
         run: |
-          IMAGE='${{ secrets.GIT_REGISTRY }}/${{ secrets.GIT_OWNER }}/b3datetime'
           SRC_TAG="sha-$(git rev-parse --short=7 HEAD)"
-          echo "Origem: \$IMAGE:$SRC_TAG"
+          echo "Origem: $IMAGE:$SRC_TAG"
           if ! crane manifest "$IMAGE:$SRC_TAG" >/dev/null 2>&1; then
             echo "::error::$IMAGE:$SRC_TAG não existe no registry. A tag precisa apontar para um commit com build verde na main."
             exit 1
           fi
-          for full in ${{ steps.meta.outputs.tags }}; do
+          while IFS= read -r full; do
+            [ -n "$full" ] || continue
             new_tag="${full##*:}"
             echo "-> $new_tag"
             crane tag "$IMAGE:$SRC_TAG" "$new_tag"
-          done
-          echo "Tags no repositório:"; crane ls "$IMAGE"
+          done <<< "$TAGS"
+          echo "Retag concluído."
 
       - name: Habilitar QEMU (só no rebuild)
         if: ${{ github.event.inputs.rebuild == 'true' }}
