@@ -100,7 +100,7 @@ class Settings(BaseSettings):
     # --- API ---
     api_title: str = "B3 DateTime API"
     api_description: str = API_DESCRIPTION
-    api_version: str = "1.0.0"
+    api_version: str = "2.0.0"
     root_path: str = ""
 
     @property

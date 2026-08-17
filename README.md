@@ -1,9 +1,11 @@
 <div align="center">
   <img src=".github/logo.svg" alt="B3 DateTime API Logo" width="400">
-  
+
   <h1>B3 DateTime API</h1>
-  
+
   <p>API REST em Python para consultar horários de operação e dias de negociação da B3 (Bolsa de Valores de São Paulo)</p>
+
+  <p><strong>Versão atual: 2.0.0</strong></p>
 </div>
 
 ## 📋 Descrição
@@ -12,9 +14,10 @@ A B3 DateTime API oferece endpoints para:
 - Consultar horários de abertura e fechamento da bolsa (via Redis com cache local de 1h)
 - Validar se determinada data é dia de negociação
 - Listar dias de negociação ou não negociação em um período
+- Consultar a janela de datas coberta pelo calendário
 - Verificar a saúde da aplicação e suas dependências
 
-Utiliza o calendário BVMF (B3/Bovespa) do módulo `exchange_calendars` com suporte a dados a partir de 01/01/2006.
+Utiliza o calendário BVMF (B3/Bovespa) do módulo `exchange_calendars`.
 
 ## 🏗️ Arquitetura
 
@@ -32,116 +35,114 @@ Utiliza o calendário BVMF (B3/Bovespa) do módulo `exchange_calendars` com supo
 ```
 
 **Características**:
-- **FastAPI**: Framework moderno e rápido com documentação automática OpenAPI/Redoc
-- **Redis com Cache Local**: Fallback automático por até 1 hora se Redis estiver offline
-- **Exchange Calendars**: Calendário oficial BVMF para validação de dias úteis
-- **Timezone**: America/Sao_Paulo para todas as operações
-- **Docker Multi-arch**: Suporte para linux/amd64 e linux/arm64
-- **CI/CD**: Pipeline automático via GitHub Actions
+- **FastAPI** com documentação OpenAPI/Redoc servida **localmente** (sem CDN)
+- **Redis assíncrono** (`redis.asyncio`), leitura atômica via `MGET` e reconexão automática
+- **Cache local** com fallback de até 1 hora quando o Redis está indisponível
+- **Exchange Calendars**: calendário oficial BVMF, com janela de cobertura consultável
+- **Timezone**: `America/Sao_Paulo` em todas as operações
+- **Docker multi-arch** (linux/amd64, linux/arm64), rodando como usuário sem privilégios
+- **CI/CD** com testes, análise estática, varredura de segurança e quality gate
 
 ## 🚀 Endpoints
 
 ### Horários de Operação
 
 #### `GET /v1/hours`
-Retorna horários de abertura e fechamento.
+Retorna horários de abertura e fechamento. As duas chaves são lidas numa **única operação atômica**, de modo que a resposta nunca combina um horário de abertura antigo com um de fechamento novo.
 
-**Resposta:**
 ```json
-{
-  "open": "10:00",
-  "close": "18:00"
-}
+{ "open": "10:00", "close": "18:00" }
 ```
 
-**Exemplo:**
 ```bash
 curl -H "apikey: YOUR_API_KEY" https://api.example.com/v1/hours
 ```
 
-#### `GET /v1/hours/open`
-Retorna apenas o horário de abertura.
+#### `GET /v1/hours/open` · `GET /v1/hours/close`
+Retornam apenas um dos horários.
 
-**Resposta:**
 ```json
-{
-  "time": "10:00"
-}
+{ "time": "10:00" }
 ```
 
-#### `GET /v1/hours/close`
-Retorna apenas o horário de fechamento.
+**Códigos de resposta dos três endpoints:**
 
-**Resposta:**
-```json
-{
-  "time": "18:00"
-}
-```
+| Código | Situação |
+|--------|----------|
+| `200` | Valor obtido do Redis, ou do cache local com menos de 1h |
+| `404` | Redis **disponível**, mas a chave não existe — basta um `SET` |
+| `502` | O valor armazenado no Redis não está no formato `HH:MM` |
+| `503` | Redis indisponível e cache ausente ou expirado |
 
 ### Dias de Negociação
+
+#### `GET /v1/calendar-info`
+Retorna a janela de datas que o calendário sabe responder. **Consulte este endpoint em vez de assumir uma data mínima fixa**: a janela é móvel e se desloca conforme o tempo passa.
+
+```json
+{
+  "exchange": "BVMF",
+  "coverage_start": "2016-08-17",
+  "coverage_end": "2027-08-17",
+  "first_session": "2016-08-17",
+  "last_session": "2027-08-17",
+  "sessions_count": 2730,
+  "max_range_days": 3660
+}
+```
+
+`coverage_*` é o intervalo respondível; `first_session`/`last_session` são o primeiro e o último **pregão** dentro dele. Os dois diferem quando a janela começa num feriado ou fim de semana.
 
 #### `GET /v1/is-trading-day`
 Verifica se hoje é dia de negociação na B3.
 
-**Resposta:**
 ```json
-{
-  "date": "2024-01-15",
-  "is_trading_day": true
-}
+{ "date": "2024-01-15", "is_trading_day": true }
 ```
 
-**Exemplo:**
-```bash
-curl -H "apikey: YOUR_API_KEY" https://api.example.com/v1/is-trading-day
-```
+Responde `503` se a data atual estiver fora da janela do calendário — nunca `false`, que seria indistinguível de um feriado legítimo.
 
 #### `GET /v1/trading-days`
-Lista dias de negociação (ou não negociação) em um período.
+Lista dias de negociação (ou de não negociação) em um período.
 
 **Parâmetros:**
-- `start` (obrigatório): Data inicial no formato YYYY-MM-DD (>= 2006-01-01)
-- `end` (obrigatório): Data final no formato YYYY-MM-DD
-- `exclude` (opcional): `true` para listar dias SEM negociação, `false` (padrão) para listar dias COM negociação
+- `start` (obrigatório): data inicial, `YYYY-MM-DD`
+- `end` (obrigatório): data final, `YYYY-MM-DD`, maior ou igual a `start`
+- `exclude` (opcional): `true` para listar dias **sem** negociação; `false` (padrão) para listar dias **com** negociação
 
-**Resposta (exclude=false):**
-```json
-[
-  "2024-01-02",
-  "2024-01-03",
-  "2024-01-04",
-  "2024-01-05",
-  "2024-01-08"
-]
-```
+**Restrições:**
+- O período deve estar **inteiramente** dentro da janela do calendário (`GET /v1/calendar-info`). Fora dela, a resposta é `400` — a API não devolve resultado parcial em silêncio.
+- O intervalo máximo por requisição é `max_range_days` (3660 dias por padrão). Períodos maiores são rejeitados com `400`.
 
-**Resposta (exclude=true):**
-```json
-[
-  "2024-01-01",
-  "2024-01-06",
-  "2024-01-07"
-]
-```
-
-**Exemplos:**
 ```bash
-# Listar dias COM negociação
+# Dias COM negociação
 curl -H "apikey: YOUR_API_KEY" \
   "https://api.example.com/v1/trading-days?start=2024-01-01&end=2024-01-31"
 
-# Listar dias SEM negociação (feriados e finais de semana)
+# Dias SEM negociação (feriados e finais de semana)
 curl -H "apikey: YOUR_API_KEY" \
   "https://api.example.com/v1/trading-days?start=2024-01-01&end=2024-01-31&exclude=true"
 ```
 
+| Código | Situação |
+|--------|----------|
+| `200` | Lista obtida |
+| `400` | `end` < `start`, período fora da janela, ou intervalo acima do máximo |
+| `422` | Formato de data inválido |
+| `503` | Calendário indisponível |
+
 ### Health Check
 
 #### `GET /v1/health`
-Verifica a saúde da API e suas dependências.
 
-**Resposta (healthy):**
+| Estado | HTTP | Situação |
+|--------|------|----------|
+| `healthy` | `200` | Redis conectado e calendário carregado |
+| `degraded` | `200` | Redis desconectado, mas **ambas** as chaves têm cache local válido |
+| `unhealthy` | **`503`** | Sem cache utilizável, cache expirado, ou calendário indisponível |
+
+O `503` em `unhealthy` é o que permite ao `HEALTHCHECK` do Docker e a probes `httpGet` do Kubernetes detectarem a falha.
+
 ```json
 {
   "status": "healthy",
@@ -151,22 +152,15 @@ Verifica a saúde da API e suas dependências.
     "redis_connected": true,
     "open_cache_age_seconds": 120,
     "close_cache_age_seconds": 120,
+    "open_cache_expired": false,
+    "close_cache_expired": false,
     "cache_ttl_seconds": 3600
-  }
-}
-```
-
-**Resposta (degraded - Redis offline, usando cache):**
-```json
-{
-  "status": "degraded",
-  "timestamp": "2024-01-15T10:30:00-03:00",
-  "redis_status": "disconnected",
-  "cache": {
-    "redis_connected": false,
-    "open_cache_age_seconds": 1800,
-    "close_cache_age_seconds": 1800,
-    "cache_ttl_seconds": 3600
+  },
+  "calendar": {
+    "available": true,
+    "first_session": "2016-08-17",
+    "last_session": "2027-08-17",
+    "sessions_count": 2730
   }
 }
 ```
@@ -174,58 +168,38 @@ Verifica a saúde da API e suas dependências.
 ### Informações da API
 
 #### `GET /`
-Retorna informações básicas sobre a API.
-
-**Resposta:**
-```json
-{
-  "name": "B3 DateTime API",
-  "version": "1.0.0",
-  "description": "API para consultar horários e dias de operação da B3",
-  "docs": {
-    "swagger": "/docs",
-    "redoc": "/redoc",
-    "openapi": "/openapi.json"
-  },
-  "endpoints": {
-    "hours": {
-      "all": "/v1/hours",
-      "open": "/v1/hours/open",
-      "close": "/v1/hours/close"
-    },
-    "dates": {
-      "is_trading_day": "/v1/is-trading-day",
-      "trading_days": "/v1/trading-days?start=YYYY-MM-DD&end=YYYY-MM-DD&exclude=false"
-    },
-    "health": "/v1/health"
-  },
-  "authentication": {
-    "type": "API Key",
-    "header": "apikey",
-    "managed_by": "Kong Gateway"
-  }
-}
-```
+Metadados, endpoints disponíveis e forma de autenticação.
 
 ## 🔐 Autenticação
 
-Todas as requisições devem incluir o header `apikey` com uma chave válida:
+Todas as requisições devem incluir o header `apikey`:
 
 ```bash
 curl -H "apikey: YOUR_API_KEY" https://api.example.com/v1/hours
 ```
 
-A autenticação é gerenciada externamente pelo **Kong Gateway**. A API não valida as chaves diretamente.
+A autenticação é gerenciada externamente pelo **Kong Gateway**. **A aplicação não valida chaves** — não há nenhum código de autenticação nela.
 
 ## ⚙️ Variáveis de Ambiente
 
-| Variável | Descrição | Padrão | Obrigatório |
-|----------|-----------|--------|-------------|
-| `REDIS_URL_ENV` | URL de conexão do Redis | `redis://localhost:6379` | Sim |
-| `REDIS_KEY_OPEN` | Chave Redis para horário de abertura | `b3:trading:hours:open` | Sim |
-| `REDIS_KEY_CLOSE` | Chave Redis para horário de fechamento | `b3:trading:hours:close` | Sim |
+| Variável | Descrição | Padrão |
+|----------|-----------|--------|
+| `REDIS_URL_ENV` | URL de conexão do Redis (nome preferencial) | `redis://localhost:6379` |
+| `REDIS_URL` | Alternativa aceita, com precedência **menor** que `REDIS_URL_ENV` | — |
+| `REDIS_KEY_OPEN` | Chave Redis do horário de abertura | `b3:trading:hours:open` |
+| `REDIS_KEY_CLOSE` | Chave Redis do horário de fechamento | `b3:trading:hours:close` |
+| `CACHE_TTL_SECONDS` | Validade do cache local, em segundos | `3600` |
+| `TIMEZONE` | Timezone das operações | `America/Sao_Paulo` |
+| `EXCHANGE_NAME` | Bolsa do `exchange_calendars` | `BVMF` |
+| `CALENDAR_START_OFFSET_YEARS` | Anos para trás na construção do calendário | `10` |
+| `MAX_RANGE_DAYS` | Intervalo máximo em `/v1/trading-days` | `3660` |
+| `REDIS_RECONNECT_INTERVAL_SECONDS` | Intervalo mínimo entre tentativas de reconexão | `30` |
+| `REDIS_SOCKET_TIMEOUT_SECONDS` | Timeout de socket do Redis | `5` |
+| `ROOT_PATH` | Prefixo para proxy reverso (ex.: `/b3datetime`) | vazio |
 
-**Exemplo de configuração (.env):**
+`REDIS_URL` é aceito porque é o nome que Heroku, Railway, Render, Fly.io e templates de `docker-compose` injetam automaticamente. Quando as duas estão definidas, **`REDIS_URL_ENV` vence**.
+
+**Exemplo (`.env`):**
 ```env
 REDIS_URL_ENV=redis://localhost:6379
 REDIS_KEY_OPEN=b3:trading:hours:open
@@ -234,169 +208,165 @@ REDIS_KEY_CLOSE=b3:trading:hours:close
 
 ## 💾 Cache e Fallback
 
-A API implementa um sistema de cache inteligente:
+1. **Leitura primária**: um único `MGET` no Redis
+2. **Cache local**: se o Redis falhar, usa o valor em memória enquanto tiver menos de 1 hora
+3. **Erro 503**: Redis indisponível e cache ausente ou expirado
 
-1. **Tentativa primária**: Busca valores diretamente do Redis
-2. **Cache local**: Se Redis falhar, usa cache em memória (válido por 1 hora)
-3. **Erro 503**: Se Redis indisponível por mais de 1 hora, retorna erro
+O cliente Redis **nunca é descartado**: se o Redis estiver fora no start do processo e voltar depois, a API se recupera sozinha, sem restart. As tentativas de reconexão são espaçadas por `REDIS_RECONNECT_INTERVAL_SECONDS`.
 
-**Benefícios:**
-- Alta disponibilidade durante instabilidades temporárias do Redis
-- Redução de latência com cache local
-- Degradação controlada do serviço
+## 🌐 Proxy reverso (Kong)
+
+- `ROOT_PATH` deve conter o prefixo (ex.: `/b3datetime`). Barra final é normalizada.
+- **A aplicação assume que o Kong remove o prefixo** antes de encaminhar, isto é, `strip_path: true`. Com `strip_path: false` nenhuma rota casa e todas as respostas são `404`.
+- O container roda o uvicorn com `--proxy-headers` e `--forwarded-allow-ips`, para que `X-Forwarded-Proto` e `X-Forwarded-For` sejam respeitados.
+- **CORS deve ser configurado em uma única camada.** A aplicação emite CORS permissivo sem credenciais; se o Kong também tiver o plugin de CORS ativo, os headers duplicados fazem o browser rejeitar a resposta.
 
 ## 🐳 Docker
 
-### Build Local
-
 ```bash
 docker build -t b3datetime:latest .
-```
 
-### Executar Container
-
-```bash
 docker run -d \
   -p 8000:8000 \
   -e REDIS_URL_ENV=redis://redis-host:6379 \
-  -e REDIS_KEY_OPEN=b3:trading:hours:open \
-  -e REDIS_KEY_CLOSE=b3:trading:hours:close \
   --name b3datetime \
   b3datetime:latest
 ```
 
+A imagem roda como usuário sem privilégios (`app`, uid 1001) e não contém `pip`, `setuptools` nem `wheel`.
+
 ### Docker Compose
 
 ```yaml
-version: '3.8'
-
 services:
   redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-  
+    image: redis:7.4-alpine
+    ports: ["6379:6379"]
+
   b3datetime:
     build: .
-    ports:
-      - "8000:8000"
+    ports: ["8000:8000"]
     environment:
       - REDIS_URL_ENV=redis://redis:6379
-      - REDIS_KEY_OPEN=b3:trading:hours:open
-      - REDIS_KEY_CLOSE=b3:trading:hours:close
-    depends_on:
-      - redis
+    depends_on: [redis]
 ```
 
 ## 💻 Desenvolvimento Local
 
 ### Pré-requisitos
+- **Python 3.11 ou superior** (a imagem roda 3.11)
+- Redis (opcional — a suíte de testes usa `fakeredis`)
 
-- Python 3.11+
-- Redis (local ou remoto)
-
-### Instalação
-
-1. Clone o repositório:
 ```bash
 git clone https://github.com/rlquilez/b3datetime.git
 cd b3datetime
-```
 
-2. Crie um ambiente virtual:
-```bash
-python -m venv venv
-source venv/bin/activate  # Linux/macOS
-# ou
-venv\Scripts\activate  # Windows
-```
+python3.11 -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
 
-3. Instale as dependências:
-```bash
-pip install -r requirements.txt
-```
-
-4. Configure as variáveis de ambiente:
-```bash
+pip install -r requirements-dev.txt
 cp .env.example .env
-# Edite .env com suas configurações
+
+uvicorn src.main:app --reload --port 8000
+# ou: python -m src
 ```
 
-5. Inicie o servidor:
-```bash
-uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
-```
+Documentação: http://localhost:8000/docs · http://localhost:8000/redoc · http://localhost:8000/openapi.json
 
-6. Acesse a documentação:
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
-- OpenAPI JSON: http://localhost:8000/openapi.json
-
-## 📊 Preparando Redis
-
-Para que a API funcione corretamente, configure as chaves no Redis:
+### Qualidade
 
 ```bash
-# Conectar ao Redis
-redis-cli
-
-# Configurar horários
-SET b3:trading:hours:open "10:00"
-SET b3:trading:hours:close "18:00"
-
-# Verificar
-GET b3:trading:hours:open
-GET b3:trading:hours:close
+ruff check .            # lint
+ruff format .           # formatação
+mypy src                # tipagem
+pytest                  # testes + coverage (mínimo de 90%)
+pytest -m "not slow"    # pula os testes que constroem o calendário real
 ```
+
+Os testes de integração contra Redis real dão *skip* automático quando não há Redis em `localhost:6379`.
+
+## 📊 Preparando o Redis
+
+```bash
+redis-cli SET b3:trading:hours:open "10:00"
+redis-cli SET b3:trading:hours:close "18:00"
+```
+
+Se as chaves não existirem, `/v1/hours` responde **404** (e não 503): o Redis está no ar, falta apenas o valor.
 
 ## 🔧 Tecnologias
 
-- **[FastAPI](https://fastapi.tiangolo.com/)** - Framework web moderno e rápido
-- **[Uvicorn](https://www.uvicorn.org/)** - Servidor ASGI de alta performance
-- **[Redis](https://redis.io/)** - Armazenamento de horários
-- **[exchange_calendars](https://github.com/gerrymanoim/exchange_calendars)** - Calendários de bolsas de valores
-- **[Pydantic](https://pydantic-docs.helpmanual.io/)** - Validação de dados
-- **[Docker](https://www.docker.com/)** - Containerização
-- **[GitHub Actions](https://github.com/features/actions)** - CI/CD
+- **[FastAPI](https://fastapi.tiangolo.com/)** · **[Uvicorn](https://www.uvicorn.org/)** · **[Redis](https://redis.io/)**
+- **[exchange_calendars](https://github.com/gerrymanoim/exchange_calendars)** · **[Pydantic](https://docs.pydantic.dev/)**
+- **[pytest](https://docs.pytest.org/)** · **[ruff](https://docs.astral.sh/ruff/)** · **[mypy](https://mypy-lang.org/)**
+- **[Docker](https://www.docker.com/)** · **[GitHub Actions](https://github.com/features/actions)** · **[SonarQube](https://www.sonarsource.com/)**
 
 ## 📝 Limitações e Considerações
 
-- **Data mínima**: Calendário BVMF disponível a partir de **01/01/2006**
-- **Timezone**: Todas as operações utilizam **America/Sao_Paulo**
-- **Cache TTL**: Cache local expira após **1 hora (3600 segundos)**
-- **Sem limite de range**: Endpoint `/v1/trading-days` aceita qualquer range desde que start >= 2006-01-01
-- **Horários estáticos**: Horários obtidos do Redis são considerados estáticos (não considera pregões especiais)
+- **Janela de datas**: o calendário cobre uma janela móvel (10 anos para trás por padrão). Consulte `GET /v1/calendar-info` — não há data mínima fixa.
+- **Intervalo máximo**: `/v1/trading-days` aceita no máximo `MAX_RANGE_DAYS` dias por requisição.
+- **Timezone**: todas as operações usam `America/Sao_Paulo`.
+- **Cache TTL**: o cache local expira em 1 hora.
+- **Horários estáticos**: os horários vindos do Redis não consideram pregões especiais.
 
 ## 🚀 CI/CD
 
-A aplicação possui pipeline automático via GitHub Actions:
+Pipeline em `.github/workflows/ci.yml`, disparado em push na `main`, em pull request e manualmente:
 
-- **Trigger**: Push nas branches `main` ou `proxima`
-- **Build**: Imagem Docker multi-arquitetura (linux/amd64, linux/arm64)
-- **Push**: Enviado para registry configurado nos secrets
-- **Cache**: Utiliza GitHub Actions cache para otimização
+| Etapa | Ferramenta |
+|-------|-----------|
+| Lint e formatação | ruff |
+| Tipagem | mypy |
+| Testes e coverage | pytest (Python 3.11 e 3.12, com Redis real) |
+| SAST | bandit, CodeQL |
+| CVEs em dependências | pip-audit, dependency-review |
+| Segredos | gitleaks |
+| Imagem e filesystem | Trivy |
+| Qualidade | SonarQube com quality gate **bloqueante** |
+| Publicação | imagem multi-arch + SBOM |
 
-**Secrets necessários:**
-- `GIT_REGISTRY` - URL do registry (ex: ghcr.io)
-- `GIT_OWNER` - Owner/organização
-- `GIT_REGISTRY_USER` - Usuário do registry
-- `GIT_REGISTRY_PASSWORD` - Token/senha do registry
+Nenhuma imagem é publicada sem que lint, tipagem, testes, scan da imagem e o quality gate passem.
+
+`.github/workflows/release.yml` é disparado por tag `v*`: valida a consistência da versão, retagueia a imagem com o semver e publica a Release.
+
+**Secrets necessários:** `GIT_REGISTRY`, `GIT_OWNER`, `GIT_REGISTRY_USER`, `GIT_REGISTRY_PASSWORD`, `SONAR_TOKEN`, `SONAR_HOST_URL`.
+
+## 🔄 Migração da v1 para a v2
+
+A v2.0.0 corrige respostas que antes eram silenciosamente erradas. As mudanças de contrato:
+
+| Endpoint | Antes (v1) | Agora (v2) | Por quê |
+|----------|-----------|-----------|---------|
+| `/v1/hours*` | `503` quando a chave não existia | **`404`** | O Redis estava no ar; dizer "indisponível" mandava o operador depurar rede e DNS quando faltava um `SET` |
+| `/v1/hours*` | `200` com valor fora de `HH:MM` | **`502`** | Valor inválido no Redis não deve ser servido como válido |
+| `/v1/health` | `200` mesmo em `unhealthy` | **`503`** em `unhealthy` | Com 200 em todos os estados, o `HEALTHCHECK` e as probes nunca detectavam falha |
+| `/v1/health` | `degraded` com cache expirado | `unhealthy` | `/v1/hours` já respondia 503 no mesmo estado; os dois endpoints se contradiziam |
+| `/v1/trading-days` | `200 []` fora da janela | **`400`** | Devolvia lista vazia, afirmando que a bolsa não operou no período |
+| `/v1/trading-days` | `200` com todos os dias, em `exclude=true` | **`400`** | Marcava o período inteiro como sem negociação |
+| `/v1/trading-days` | intervalo ilimitado | **`400`** acima de `MAX_RANGE_DAYS` | Um único request consumia ~77 s de CPU e ~117 MB |
+| `/v1/trading-days` | `400` para data mal formada | **`422`** | Convenção do FastAPI para erro de validação |
+
+**Ações necessárias:**
+1. Trate `404` e `502` em `/v1/hours*` (antes tudo era `503`).
+2. Ajuste monitoramento que dependa de `/v1/health` responder `200` — `unhealthy` agora é `503`.
+3. Substitua qualquer data mínima fixa (`2006-01-01`) por uma consulta a `GET /v1/calendar-info`.
+4. Divida consultas com intervalo acima de `MAX_RANGE_DAYS`.
+
 ## 📄 Licença
 
-Este projeto está sob a licença MIT - veja o arquivo [LICENSE](LICENSE) para mais detalhes.
-
-Você é livre para usar, copiar, modificar e distribuir este software para qualquer finalidade, incluindo uso comercial, desde que mantenha o aviso de copyright e a licença.
+MIT — veja [LICENSE](LICENSE).
 
 ## 👤 Autor
 
-Rodrigo Quilez (@rlquilez)
+Rodrigo Quilez ([@rlquilez](https://github.com/rlquilez))
 
 ## 🤝 Contribuindo
 
-Contribuições são bem-vindas! Sinta-se à vontade para abrir issues e pull requests.
+Contribuições são bem-vindas. Abra uma issue ou pull request.
 
 ## 📚 Documentação Adicional
 
+- [CHANGELOG.md](CHANGELOG.md)
 - [Documentação FastAPI](https://fastapi.tiangolo.com/)
 - [Exchange Calendars](https://github.com/gerrymanoim/exchange_calendars)
 - [Redis Python Client](https://redis-py.readthedocs.io/)

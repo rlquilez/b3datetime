@@ -1,0 +1,178 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+-*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag existente (ex.: v2.0.0)"
+        required: true
+      rebuild:
+        description: "Rebuildar em vez de retaguear"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verificar consistência da versão
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      tag: ${{ steps.v.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Resolver a tag e a versão
+        id: v
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "Tag: $TAG / versão: ${TAG#v}"
+
+      - name: A tag aponta para um commit da main
+        run: |
+          git fetch origin main
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "::error::a tag não aponta para um commit contido na main"
+            exit 1
+          fi
+
+      # O CI passa a impor a sincronia de versão que antes era só convenção: a
+      # versão vive em src/config.py e é duplicada no README e no CHANGELOG.
+      - name: Versão consistente entre config, README e CHANGELOG
+        run: |
+          V='${{ steps.v.outputs.version }}'
+          CFG=$(grep -oE 'api_version: str = "[^"]+"' src/config.py \
+                | grep -oE '[0-9]+\.[0-9]+\.[0-9]+[^"]*')
+          echo "api_version em src/config.py: $CFG"
+          if [ "$CFG" != "$V" ]; then
+            echo "::error::api_version ($CFG) difere da tag ($V)"
+            exit 1
+          fi
+          if ! grep -q "Versão atual: $V" README.md; then
+            echo "::error::README.md não declara 'Versão atual: $V'"
+            exit 1
+          fi
+          if ! grep -q "^## \[$V\] - [0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}$" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md não tem a seção '## [$V] - AAAA-MM-DD'"
+            exit 1
+          fi
+
+      - name: Extrair as notas do CHANGELOG
+        run: |
+          V='${{ steps.v.outputs.version }}'
+          awk -v v="$V" '
+            $0 ~ "^## \\["v"\\]" {f=1; next}
+            f && /^## \[/ {exit}
+            f
+          ' CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "::error::seção do CHANGELOG para $V está vazia"
+            exit 1
+          fi
+          echo "--- notas extraídas ---"; head -20 release-notes.md
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: release-notes.md
+          if-no-files-found: error
+
+  retag:
+    name: Retaguear a imagem com o semver
+    needs: [verify]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.verify.outputs.tag }}
+
+      - name: Gerar as tags semver
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ secrets.GIT_REGISTRY }}/${{ secrets.GIT_OWNER }}/b3datetime
+          # latest NÃO é tocado aqui: quem o move é o ci.yml, na main. Dois
+          # workflows disputando a mesma tag seria uma corrida.
+          flavor: latest=false
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.GIT_REGISTRY }}
+          username: ${{ secrets.GIT_REGISTRY_USER }}
+          password: ${{ secrets.GIT_REGISTRY_PASSWORD }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Retag no nível do manifest: preserva a lista multi-arch, leva segundos e
+      # não requer QEMU. A precondição explícita evita um "manifest not found"
+      # confuso quando a tag aponta para um commit sem build verde.
+      - name: Retaguear a partir do manifest de origem
+        if: ${{ github.event.inputs.rebuild != 'true' }}
+        run: |
+          IMAGE='${{ secrets.GIT_REGISTRY }}/${{ secrets.GIT_OWNER }}/b3datetime'
+          SRC="$IMAGE:sha-$(git rev-parse --short=7 HEAD)"
+          echo "Origem: $SRC"
+          if ! docker buildx imagetools inspect "$SRC" >/dev/null 2>&1; then
+            echo "::error::$SRC não existe no registry. A tag precisa apontar para um commit com build verde na main."
+            exit 1
+          fi
+          ARGS=""
+          for t in $(echo '${{ steps.meta.outputs.tags }}'); do
+            ARGS="$ARGS -t $t"
+          done
+          # shellcheck disable=SC2086
+          docker buildx imagetools create $ARGS "$SRC"
+          echo "Tags publicadas:"; echo '${{ steps.meta.outputs.tags }}'
+
+      - name: Habilitar QEMU (só no rebuild)
+        if: ${{ github.event.inputs.rebuild == 'true' }}
+        uses: docker/setup-qemu-action@v3
+
+      - name: Rebuild multi-arch (escape hatch)
+        if: ${{ github.event.inputs.rebuild == 'true' }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  github-release:
+    name: Publicar a Release
+    needs: [verify, retag]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-notes
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.verify.outputs.tag }}
+          name: ${{ needs.verify.outputs.tag }}
+          body_path: release-notes.md
+          generate_release_notes: false
+          prerelease: ${{ contains(needs.verify.outputs.tag, '-') }}
