@@ -1,2 +1,5 @@
 # Commits puramente de formatação, ignorados pelo `git blame`.
 # Uso local:  git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# style: aplicar ruff format (Refs #3)
+dc86e46d9850748efd79e680a9421c6f01f2cbd9
