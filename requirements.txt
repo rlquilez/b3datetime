@@ -2,6 +2,9 @@ fastapi==0.115.0
 uvicorn[standard]==0.32.0
 redis==5.2.0
 exchange-calendars==4.5.6
+# Dependência direta (src/services/calendar_service.py, src/routers/dates.py).
+# exchange-calendars não impõe constraint, então o pin explícito é obrigatório.
+pandas==3.0.5
 pytz==2024.2
 pydantic==2.10.0
 pydantic-settings==2.6.1

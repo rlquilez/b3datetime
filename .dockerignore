@@ -1,0 +1,43 @@
+# Controle de versão
+.git/
+.gitignore
+.git-blame-ignore-revs
+
+# VS Code Local History: ~52 cópias quase idênticas do fonte
+.history/
+
+# Ambientes e caches Python
+.venv/
+venv/
+ENV/
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+junit.xml
+
+# Configuração e segredos — nunca devem entrar numa camada da imagem
+.env
+.env.*
+!.env.example
+
+# Ferramentas e CI
+.github/
+.claude/
+.scannerwork/
+sonar-project.properties
+pyproject.toml
+requirements-dev.txt
+tests/
+
+# Documentação
+*.md
+LICENSE
+
+# Sistema operacional
+.DS_Store

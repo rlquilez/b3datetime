@@ -1,0 +1,142 @@
+[project]
+name = "b3datetime"
+version = "1.0.0"
+description = "API REST para consultar horários de operação e dias de negociação da B3"
+requires-python = ">=3.11"
+
+# NOTA: este projeto NÃO deve ser instalado como pacote (nem com `pip install -e .`).
+# Os testes importam `src.*` a partir da árvore de trabalho via `pythonpath = ["."]`.
+# Instalar faria o coverage registrar caminhos em site-packages, que não casam com
+# `sonar.sources=src`, e o SonarQube reportaria 0% de coverage.
+
+# --------------------------------------------------------------------------- #
+# pytest
+# --------------------------------------------------------------------------- #
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = """
+    -ra
+    --strict-markers
+    --strict-config
+    --import-mode=importlib
+    --cov=src
+    --cov-report=term-missing
+    --cov-report=xml:coverage.xml
+    --junitxml=junit.xml
+"""
+asyncio_mode = "auto"
+markers = [
+    "integration: requer um Redis real em execução",
+    "slow: constrói calendários reais do exchange_calendars",
+]
+# Warnings viram erro: é o que impede deprecações do pydantic de voltarem.
+filterwarnings = [
+    "error",
+    "ignore::DeprecationWarning:pytz",
+    "ignore::DeprecationWarning:dateutil",
+]
+
+# --------------------------------------------------------------------------- #
+# coverage
+# --------------------------------------------------------------------------- #
+[tool.coverage.run]
+source = ["src"]
+branch = true
+# CRÍTICO: sem relative_files, os caminhos gravados no coverage.xml são absolutos
+# (/home/runner/work/...), não casam com sonar.sources e o SonarQube mostra 0%.
+relative_files = true
+omit = ["src/__main__.py"]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+skip_covered = false
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "@(abc\\.)?abstractmethod",
+]
+
+[tool.coverage.xml]
+output = "coverage.xml"
+
+# --------------------------------------------------------------------------- #
+# ruff
+# --------------------------------------------------------------------------- #
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+extend-exclude = [".history", "htmlcov", ".venv", "venv"]
+
+[tool.ruff.lint]
+select = [
+    "E",     # pycodestyle errors
+    "W",     # pycodestyle warnings
+    "F",     # pyflakes
+    "I",     # isort
+    "N",     # pep8-naming
+    "UP",    # pyupgrade
+    "B",     # flake8-bugbear (inclui B904: raise ... from e)
+    "A",     # flake8-builtins
+    "C4",    # flake8-comprehensions
+    "SIM",   # flake8-simplify
+    "RUF",   # ruff-specific
+    "ASYNC", # flake8-async — detecta chamada bloqueante dentro de async def
+    "S",     # flake8-bandit
+    "PT",    # flake8-pytest-style
+    "LOG",   # flake8-logging
+    "G",     # flake8-logging-format (G004: f-string em log)
+    "TRY",   # tryceratops
+    "DTZ",   # flake8-datetimez
+]
+ignore = [
+    "TRY003", # mensagens longas em raise: as mensagens em pt-BR são deliberadamente descritivas
+    "E501",   # comprimento de linha: o formatter já cuida
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = [
+    "S101",    # assert é o ponto dos testes
+    "S105",    # "senhas" hardcoded em fixtures
+    "S106",
+    "PLR2004", # números mágicos em asserts
+]
+"src/main.py" = ["S104"]  # bind 0.0.0.0 é intencional em container
+
+[tool.ruff.lint.isort]
+known-first-party = ["src"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# --------------------------------------------------------------------------- #
+# mypy
+# --------------------------------------------------------------------------- #
+[tool.mypy]
+python_version = "3.11"
+files = ["src"]
+strict = false
+warn_return_any = true
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+no_implicit_optional = true
+show_error_codes = true
+pretty = true
+
+[[tool.mypy.overrides]]
+module = ["exchange_calendars.*", "fakeredis.*"]
+ignore_missing_imports = true
+
+# --------------------------------------------------------------------------- #
+# bandit
+# --------------------------------------------------------------------------- #
+[tool.bandit]
+exclude_dirs = ["tests", ".history", ".venv", "venv"]

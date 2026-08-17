@@ -209,4 +209,8 @@ __marimo__/
 
 .history/
 
-.DS_Store/
+.DS_Store
+
+# SonarQube scanner
+.scannerwork/
+.sonar/

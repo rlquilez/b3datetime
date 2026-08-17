@@ -1,0 +1,2 @@
+# Commits puramente de formatação, ignorados pelo `git blame`.
+# Uso local:  git config blame.ignoreRevsFile .git-blame-ignore-revs
