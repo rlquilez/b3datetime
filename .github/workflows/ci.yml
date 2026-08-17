@@ -1,0 +1,412 @@
+name: CI
+
+# Sem trigger de tags: quem trata tags é o release.yml. É assim que a publicação
+# dupla da imagem é evitada estruturalmente, e não por convenção.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  # Só cancela em PR: um publish da main nunca deve ser morto no meio.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check . --output-format=github
+      - run: ruff format --check .
+
+  typecheck:
+    name: Tipagem (mypy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - run: mypy src
+
+  test:
+    name: Testes (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    services:
+      # Cobre os testes de contrato contra Redis real, que são a única defesa
+      # contra drift do fakeredis exatamente na semântica que corrigimos
+      # (string vazia devolvida como "" e não None, decode_responses).
+      redis:
+        image: redis:7.4-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+
+      - name: pytest
+        run: python -m pytest
+
+      # Tripwire permanente do 0% de coverage no SonarQube: se os caminhos do
+      # coverage.xml deixarem de ser relativos à raiz, o Sonar não casa com
+      # sonar.sources e reporta 0% silenciosamente.
+      - name: Verificar caminhos do coverage.xml
+        run: |
+          if ! grep -q 'filename="src/' coverage.xml; then
+            echo "::error::coverage.xml sem caminhos 'src/...'; o SonarQube reportaria 0%"
+            grep -o 'filename="[^"]*"' coverage.xml | head -5
+            exit 1
+          fi
+          echo "OK: $(grep -c 'filename="src/' coverage.xml) arquivos com caminho relativo à raiz"
+
+      - name: Publicar relatórios
+        if: matrix.python-version == '3.11'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            coverage.xml
+            junit.xml
+          if-no-files-found: error
+
+  sonar:
+    name: SonarQube
+    needs: [test]
+    runs-on: ubuntu-latest
+    # PRs de fork não têm acesso aos secrets; sem este guard o job falharia
+    # de forma confusa em vez de ser pulado.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Clone raso quebra o git blame, que quebra a atribuição de new code,
+          # que torna as métricas de new code do quality gate sem sentido.
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: coverage-report
+          path: .
+
+      # ATENÇÃO — gate ainda NÃO bloqueante nesta etapa.
+      # O projeto b3datetime nunca havia sido analisado, e o gate `Sonar way`
+      # (built-in, não editável) mede new code: sem baseline, "novo" é tudo. Além
+      # disso a condição "security hotspots revisados = 100%" não é satisfazível
+      # pelo CI, só pela UI ou API. Sequência: (1) esta análise estabelece o
+      # baseline, (2) new code definition vai para reference branch `main`,
+      # (3) hotspots revisados e duplicação corrigida, (4) só então
+      # qualitygate.wait=true e `sonar` entra no needs de docker-publish.
+      - name: Análise (baseline, gate não bloqueante)
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        with:
+          args: >
+            -Dsonar.qualitygate.wait=false
+            -Dsonar.verbose=true
+
+  bandit:
+    name: SAST (bandit)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - name: bandit
+        run: bandit -r src -c pyproject.toml -f sarif -o bandit.sarif --exit-zero
+      - uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: bandit.sarif
+          category: bandit
+      - name: Falhar em achado de severidade alta
+        run: bandit -r src -c pyproject.toml -ll
+
+  pip-audit:
+    name: CVEs em dependências
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - uses: pypa/gh-action-pip-audit@v1.1.0
+        with:
+          inputs: requirements.txt requirements-dev.txt
+
+  dependency-review:
+    name: Revisão de dependências
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+
+  secret-scan:
+    name: Varredura de segredos (gitleaks)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # o histórico inteiro é o ponto da varredura
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: python
+          build-mode: none
+          queries: security-extended
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:python"
+
+  trivy-fs:
+    name: Trivy (filesystem)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # Duas invocações: a primeira com exit-code 0 garante que o SARIF sempre
+      # sobe; a segunda é a que efetivamente reprova o build.
+      - name: Trivy (SARIF)
+        uses: aquasecurity/trivy-action@0.29.0
+        with:
+          scan-type: fs
+          scanners: vuln,secret,misconfig
+          format: sarif
+          output: trivy-fs.sarif
+          exit-code: "0"
+        env:
+          TRIVY_SKIP_DB_UPDATE: false
+      - uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-fs.sarif
+          category: trivy-fs
+
+      - name: Trivy (bloqueante)
+        uses: aquasecurity/trivy-action@0.29.0
+        with:
+          scan-type: fs
+          scanners: vuln,misconfig
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+  docker-verify:
+    name: Build e scan da imagem
+    needs: [lint, typecheck, test]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      # Build só de amd64 com load: true. Um build multi-arch com --push não
+      # deixa nada localmente para o Trivy escanear. Sem secrets, este job
+      # também funciona em PR de fork.
+      - name: Build local (amd64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: b3datetime:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test da imagem
+        run: |
+          docker run -d --name smoke -p 8000:8000 \
+            -e REDIS_URL_ENV=redis://127.0.0.1:1 b3datetime:ci
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/v1/health || true)
+            if [ -n "$code" ] && [ "$code" != "000" ]; then break; fi
+            sleep 2
+          done
+          echo "GET /v1/health -> $code"
+          # Sem Redis, o estado correto é unhealthy com 503. Um 200 aqui significa
+          # que o health voltou a ser decorativo e o HEALTHCHECK não detecta nada.
+          [ "$code" = "503" ] || { docker logs smoke; exit 1; }
+          root=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/)
+          echo "GET / -> $root"
+          [ "$root" = "200" ] || { docker logs smoke; exit 1; }
+          docker rm -f smoke
+
+      - name: Trivy na imagem (SARIF)
+        uses: aquasecurity/trivy-action@0.29.0
+        with:
+          scan-type: image
+          image-ref: b3datetime:ci
+          format: sarif
+          output: trivy-image.sarif
+          exit-code: "0"
+      - uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-image.sarif
+          category: trivy-image
+
+      - name: Trivy na imagem (bloqueante)
+        uses: aquasecurity/trivy-action@0.29.0
+        with:
+          scan-type: image
+          image-ref: b3datetime:ci
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+  docker-publish:
+    name: Publicar imagem
+    # `sonar` entra aqui na etapa 4 do sequenciamento do gate (ver o job sonar):
+    # o gate passa a bloquear a publicação depois de ter sido observado passando,
+    # não antes — caso contrário a primeira análise trancaria o pipeline.
+    needs: [docker-verify]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    env:
+      RUNNER_TOOL_CACHE: /toolcache
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Gerar metadados da imagem
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ secrets.GIT_REGISTRY }}/${{ secrets.GIT_OWNER }}/b3datetime
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,format=short
+            type=ref,event=branch
+
+      - name: Login no Container Registry
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.GIT_REGISTRY_USER }}
+          password: ${{ secrets.GIT_REGISTRY_PASSWORD }}
+          registry: ${{ secrets.GIT_REGISTRY }}
+
+      - name: Habilitar QEMU (multi-arquitetura)
+        uses: docker/setup-qemu-action@v3
+      - name: Configurar Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Construir e enviar imagem multi-arch
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  sbom:
+    name: SBOM
+    needs: [docker-publish]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: spdx-json
+          artifact-name: sbom.spdx.json
+
+  ci-ok:
+    name: CI OK
+    # Agregador: é este o único check que precisa ser exigido em branch
+    # protection, em vez de enumerar uma dúzia de nomes de job.
+    if: always()
+    needs:
+      - lint
+      - typecheck
+      - test
+      - sonar
+      - bandit
+      - pip-audit
+      - secret-scan
+      - codeql
+      - trivy-fs
+      - docker-verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verificar resultado dos jobs
+        run: |
+          echo '${{ toJSON(needs) }}' > needs.json
+          python3 - <<'PY'
+          import json, sys
+          needs = json.load(open("needs.json"))
+          ruim = {n: r["result"] for n, r in needs.items()
+                  if r["result"] not in ("success", "skipped")}
+          for nome, resultado in sorted(ruim.items()):
+              print(f"::error::job '{nome}' terminou como {resultado}")
+          if ruim:
+              sys.exit(1)
+          print("Todos os jobs obrigatórios passaram.")
+          PY
