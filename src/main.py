@@ -20,6 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import ValidationError
 
 from src.config import Settings, get_settings
 from src.routers import dates, health, hours
@@ -79,6 +80,22 @@ def _register_exception_handlers(app: FastAPI) -> None:
                     "error": "Not Found",
                     "message": "Chave não encontrada no Redis",
                     "key": exc.key,
+                }
+            },
+        )
+
+    @app.exception_handler(ValidationError)
+    async def _invalid_upstream(_: Request, exc: ValidationError) -> JSONResponse:
+        # Chega aqui quando o valor lido do Redis não satisfaz o contrato da resposta
+        # (ex.: "25:00" onde se promete HH:MM). 502, porque a falha é do upstream, não
+        # do cliente. Antes, a exceção escapava e virava um 500 sem explicação.
+        logger.error("Valor inválido lido do Redis: %s", exc.errors())
+        return JSONResponse(
+            status_code=502,
+            content={
+                "detail": {
+                    "error": "Bad Gateway",
+                    "message": "O valor armazenado no Redis não está no formato esperado",
                 }
             },
         )

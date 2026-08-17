@@ -49,7 +49,21 @@ class CalendarInfoResponse(BaseModel):
     """Limites vigentes do calendário carregado."""
 
     exchange: str = Field(..., json_schema_extra={"example": "BVMF"})
-    first_session: str = Field(..., json_schema_extra={"example": "2016-08-17"})
+    coverage_start: str = Field(
+        ...,
+        description="Primeira data respondível. Períodos que comecem antes são rejeitados",
+        json_schema_extra={"example": "2016-08-17"},
+    )
+    coverage_end: str = Field(
+        ...,
+        description="Última data respondível",
+        json_schema_extra={"example": "2027-08-17"},
+    )
+    first_session: str = Field(
+        ...,
+        description="Primeiro dia de negociação dentro da cobertura",
+        json_schema_extra={"example": "2016-08-17"},
+    )
     last_session: str = Field(..., json_schema_extra={"example": "2027-08-17"})
     sessions_count: int = Field(..., json_schema_extra={"example": 2730})
     max_range_days: int = Field(
@@ -101,14 +115,17 @@ def _validate_range(calendar: TradingCalendar, start: date, end: date, max_range
 )
 async def get_calendar_info(calendar: CalendarDep, settings: SettingsDep) -> CalendarInfoResponse:
     """Limites vigentes do calendário."""
-    first, last = calendar.bounds
-    if first is None or last is None:  # pragma: no cover - calendário vazio
+    coverage_start, coverage_end = calendar.coverage
+    first, last = calendar.first_session, calendar.last_session
+    if coverage_start is None or coverage_end is None or first is None or last is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={"error": "Service Unavailable", "message": "Calendário vazio"},
         )
     return CalendarInfoResponse(
         exchange=settings.exchange_name,
+        coverage_start=coverage_start.isoformat(),
+        coverage_end=coverage_end.isoformat(),
         first_session=first.isoformat(),
         last_session=last.isoformat(),
         sessions_count=len(calendar),

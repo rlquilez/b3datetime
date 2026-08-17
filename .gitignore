@@ -214,3 +214,6 @@ __marimo__/
 # SonarQube scanner
 .scannerwork/
 .sonar/
+
+# Relatórios de teste
+junit.xml

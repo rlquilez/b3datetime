@@ -22,7 +22,7 @@ import asyncio
 import logging
 from collections.abc import Callable
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import redis.asyncio as aioredis
 from redis.exceptions import RedisError
@@ -118,11 +118,15 @@ class RedisService:
 
     def _default_client_factory(self) -> aioredis.Redis:
         timeout = self._settings.redis_socket_timeout_seconds
-        return aioredis.from_url(
-            self._settings.redis_url,
-            decode_responses=True,
-            socket_connect_timeout=timeout,
-            socket_timeout=timeout,
+        # cast: redis-py declara from_url como Any.
+        return cast(
+            "aioredis.Redis",
+            aioredis.from_url(
+                self._settings.redis_url,
+                decode_responses=True,
+                socket_connect_timeout=timeout,
+                socket_timeout=timeout,
+            ),
         )
 
     async def connect(self) -> None:
@@ -250,7 +254,11 @@ class RedisService:
     # --- diagnóstico -------------------------------------------------------
 
     async def is_connected(self) -> bool:
-        client = self._client
+        # _ensure_client, e não apenas a leitura de self._client: sem isso, o health
+        # reportaria "disconnected" indefinidamente após uma queda, mesmo com o Redis
+        # de volta e com /v1/hours já reconectando. Como orquestradores fazem poll no
+        # health, é ele que dispara a reconexão na prática. A tentativa vem throttled.
+        client = await self._ensure_client()
         if client is None:
             return False
         try:

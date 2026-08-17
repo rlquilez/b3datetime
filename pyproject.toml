@@ -21,7 +21,7 @@ addopts = """
     --strict-markers
     --strict-config
     --import-mode=importlib
-    --cov=src
+    --cov
     --cov-report=term-missing
     --cov-report=xml:coverage.xml
     --junitxml=junit.xml
@@ -42,7 +42,7 @@ filterwarnings = [
 # coverage
 # --------------------------------------------------------------------------- #
 [tool.coverage.run]
-source = ["src"]
+include = ["src/*", "src/**/*"]
 branch = true
 # CRÍTICO: sem relative_files, os caminhos gravados no coverage.xml são absolutos
 # (/home/runner/work/...), não casam com sonar.sources e o SonarQube mostra 0%.
@@ -132,7 +132,7 @@ show_error_codes = true
 pretty = true
 
 [[tool.mypy.overrides]]
-module = ["exchange_calendars.*", "fakeredis.*"]
+module = ["exchange_calendars.*", "pandas.*"]
 ignore_missing_imports = true
 
 # --------------------------------------------------------------------------- #
