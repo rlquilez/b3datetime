@@ -1,6 +1,6 @@
 # Imagem multi-stage da B3 DateTime API.
 # Stage 1: build das dependências
-FROM python:3.11-slim AS builder
+FROM python:3.14-slim AS builder
 
 WORKDIR /app
 
@@ -12,7 +12,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --user -r requirements.txt
 
 # Stage 2: runtime
-FROM python:3.11-slim
+FROM python:3.14-slim
 
 # Patches de segurança do sistema disponíveis no momento do build. A imagem base
 # costuma ficar atrás dos repositórios Debian (ex.: CVE-2026-53615 na família
