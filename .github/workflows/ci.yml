@@ -152,6 +152,10 @@ jobs:
         with:
           sarif_file: bandit.sarif
           category: bandit
+        # Caminho de relato, não de decisão: quem reprova o build é o passo de scan
+        # bloqueante. Uma indisponibilidade do endpoint de code scanning do GitHub
+        # não deve derrubar um scan que passou.
+        continue-on-error: true
       - name: Falhar em achado de severidade alta
         run: bandit -r src -c pyproject.toml -ll
 
@@ -237,6 +241,10 @@ jobs:
         with:
           sarif_file: trivy-fs.sarif
           category: trivy-fs
+        # Caminho de relato, não de decisão: quem reprova o build é o passo de scan
+        # bloqueante. Uma indisponibilidade do endpoint de code scanning do GitHub
+        # não deve derrubar um scan que passou.
+        continue-on-error: true
 
       - name: Trivy (bloqueante)
         uses: aquasecurity/trivy-action@v0.36.0
@@ -302,6 +310,10 @@ jobs:
         with:
           sarif_file: trivy-image.sarif
           category: trivy-image
+        # Caminho de relato, não de decisão: quem reprova o build é o passo de scan
+        # bloqueante. Uma indisponibilidade do endpoint de code scanning do GitHub
+        # não deve derrubar um scan que passou.
+        continue-on-error: true
 
       - name: Trivy na imagem (bloqueante)
         uses: aquasecurity/trivy-action@v0.36.0
