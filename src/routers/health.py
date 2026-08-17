@@ -1,6 +1,7 @@
 """
 Router para endpoint de health check.
 """
+
 from datetime import datetime
 
 from fastapi import APIRouter
@@ -9,16 +10,18 @@ from pydantic import BaseModel, Field
 from src.services.redis_service import redis_service
 from src.config import TZ, get_current_datetime
 
-router = APIRouter(
-    prefix="/v1",
-    tags=["Health Check"]
-)
+router = APIRouter(prefix="/v1", tags=["Health Check"])
 
 
 class HealthResponse(BaseModel):
     """Modelo para resposta do health check."""
+
     status: str = Field(..., description="Status geral da API", example="healthy")
-    timestamp: str = Field(..., description="Timestamp do health check no formato ISO 8601", example="2024-01-15T10:30:00-03:00")
+    timestamp: str = Field(
+        ...,
+        description="Timestamp do health check no formato ISO 8601",
+        example="2024-01-15T10:30:00-03:00",
+    )
     redis_status: str = Field(..., description="Status da conexão Redis", example="connected")
     cache: dict = Field(..., description="Informações sobre o cache local")
 
@@ -63,9 +66,9 @@ class HealthResponse(BaseModel):
                                     "redis_connected": True,
                                     "open_cache_age_seconds": 120,
                                     "close_cache_age_seconds": 120,
-                                    "cache_ttl_seconds": 3600
-                                }
-                            }
+                                    "cache_ttl_seconds": 3600,
+                                },
+                            },
                         },
                         "degraded": {
                             "summary": "Sistema degradado (Redis offline, usando cache)",
@@ -77,9 +80,9 @@ class HealthResponse(BaseModel):
                                     "redis_connected": False,
                                     "open_cache_age_seconds": 1800,
                                     "close_cache_age_seconds": 1800,
-                                    "cache_ttl_seconds": 3600
-                                }
-                            }
+                                    "cache_ttl_seconds": 3600,
+                                },
+                            },
                         },
                         "unhealthy": {
                             "summary": "Sistema não saudável (Redis offline, sem cache)",
@@ -91,21 +94,21 @@ class HealthResponse(BaseModel):
                                     "redis_connected": False,
                                     "open_cache_age_seconds": None,
                                     "close_cache_age_seconds": None,
-                                    "cache_ttl_seconds": 3600
-                                }
-                            }
-                        }
+                                    "cache_ttl_seconds": 3600,
+                                },
+                            },
+                        },
                     }
                 }
-            }
+            },
         }
-    }
+    },
 )
 async def health_check():
     """Retorna informações de saúde da API."""
     cache_status = redis_service.get_cache_status()
     redis_connected = cache_status["redis_connected"]
-    
+
     # Determina status geral
     if redis_connected:
         status = "healthy"
@@ -116,10 +119,10 @@ async def health_check():
     else:
         status = "unhealthy"
         redis_status = "disconnected"
-    
+
     return HealthResponse(
         status=status,
         timestamp=get_current_datetime().isoformat(),
         redis_status=redis_status,
-        cache=cache_status
+        cache=cache_status,
     )

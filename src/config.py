@@ -2,6 +2,7 @@
 Configurações da aplicação B3 DateTime API.
 Carrega variáveis de ambiente e define constantes.
 """
+
 import os
 from datetime import datetime
 from typing import Optional
@@ -12,22 +13,22 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     """Configurações da aplicação carregadas de variáveis de ambiente."""
-    
+
     # Configurações Redis
     redis_url: str = os.getenv("REDIS_URL_ENV", "redis://localhost:6379")
     redis_key_open: str = os.getenv("REDIS_KEY_OPEN", "b3:trading:hours:open")
     redis_key_close: str = os.getenv("REDIS_KEY_CLOSE", "b3:trading:hours:close")
-    
+
     # Configurações de Cache
     cache_ttl_seconds: int = 3600  # 1 hora
-    
+
     # Configurações de Timezone
     timezone: str = "America/Sao_Paulo"
-    
+
     # Configurações de Exchange Calendar
     exchange_name: str = "BVMF"  # B3/Bovespa
     min_date_year: int = 2006  # Data mínima permitida: 01/01/2006
-    
+
     # Configurações da API
     api_title: str = "B3 DateTime API"
     api_description: str = """
@@ -46,7 +47,7 @@ class Settings(BaseSettings):
     """
     api_version: str = "1.0.0"
     root_path: str = os.getenv("ROOT_PATH", "")  # Ex: /b3datetime para proxy reverso
-    
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

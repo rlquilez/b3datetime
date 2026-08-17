@@ -1,25 +1,25 @@
 """
 Router para endpoints de horários de operação da B3.
 """
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from src.services.redis_service import redis_service
 
-router = APIRouter(
-    prefix="/v1/hours",
-    tags=["Horários de Operação"]
-)
+router = APIRouter(prefix="/v1/hours", tags=["Horários de Operação"])
 
 
 class TradingHours(BaseModel):
     """Modelo para horários de abertura e fechamento."""
+
     open: str = Field(..., description="Horário de abertura no formato HH:MM", example="10:00")
     close: str = Field(..., description="Horário de fechamento no formato HH:MM", example="18:00")
 
 
 class TradingTime(BaseModel):
     """Modelo para horário único."""
+
     time: str = Field(..., description="Horário no formato HH:MM", example="10:00")
 
 
@@ -38,14 +38,7 @@ class TradingTime(BaseModel):
     responses={
         200: {
             "description": "Horários obtidos com sucesso",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "open": "10:00",
-                        "close": "18:00"
-                    }
-                }
-            }
+            "content": {"application/json": {"example": {"open": "10:00", "close": "18:00"}}},
         },
         503: {
             "description": "Redis indisponível e cache expirado",
@@ -56,19 +49,19 @@ class TradingTime(BaseModel):
                             "error": "Service Unavailable",
                             "message": "Redis indisponível há mais de 3600s",
                             "cache_age_seconds": 3700,
-                            "key": "b3:trading:hours:open"
+                            "key": "b3:trading:hours:open",
                         }
                     }
                 }
-            }
-        }
-    }
+            },
+        },
+    },
 )
 async def get_trading_hours():
     """Retorna horários de abertura e fechamento."""
     open_time = redis_service.get_open_time()
     close_time = redis_service.get_close_time()
-    
+
     return TradingHours(open=open_time, close=close_time)
 
 
@@ -86,18 +79,10 @@ async def get_trading_hours():
     responses={
         200: {
             "description": "Horário de abertura obtido com sucesso",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "time": "10:00"
-                    }
-                }
-            }
+            "content": {"application/json": {"example": {"time": "10:00"}}},
         },
-        503: {
-            "description": "Redis indisponível e cache expirado"
-        }
-    }
+        503: {"description": "Redis indisponível e cache expirado"},
+    },
 )
 async def get_open_time():
     """Retorna horário de abertura."""
@@ -119,18 +104,10 @@ async def get_open_time():
     responses={
         200: {
             "description": "Horário de fechamento obtido com sucesso",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "time": "18:00"
-                    }
-                }
-            }
+            "content": {"application/json": {"example": {"time": "18:00"}}},
         },
-        503: {
-            "description": "Redis indisponível e cache expirado"
-        }
-    }
+        503: {"description": "Redis indisponível e cache expirado"},
+    },
 )
 async def get_close_time():
     """Retorna horário de fechamento."""

@@ -1,6 +1,7 @@
 """
 Router para endpoints de dias de negociação da B3.
 """
+
 from datetime import date, datetime, timedelta
 from typing import List, Optional
 
@@ -11,14 +12,13 @@ from pydantic import BaseModel, Field
 
 from src.config import settings, TZ, get_current_datetime, get_min_allowed_date
 
-router = APIRouter(
-    prefix="/v1",
-    tags=["Dias de Negociação"]
-)
+router = APIRouter(prefix="/v1", tags=["Dias de Negociação"])
 
 # Inicializa o calendário BVMF (B3)
 try:
-    _start = pd.Timestamp.now(tz="America/Sao_Paulo").normalize().tz_localize(None) - pd.DateOffset(years=10)
+    _start = pd.Timestamp.now(tz="America/Sao_Paulo").normalize().tz_localize(None) - pd.DateOffset(
+        years=10
+    )
     bvmf_calendar = xcals.get_calendar(
         settings.exchange_name,
         start=_start,
@@ -29,7 +29,10 @@ except Exception as e:
 
 class TradingDayResponse(BaseModel):
     """Modelo para resposta de validação de dia de negociação."""
-    date: str = Field(..., description="Data verificada no formato YYYY-MM-DD", example="2024-01-15")
+
+    date: str = Field(
+        ..., description="Data verificada no formato YYYY-MM-DD", example="2024-01-15"
+    )
     is_trading_day: bool = Field(..., description="Se é um dia de negociação na B3", example=True)
 
 
@@ -55,23 +58,17 @@ class TradingDayResponse(BaseModel):
                     "examples": {
                         "trading_day": {
                             "summary": "Dia de negociação",
-                            "value": {
-                                "date": "2024-01-15",
-                                "is_trading_day": True
-                            }
+                            "value": {"date": "2024-01-15", "is_trading_day": True},
                         },
                         "non_trading_day": {
                             "summary": "Não é dia de negociação",
-                            "value": {
-                                "date": "2024-01-20",
-                                "is_trading_day": False
-                            }
-                        }
+                            "value": {"date": "2024-01-20", "is_trading_day": False},
+                        },
                     }
                 }
-            }
+            },
         }
-    }
+    },
 )
 async def is_trading_day():
     """Verifica se hoje é dia de negociação na B3."""
@@ -79,10 +76,7 @@ async def is_trading_day():
     today_ts = pd.Timestamp(today)
     is_open = today_ts in bvmf_calendar.sessions
 
-    return TradingDayResponse(
-        date=today.isoformat(),
-        is_trading_day=is_open
-    )
+    return TradingDayResponse(date=today.isoformat(), is_trading_day=is_open)
 
 
 @router.get(
@@ -119,50 +113,42 @@ async def is_trading_day():
                                 "2024-01-03",
                                 "2024-01-04",
                                 "2024-01-05",
-                                "2024-01-08"
-                            ]
+                                "2024-01-08",
+                            ],
                         },
                         "non_trading_days": {
                             "summary": "Dias sem negociação (exclude=true)",
-                            "value": [
-                                "2024-01-01",
-                                "2024-01-06",
-                                "2024-01-07"
-                            ]
-                        }
+                            "value": ["2024-01-01", "2024-01-06", "2024-01-07"],
+                        },
                     }
                 }
-            }
+            },
         },
         400: {
             "description": "Parâmetros inválidos",
             "content": {
-                "application/json": {
-                    "example": {
-                        "detail": "Data inicial deve ser >= 2006-01-01"
-                    }
-                }
-            }
-        }
-    }
+                "application/json": {"example": {"detail": "Data inicial deve ser >= 2006-01-01"}}
+            },
+        },
+    },
 )
 async def get_trading_days(
     start: str = Query(
         ...,
         description="Data inicial no formato YYYY-MM-DD (>= 2006-01-01)",
         example="2024-01-01",
-        pattern=r"^\d{4}-\d{2}-\d{2}$"
+        pattern=r"^\d{4}-\d{2}-\d{2}$",
     ),
     end: str = Query(
         ...,
         description="Data final no formato YYYY-MM-DD (>= start)",
         example="2024-01-31",
-        pattern=r"^\d{4}-\d{2}-\d{2}$"
+        pattern=r"^\d{4}-\d{2}-\d{2}$",
     ),
     exclude: bool = Query(
         False,
-        description="Se True, retorna dias SEM negociação; se False, retorna dias COM negociação"
-    )
+        description="Se True, retorna dias SEM negociação; se False, retorna dias COM negociação",
+    ),
 ):
     """
     Lista dias de negociação (ou não negociação) em um período.
@@ -173,32 +159,27 @@ async def get_trading_days(
         end_date = date.fromisoformat(end)
     except ValueError as e:
         raise HTTPException(
-            status_code=400,
-            detail=f"Formato de data inválido: {e}. Use YYYY-MM-DD"
+            status_code=400, detail=f"Formato de data inválido: {e}. Use YYYY-MM-DD"
         )
-    
+
     # Valida data mínima (2006-01-01)
     min_date = get_min_allowed_date().date()
     if start_date < min_date:
         raise HTTPException(
-            status_code=400,
-            detail=f"Data inicial deve ser >= {min_date.isoformat()}"
+            status_code=400, detail=f"Data inicial deve ser >= {min_date.isoformat()}"
         )
-    
+
     # Valida que end >= start
     if end_date < start_date:
-        raise HTTPException(
-            status_code=400,
-            detail="Data final deve ser >= data inicial"
-        )
-    
+        raise HTTPException(status_code=400, detail="Data final deve ser >= data inicial")
+
     # Obtém schedule do calendário via DatetimeIndex (evita parse_date/DateOutOfBounds)
     start_ts = pd.Timestamp(start_date)
     end_ts = pd.Timestamp(end_date)
     sessions = bvmf_calendar.sessions
     mask = (sessions >= start_ts) & (sessions <= end_ts)
     trading_days = [ts.date() for ts in sessions[mask]]
-    
+
     # Se exclude=True, retorna dias que NÃO são de negociação
     if exclude:
         # Gera todas as datas no range
@@ -207,12 +188,10 @@ async def get_trading_days(
         while current <= end_date:
             all_days.append(current)
             current = date.fromordinal(current.toordinal() + 1)
-        
+
         # Filtra dias que não são de negociação
-        non_trading_days = [
-            day for day in all_days if day not in trading_days
-        ]
+        non_trading_days = [day for day in all_days if day not in trading_days]
         return [day.isoformat() for day in non_trading_days]
-    
+
     # Retorna dias de negociação
     return [day.isoformat() for day in trading_days]

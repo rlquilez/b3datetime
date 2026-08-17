@@ -1,6 +1,7 @@
 """
 B3 DateTime API - API para consultar horários e dias de operação da B3.
 """
+
 import logging
 from contextlib import asynccontextmanager
 
@@ -14,8 +15,7 @@ from src.routers import hours, dates, health
 
 # Configurar logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -43,14 +43,8 @@ app = FastAPI(
     openapi_url="/openapi.json",  # Manter absoluto para o próprio FastAPI
     lifespan=lifespan,
     swagger_ui_parameters={"syntaxHighlight.theme": "monokai"},
-    contact={
-        "name": "B3 DateTime API",
-        "url": "https://github.com/rlquilez/b3datetime"
-    },
-    license_info={
-        "name": "MIT",
-        "url": "https://opensource.org/licenses/MIT"
-    }
+    contact={"name": "B3 DateTime API", "url": "https://github.com/rlquilez/b3datetime"},
+    license_info={"name": "MIT", "url": "https://opensource.org/licenses/MIT"},
 )
 
 # Configurar CORS
@@ -74,7 +68,7 @@ async def custom_swagger_ui_html():
     return get_swagger_ui_html(
         openapi_url="./openapi.json",  # Caminho relativo!
         title=f"{settings.api_title} - Swagger UI",
-        swagger_ui_parameters={"syntaxHighlight.theme": "monokai"}
+        swagger_ui_parameters={"syntaxHighlight.theme": "monokai"},
     )
 
 
@@ -108,7 +102,7 @@ async def redoc_html():
     "/",
     tags=["Root"],
     summary="Informações da API",
-    description="Retorna informações básicas sobre a API."
+    description="Retorna informações básicas sobre a API.",
 )
 async def root():
     """Endpoint raiz com informações da API."""
@@ -116,37 +110,20 @@ async def root():
         "name": settings.api_title,
         "version": settings.api_version,
         "description": "API para consultar horários e dias de operação da B3",
-        "docs": {
-            "swagger": "/docs",
-            "redoc": "/redoc",
-            "openapi": "./openapi.json"
-        },
+        "docs": {"swagger": "/docs", "redoc": "/redoc", "openapi": "./openapi.json"},
         "endpoints": {
-            "hours": {
-                "all": "/v1/hours",
-                "open": "/v1/hours/open",
-                "close": "/v1/hours/close"
-            },
+            "hours": {"all": "/v1/hours", "open": "/v1/hours/open", "close": "/v1/hours/close"},
             "dates": {
                 "is_trading_day": "/v1/is-trading-day",
-                "trading_days": "/v1/trading-days?start=YYYY-MM-DD&end=YYYY-MM-DD&exclude=false"
+                "trading_days": "/v1/trading-days?start=YYYY-MM-DD&end=YYYY-MM-DD&exclude=false",
             },
-            "health": "/v1/health"
+            "health": "/v1/health",
         },
-        "authentication": {
-            "type": "API Key",
-            "header": "apikey",
-            "managed_by": "Kong Gateway"
-        }
+        "authentication": {"type": "API Key", "header": "apikey", "managed_by": "Kong Gateway"},
     }
 
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(
-        "src.main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,
-        log_level="info"
-    )
+
+    uvicorn.run("src.main:app", host="0.0.0.0", port=8000, reload=True, log_level="info")
