@@ -56,7 +56,6 @@ class TradingTime(BaseModel):
 
 @router.get(
     "",
-    response_model=TradingHours,
     summary="Obter horários de abertura e fechamento",
     description=f"""
     Retorna os horários de abertura e fechamento da B3.
@@ -85,7 +84,6 @@ async def get_trading_hours(redis: RedisDep) -> TradingHours:
 
 @router.get(
     "/open",
-    response_model=TradingTime,
     summary="Obter horário de abertura",
     description=f"""
     Retorna apenas o horário de abertura da B3.
@@ -110,7 +108,6 @@ async def get_open_time(redis: RedisDep) -> TradingTime:
 
 @router.get(
     "/close",
-    response_model=TradingTime,
     summary="Obter horário de fechamento",
     description=f"""
     Retorna apenas o horário de fechamento da B3.

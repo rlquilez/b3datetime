@@ -100,7 +100,6 @@ def _validate_range(calendar: TradingCalendar, start: date, end: date, max_range
 
 @router.get(
     "/calendar-info",
-    response_model=CalendarInfoResponse,
     summary="Consultar os limites do calendário",
     description=f"""
     Retorna os limites vigentes do calendário carregado.
@@ -135,7 +134,6 @@ async def get_calendar_info(calendar: CalendarDep, settings: SettingsDep) -> Cal
 
 @router.get(
     "/is-trading-day",
-    response_model=TradingDayResponse,
     summary="Verificar se hoje é dia de negociação",
     description=f"""
     Verifica se o dia atual é um dia de negociação na B3, considerando feriados e finais
@@ -180,7 +178,6 @@ async def is_trading_day(calendar: CalendarDep, settings: SettingsDep) -> Tradin
 
 @router.get(
     "/trading-days",
-    response_model=list[str],
     summary="Listar dias de negociação em um período",
     description=f"""
     Retorna os dias de negociação (ou de não-negociação) num período.

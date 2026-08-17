@@ -30,6 +30,10 @@ from src.static import REDOC_JS, STATIC_DIR, SWAGGER_CSS, SWAGGER_JS
 
 logger = logging.getLogger(__name__)
 
+# Caminho relativo: atrás do Kong com prefixo, um caminho absoluto para
+# openapi.json quebra as páginas de documentação.
+OPENAPI_RELATIVE_URL = "./openapi.json"
+
 
 def configure_logging() -> None:
     """Configura o logging raiz. Chamado no entrypoint, não no import."""
@@ -148,12 +152,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(dates.router)
     app.include_router(health.router)
 
-    # Caminhos relativos: atrás do Kong com prefixo, um caminho absoluto para
-    # openapi.json quebra a página de documentação.
     @app.get("/docs", include_in_schema=False)
     async def swagger_ui() -> object:
         return get_swagger_ui_html(
-            openapi_url="./openapi.json",
+            openapi_url=OPENAPI_RELATIVE_URL,
             title=f"{settings.api_title} - Swagger UI",
             swagger_js_url=f"./static/{SWAGGER_JS}",
             swagger_css_url=f"./static/{SWAGGER_CSS}",
@@ -163,7 +165,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/redoc", include_in_schema=False)
     async def redoc_ui() -> object:
         return get_redoc_html(
-            openapi_url="./openapi.json",
+            openapi_url=OPENAPI_RELATIVE_URL,
             title=f"{settings.api_title} - ReDoc",
             redoc_js_url=f"./static/{REDOC_JS}",
             redoc_favicon_url="./static/favicon.png",
@@ -179,7 +181,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "docs": {
                 "swagger": "/docs",
                 "redoc": "/redoc",
-                "openapi": "./openapi.json",
+                "openapi": OPENAPI_RELATIVE_URL,
             },
             "endpoints": {
                 "hours": {

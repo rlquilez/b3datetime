@@ -74,7 +74,6 @@ def _evaluate(cache: dict[str, Any], calendar_available: bool) -> str:
 
 @router.get(
     "/health",
-    response_model=HealthResponse,
     summary="Verificar saúde da API",
     description=f"""
     Retorna o estado da API e de suas dependências.

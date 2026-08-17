@@ -78,8 +78,9 @@ def test_periodo_totalmente_fora_da_janela_levanta(test_calendar: TradingCalenda
 
     A API afirmava que a B3 não teve nenhum dia de negociação no ano inteiro.
     """
+    inicio, fim = date(2010, 1, 1), date(2010, 12, 31)
     with pytest.raises(CalendarRangeOutOfBoundsError) as exc:
-        test_calendar.require_coverage(date(2010, 1, 1), date(2010, 12, 31))
+        test_calendar.require_coverage(inicio, fim)
 
     assert exc.value.coverage_start == date(2024, 1, 1)
     assert exc.value.coverage_end == date(2024, 12, 31)
@@ -91,18 +92,20 @@ def test_periodo_fora_da_janela_nao_vira_lista_de_nao_negociacao(
 ) -> None:
     """Regressão: com exclude=true, um período fora da janela devolvia todos os dias
     como "sem negociação" — o pior dos dois caminhos, porque parecia plausível."""
+    inicio, fim = date(2010, 1, 1), date(2010, 12, 31)
     with pytest.raises(CalendarRangeOutOfBoundsError):
-        test_calendar.require_coverage(date(2010, 1, 1), date(2010, 12, 31))
+        test_calendar.require_coverage(inicio, fim)
 
 
 def test_periodo_parcialmente_coberto_tambem_e_rejeitado(
     test_calendar: TradingCalendar,
 ) -> None:
-    with pytest.raises(CalendarRangeOutOfBoundsError):
-        test_calendar.require_coverage(date(2023, 12, 1), date(2024, 3, 1))
+    antes_da_janela = (date(2023, 12, 1), date(2024, 3, 1))
+    depois_da_janela = (date(2024, 12, 1), date(2025, 3, 1))
 
-    with pytest.raises(CalendarRangeOutOfBoundsError):
-        test_calendar.require_coverage(date(2024, 12, 1), date(2025, 3, 1))
+    for inicio, fim in (antes_da_janela, depois_da_janela):
+        with pytest.raises(CalendarRangeOutOfBoundsError):
+            test_calendar.require_coverage(inicio, fim)
 
 
 def test_cobertura_sem_janela_explicita_usa_as_sessoes() -> None:
@@ -116,8 +119,9 @@ def test_calendario_vazio_nao_estoura() -> None:
     assert not vazio.covers(date(2024, 1, 1), date(2024, 1, 2))
     assert len(vazio) == 0
 
+    inicio, fim = date(2024, 1, 1), date(2024, 1, 2)
     with pytest.raises(CalendarRangeOutOfBoundsError, match="vazio"):
-        vazio.require_coverage(date(2024, 1, 1), date(2024, 1, 2))
+        vazio.require_coverage(inicio, fim)
 
 
 def test_len(test_calendar: TradingCalendar) -> None:
@@ -170,8 +174,9 @@ def test_build_bvmf_calendar_traduz_falha(monkeypatch: pytest.MonkeyPatch) -> No
         raise ValueError("catálogo corrompido")
 
     monkeypatch.setattr(mod.xcals, "get_calendar", boom)
+    settings = Settings(_env_file=None)
     with pytest.raises(CalendarUnavailableError, match="BVMF"):
-        build_bvmf_calendar(Settings(_env_file=None))
+        build_bvmf_calendar(settings)
 
 
 def test_build_bvmf_calendar_preserva_a_causa(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -183,8 +188,9 @@ def test_build_bvmf_calendar_preserva_a_causa(monkeypatch: pytest.MonkeyPatch) -
         raise original
 
     monkeypatch.setattr(mod.xcals, "get_calendar", boom)
+    settings = Settings(_env_file=None)
     with pytest.raises(CalendarUnavailableError) as exc:
-        build_bvmf_calendar(Settings(_env_file=None))
+        build_bvmf_calendar(settings)
     assert exc.value.__cause__ is original
 
 

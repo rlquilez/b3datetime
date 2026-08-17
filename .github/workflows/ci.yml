@@ -119,23 +119,19 @@ jobs:
           name: coverage-report
           path: .
 
-      # ATENÇÃO — gate ainda NÃO bloqueante nesta etapa.
-      # O projeto b3datetime nunca havia sido analisado, e o gate `Sonar way`
-      # (built-in, não editável) mede new code: sem baseline, "novo" é tudo. Além
-      # disso a condição "security hotspots revisados = 100%" não é satisfazível
-      # pelo CI, só pela UI ou API. Sequência: (1) esta análise estabelece o
-      # baseline, (2) new code definition vai para reference branch `main`,
-      # (3) hotspots revisados e duplicação corrigida, (4) só então
-      # qualitygate.wait=true e `sonar` entra no needs de docker-publish.
-      - name: Análise (baseline, gate não bloqueante)
+      # Gate bloqueante. A primeira análise (commit 4cdd874) estabeleceu o baseline
+      # e passou com new_coverage 100%, duplicação 0% e 0 violations, e o projeto
+      # não tem security hotspots — então o gate pôde ser fechado depois de ter
+      # sido observado passando, e não antes.
+      - name: Análise e quality gate
         uses: SonarSource/sonarqube-scan-action@v6
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         with:
           args: >
-            -Dsonar.qualitygate.wait=false
-            -Dsonar.verbose=true
+            -Dsonar.qualitygate.wait=true
+            -Dsonar.qualitygate.timeout=600
 
   bandit:
     name: SAST (bandit)
@@ -318,10 +314,9 @@ jobs:
 
   docker-publish:
     name: Publicar imagem
-    # `sonar` entra aqui na etapa 4 do sequenciamento do gate (ver o job sonar):
-    # o gate passa a bloquear a publicação depois de ter sido observado passando,
-    # não antes — caso contrário a primeira análise trancaria o pipeline.
-    needs: [docker-verify]
+    # Nenhuma imagem é publicada sem lint, tipagem, testes, scan da imagem e
+    # quality gate aprovado.
+    needs: [docker-verify, sonar]
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     env:
