@@ -82,12 +82,14 @@ def auth_description(api_key_required: bool) -> str:
 
 # --- Blocos `responses` ---------------------------------------------------------------
 
+JSON = "application/json"
+
 
 def error_response(description: str, example: dict[str, Any]) -> dict[str, Any]:
     """Monta uma entrada de `responses` com um único exemplo de erro."""
     return {
         "description": description,
-        "content": {"application/json": {"example": {"detail": example}}},
+        "content": {JSON: {"example": {"detail": example}}},
     }
 
 
@@ -95,7 +97,7 @@ def examples_response(description: str, examples: dict[str, Any]) -> dict[str, A
     """Monta uma entrada de `responses` com exemplos nomeados."""
     return {
         "description": description,
-        "content": {"application/json": {"examples": examples}},
+        "content": {JSON: {"examples": examples}},
     }
 
 
@@ -103,7 +105,7 @@ def success_response(description: str, example: dict[str, Any] | list[Any]) -> d
     """Monta uma entrada de sucesso de `responses` com um único exemplo."""
     return {
         "description": description,
-        "content": {"application/json": {"example": example}},
+        "content": {JSON: {"example": example}},
     }
 
 
