@@ -7,6 +7,8 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ## [Não publicado]
 
+## [2.0.2] - 2026-09-04
+
 ### Alterado
 
 - Runtime da imagem migrado para **Python 3.14** (`python:3.14-slim`). A suíte continua rodando em 3.11 (mínimo suportado) e agora também em 3.14 no CI, e `sonar.python.version` acompanha o runtime. A remoção de `pip`/`setuptools`/`wheel` da imagem passa a descobrir o `site-packages` via `sysconfig`, em vez de um caminho com a versão hardcoded. (#31)
@@ -110,7 +112,8 @@ Primeira versão da API, desenvolvida entre 2025-12-26 e 2026-03-12.
 - Imagem Docker multi-arquitetura (`linux/amd64`, `linux/arm64`) publicada por GitHub Actions.
 - Timezone `America/Sao_Paulo` em todas as operações de data e hora.
 
-[Não publicado]: https://github.com/rlquilez/b3datetime/compare/v2.0.1...HEAD
+[Não publicado]: https://github.com/rlquilez/b3datetime/compare/v2.0.2...HEAD
+[2.0.2]: https://github.com/rlquilez/b3datetime/compare/v2.0.1...v2.0.2
 [2.0.1]: https://github.com/rlquilez/b3datetime/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/rlquilez/b3datetime/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/rlquilez/b3datetime/releases/tag/v1.0.0

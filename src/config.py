@@ -110,7 +110,7 @@ class Settings(BaseSettings):
     # --- API ---
     api_title: str = "B3 DateTime API"
     api_description: str = API_DESCRIPTION
-    api_version: str = "2.0.1"
+    api_version: str = "2.0.2"
     root_path: str = ""
     # Só afeta a documentação: com `true`, o OpenAPI declara o esquema `ApiKeyAuth` e
     # `GET /` informa que o header `apikey` é obrigatório. Quem valida a chave é o Kong;
