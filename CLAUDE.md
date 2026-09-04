@@ -129,8 +129,10 @@ Integration tests against real Redis auto-skip when none is reachable, and use *
 
 - **No `tags:` trigger** — `release.yml` owns tags. That is how double-publishing is prevented structurally.
 - `latest` is `enable={{is_default_branch}}`. It used to be unconditional, so a push to any branch overwrote production `latest`.
-- The `test` job greps `coverage.xml` for `filename="src/`. Coverage is configured with `include` (not `source`) precisely so paths are root-relative; otherwise SonarQube silently reports **0%**.
-- `docker-verify` builds amd64 with `load: true` so Trivy has something to scan, and needs no secrets (works on fork PRs).
+- The `test` job greps `coverage.xml` for `filename="src/`. Coverage is configured with `include` (not `source`) precisely so paths are root-relative; otherwise SonarQube silently reports **0%**. A second tripwire fails the job if `junit.xml` records any skipped test — with the Redis service up, `slow` and `integration` must actually run.
+- `docker-verify` builds amd64 with `load: true` so Trivy has something to scan, and needs no secrets (works on fork PRs). Its smoke step runs `scripts/smoke_image.sh` against the built image: no Redis (health 503), then real Redis + `ROOT_PATH` in both Kong path shapes, every page/asset/endpoint, trailing slash, negatives and the Docker `HEALTHCHECK`.
+- `sonar` is skipped for Dependabot PRs (`github.actor == 'dependabot[bot]'`) as well as fork PRs: they get no secrets, and the job used to fail on an empty `SONAR_HOST_URL`, painting every Dependabot PR red. It also `ls`es `coverage.xml`/`junit.xml` after the artifact download so a broken download cannot turn into a silent 0%.
+- `dependency-review` is in `ci-ok` (it needs the repository's Dependency graph enabled — it is, via `PUT /repos/{owner}/{repo}/vulnerability-alerts`).
 
 `.github/workflows/release.yml` — on `v*` tags: verifies the tag is on `main` and that `api_version`, README and CHANGELOG agree, extracts the CHANGELOG section, retags the image at the manifest level (no rebuild), and publishes the Release. It does **not** touch `latest`.
 

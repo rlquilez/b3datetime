@@ -88,6 +88,18 @@ jobs:
           fi
           echo "OK: $(grep -c 'filename="src/' coverage.xml) arquivos com caminho relativo à raiz"
 
+      # Tripwire: com o service de Redis disponível, nada pode ser pulado — os testes
+      # `slow` e `integration` precisam ter executado de fato, senão "suíte completa"
+      # vira só uma intenção.
+      - name: Nenhum teste pulado no CI
+        run: |
+          if grep -qE 'skipped="[1-9][0-9]*"' junit.xml; then
+            echo "::error::junit.xml registra testes pulados; a suíte completa não executou"
+            grep -oE 'skipped="[0-9]+"' junit.xml | sort | uniq -c
+            exit 1
+          fi
+          echo "OK: nenhum teste pulado ($(grep -oE 'tests="[0-9]+"' junit.xml | head -1))"
+
       - name: Publicar relatórios
         if: matrix.python-version == '3.11'
         uses: actions/upload-artifact@v4
@@ -102,11 +114,13 @@ jobs:
     name: SonarQube
     needs: [test]
     runs-on: ubuntu-latest
-    # PRs de fork não têm acesso aos secrets; sem este guard o job falharia
-    # de forma confusa em vez de ser pulado.
+    # PRs de fork e PRs do Dependabot não têm acesso aos secrets (SONAR_HOST_URL chega
+    # vazio); sem este guard o job falharia de forma confusa em vez de ser pulado, e
+    # todo PR do Dependabot ficava vermelho no ci-ok.
     if: >-
-      github.event_name != 'pull_request' ||
-      github.event.pull_request.head.repo.full_name == github.repository
+      github.actor != 'dependabot[bot]' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
     steps:
       - uses: actions/checkout@v4
         with:
@@ -118,6 +132,10 @@ jobs:
         with:
           name: coverage-report
           path: .
+
+      # Tripwire: sem os relatórios, o scanner roda e o Sonar reporta 0% em silêncio.
+      - name: Relatórios de coverage e testes presentes
+        run: ls -l coverage.xml junit.xml
 
       # Gate bloqueante. A primeira análise (commit 4cdd874) estabeleceu o baseline
       # e passou com new_coverage 100%, duplicação 0% e 0 violations, e o projeto
@@ -280,23 +298,16 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Smoke test da imagem
-        run: |
-          docker run -d --name smoke -p 8000:8000 \
-            -e REDIS_URL_ENV=redis://127.0.0.1:1 b3datetime:ci
-          for i in $(seq 1 30); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/v1/health || true)
-            if [ -n "$code" ] && [ "$code" != "000" ]; then break; fi
-            sleep 2
-          done
-          echo "GET /v1/health -> $code"
-          # Sem Redis, o estado correto é unhealthy com 503. Um 200 aqui significa
-          # que o health voltou a ser decorativo e o HEALTHCHECK não detecta nada.
-          [ "$code" = "503" ] || { docker logs smoke; exit 1; }
-          root=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/)
-          echo "GET / -> $root"
-          [ "$root" = "200" ] || { docker logs smoke; exit 1; }
-          docker rm -f smoke
+      # O container real, como roda em produção: sem Redis (health 503), depois com
+      # Redis real e ROOT_PATH nas duas formas em que o Kong entrega o caminho, todas
+      # as páginas, assets e endpoints, barra final, casos negativos e o HEALTHCHECK.
+      # O mesmo script roda localmente: IMAGE=b3datetime:ci scripts/smoke_image.sh
+      - name: Smoke test da imagem (sem Redis; Redis real + prefixo; HEALTHCHECK)
+        run: IMAGE=b3datetime:ci bash scripts/smoke_image.sh
+
+      - name: Limpeza dos containers do smoke test
+        if: always()
+        run: docker rm -f smoke-app smoke-redis >/dev/null 2>&1 || true
 
       - name: Trivy na imagem (SARIF)
         uses: aquasecurity/trivy-action@v0.36.0
@@ -397,6 +408,7 @@ jobs:
       - sonar
       - bandit
       - pip-audit
+      - dependency-review
       - secret-scan
       - codeql
       - trivy-fs
