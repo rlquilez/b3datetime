@@ -18,7 +18,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  PYTHON_VERSION: "3.11"
+  PYTHON_VERSION: "3.14"
 
 jobs:
   lint:
@@ -51,8 +51,9 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      # 3.11 = mínimo suportado (requires-python); 3.14 = runtime da imagem.
       matrix:
-        python-version: ["3.11", "3.12"]
+        python-version: ["3.11", "3.14"]
     services:
       # Cobre os testes de contrato contra Redis real, que são a única defesa
       # contra drift do fakeredis exatamente na semântica que corrigimos
@@ -101,7 +102,7 @@ jobs:
           echo "OK: nenhum teste pulado ($(grep -oE 'tests="[0-9]+"' junit.xml | head -1))"
 
       - name: Publicar relatórios
-        if: matrix.python-version == '3.11'
+        if: matrix.python-version == '3.14'
         uses: actions/upload-artifact@v7
         with:
           name: coverage-report

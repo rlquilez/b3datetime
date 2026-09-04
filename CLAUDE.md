@@ -36,17 +36,17 @@ FastAPI service exposing B3 (Brazilian stock exchange) trading hours and trading
 
 ## Commands
 
-Local `python3` on this machine is 3.9.6 and the project needs **3.11+**. There is no 3.11 interpreter installed, so the practical way to run tests and lint locally is Docker, which also matches the deployed runtime exactly:
+Local `python3` on this machine is 3.9.6 and the project needs **3.11+** (the image runs **3.14**). There is no 3.11+ interpreter installed, so the practical way to run tests and lint locally is Docker, which also matches the deployed runtime exactly:
 
 ```bash
-docker run --rm -v "$PWD":/app -w /app python:3.11-slim bash -c \
+docker run --rm -v "$PWD":/app -w /app python:3.14-slim bash -c \
   'pip install -q -r requirements-dev.txt && python -m pytest'
 ```
 
 With a 3.11+ interpreter available:
 
 ```bash
-python3.11 -m venv .venv && source .venv/bin/activate
+python3.14 -m venv .venv && source .venv/bin/activate   # any 3.11+ works; the image runs 3.14
 pip install -r requirements-dev.txt
 cp .env.example .env
 
@@ -125,7 +125,7 @@ Integration tests against real Redis auto-skip when none is reachable, and use *
 
 ## CI/CD
 
-`.github/workflows/ci.yml` — lint, mypy, tests (3.11 + 3.12 with a Redis service), bandit, pip-audit, dependency-review, gitleaks, CodeQL, Trivy (fs + image), SonarQube with a **blocking** quality gate, multi-arch publish, SBOM, and a `ci-ok` aggregator meant to be the single required status check.
+`.github/workflows/ci.yml` — lint, mypy, tests (3.11 = minimum supported, 3.14 = runtime, both with a Redis service), bandit, pip-audit, dependency-review, gitleaks, CodeQL, Trivy (fs + image), SonarQube with a **blocking** quality gate, multi-arch publish, SBOM, and a `ci-ok` aggregator meant to be the single required status check.
 
 - **No `tags:` trigger** — `release.yml` owns tags. That is how double-publishing is prevented structurally.
 - `latest` is `enable={{is_default_branch}}`. It used to be unconditional, so a push to any branch overwrote production `latest`.

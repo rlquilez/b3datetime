@@ -7,6 +7,12 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ## [Não publicado]
 
+### Alterado
+
+- Runtime da imagem migrado para **Python 3.14** (`python:3.14-slim`). A suíte continua rodando em 3.11 (mínimo suportado) e agora também em 3.14 no CI, e `sonar.python.version` acompanha o runtime. A remoção de `pip`/`setuptools`/`wheel` da imagem passa a descobrir o `site-packages` via `sysconfig`, em vez de um caminho com a versão hardcoded. (#31)
+- Dependências atualizadas: `exchange-calendars` 4.5.6 → 4.13.2, `uvicorn` 0.52.3 → 0.52.4, `fakeredis` 2.37.0 → 2.37.1, `ruff` 0.16.3 → 0.16.5. (#29)
+- Todas as actions dos workflows nos majors com runtime Node 24 (`checkout@v7`, `setup-python@v7`, `upload-artifact@v7`, `download-artifact@v8`, `dependency-review-action@v5`, `gitleaks-action@v3`, `docker/*`, `action-gh-release@v3`, `setup-crane@v0.7`), eliminando as anotações de descontinuação do Node 20. (#30)
+
 ## [2.0.1] - 2026-09-04
 
 ### Adicionado

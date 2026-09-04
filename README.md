@@ -751,14 +751,14 @@ services:
 
 ### Pré-requisitos
 
-- **Python 3.11 ou superior** (a imagem roda 3.11)
+- **Python 3.11 ou superior** (a imagem de produção roda **3.14**; a suíte é executada em 3.11 e 3.14)
 - Redis (opcional — a suíte de testes usa `fakeredis`)
 
 ```bash
 git clone https://github.com/rlquilez/b3datetime.git
 cd b3datetime
 
-python3.11 -m venv .venv
+python3.14 -m venv .venv           # qualquer 3.11+ serve
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 
 pip install -r requirements-dev.txt
@@ -770,10 +770,10 @@ uvicorn src.main:app --reload --port 8000
 
 Documentação local: http://localhost:8000/docs · http://localhost:8000/redoc · http://localhost:8000/openapi.json
 
-Sem um Python 3.11 instalado, tudo roda em Docker, que também é exatamente o runtime da imagem:
+Sem um Python 3.11+ instalado, tudo roda em Docker, que também é exatamente o runtime da imagem:
 
 ```bash
-docker run --rm -v "$PWD":/app -w /app python:3.11-slim bash -c \
+docker run --rm -v "$PWD":/app -w /app python:3.14-slim bash -c \
   'pip install -q -r requirements-dev.txt && ruff check . && ruff format --check . && mypy src && python -m pytest'
 ```
 
@@ -828,7 +828,7 @@ flowchart LR
     subgraph paralelo["Sem dependências"]
         lint["lint (ruff)"]
         typecheck["tipagem (mypy)"]
-        test["testes (3.11 e 3.12 + Redis)"]
+        test["testes (3.11 e 3.14 + Redis)"]
         bandit["bandit"]
         pipaudit["pip-audit"]
         gitleaks["gitleaks"]
@@ -846,7 +846,7 @@ flowchart LR
 |-------|-----------|------------|
 | Lint e formatação | ruff | |
 | Tipagem | mypy | |
-| Testes e coverage | pytest em Python 3.11 e 3.12, com Redis real | tripwires: caminhos relativos no `coverage.xml` (senão o Sonar reporta 0%) e nenhum teste pulado |
+| Testes e coverage | pytest em Python 3.11 (mínimo suportado) e 3.14 (runtime), com Redis real | tripwires: caminhos relativos no `coverage.xml` (senão o Sonar reporta 0%) e nenhum teste pulado |
 | SAST | bandit, CodeQL | |
 | CVEs em dependências | pip-audit, dependency-review | |
 | Segredos | gitleaks | histórico inteiro |

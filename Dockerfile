@@ -1,6 +1,8 @@
 # Imagem multi-stage da B3 DateTime API.
+# Python 3.14: a suíte também roda em 3.11 (mínimo suportado) na matriz do CI; a
+# versão do runtime é a única que precisa constar aqui e em sonar.python.version.
 # Stage 1: build das dependências
-FROM python:3.11-slim AS builder
+FROM python:3.14-slim AS builder
 
 WORKDIR /app
 
@@ -12,7 +14,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --user -r requirements.txt
 
 # Stage 2: runtime
-FROM python:3.11-slim
+FROM python:3.14-slim
 
 # Patches de segurança do sistema disponíveis no momento do build. A imagem base
 # costuma ficar atrás dos repositórios Debian (ex.: CVE-2026-53615 na família
@@ -37,14 +39,13 @@ WORKDIR /app
 # pelo Trivy). Removê-los resolve a classe do problema em vez de perseguir versão,
 # reduz a superfície de ataque e impede `pip install` dentro de um container
 # comprometido.
+# O diretório de site-packages vem do sysconfig, e não de um caminho com a versão
+# hardcoded: um bump de Python deixava o rm sem efeito e o pip de volta na imagem.
 RUN python -m pip uninstall -y pip setuptools wheel 2>/dev/null || true; \
-    rm -rf /usr/local/lib/python3.11/site-packages/pip* \
-           /usr/local/lib/python3.11/site-packages/setuptools* \
-           /usr/local/lib/python3.11/site-packages/wheel* \
-           /usr/local/lib/python3.11/site-packages/pkg_resources \
-           /usr/local/lib/python3.11/site-packages/_distutils_hack \
-           /usr/local/lib/python3.11/site-packages/distutils-precedence.pth \
-           /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.11
+    SITE="$(python -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')" && \
+    rm -rf "$SITE"/pip* "$SITE"/setuptools* "$SITE"/wheel* "$SITE"/pkg_resources \
+           "$SITE"/_distutils_hack "$SITE"/distutils-precedence.pth \
+           /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.*
 
 COPY --from=builder --chown=app:app /root/.local /home/app/.local
 COPY --chown=app:app src/ ./src/
