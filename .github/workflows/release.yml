@@ -30,7 +30,7 @@ jobs:
       version: ${{ steps.v.outputs.version }}
       tag: ${{ steps.v.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
           fetch-depth: 0
@@ -86,7 +86,7 @@ jobs:
           fi
           echo "--- notas extraídas ---"; head -20 release-notes.md
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-notes
           path: release-notes.md
@@ -97,13 +97,13 @@ jobs:
     needs: [verify]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.verify.outputs.tag }}
 
       - name: Gerar as tags semver
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: |
             ${{ secrets.GIT_REGISTRY }}/${{ secrets.GIT_OWNER }}/b3datetime
@@ -115,17 +115,17 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
 
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@v4
         with:
           registry: ${{ secrets.GIT_REGISTRY }}
           username: ${{ secrets.GIT_REGISTRY_USER }}
           password: ${{ secrets.GIT_REGISTRY_PASSWORD }}
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
       - name: Instalar crane
         if: ${{ github.event.inputs.rebuild != 'true' }}
-        uses: imjasonh/setup-crane@v0.4
+        uses: imjasonh/setup-crane@v0.7
 
       # `crane tag` adiciona uma tag ao manifest existente dentro do mesmo
       # repositório: preserva a lista multi-arch, não copia blob nenhum e leva
@@ -158,11 +158,11 @@ jobs:
 
       - name: Habilitar QEMU (só no rebuild)
         if: ${{ github.event.inputs.rebuild == 'true' }}
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
 
       - name: Rebuild multi-arch (escape hatch)
         if: ${{ github.event.inputs.rebuild == 'true' }}
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: true
@@ -177,11 +177,11 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: release-notes
 
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.verify.outputs.tag }}
           name: ${{ needs.verify.outputs.tag }}
