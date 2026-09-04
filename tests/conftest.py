@@ -12,6 +12,7 @@ Duas armadilhas que motivam o desenho abaixo:
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -29,6 +30,34 @@ from src.services.redis_service import RedisService
 from tests.factories import make_calendar
 
 TZ = ZoneInfo("America/Sao_Paulo")
+
+# Prefixo com que a API é publicada atrás do Kong.
+PREFIX = "/b3datetime"
+
+
+@dataclass(frozen=True)
+class ProxyMode:
+    """Como o proxy entrega a requisição ao app.
+
+    ``root_path`` é o valor de ROOT_PATH; ``strip_path`` diz se o proxy remove o
+    prefixo de ``path`` antes de encaminhar (o padrão do Kong).
+    """
+
+    root_path: str
+    strip_path: bool
+
+    def upstream(self, public_path: str) -> str:
+        """Caminho que chega ao app para um caminho público (o que o Kong encaminha)."""
+        if self.root_path and self.strip_path:
+            return public_path[len(self.root_path) :] or "/"
+        return public_path
+
+
+PROXY_MODES = [
+    pytest.param(ProxyMode("", False), id="sem-proxy"),
+    pytest.param(ProxyMode(PREFIX, True), id="kong-strip_path-true"),
+    pytest.param(ProxyMode(PREFIX, False), id="kong-strip_path-false"),
+]
 
 
 class FakeClock:
@@ -126,18 +155,55 @@ def test_calendar() -> TradingCalendar:
     return make_calendar()
 
 
-@pytest.fixture
-def app(settings: Settings, redis_service: RedisService, test_calendar: TradingCalendar) -> FastAPI:
+def build_app(
+    settings: Settings, redis_service: RedisService, calendar: TradingCalendar | None
+) -> FastAPI:
     """App com o estado já populado — sem lifespan, portanto sem I/O."""
     application = create_app(settings)
     application.state.redis_service = redis_service
-    application.state.calendar = test_calendar
+    application.state.calendar = calendar
     return application
+
+
+@pytest.fixture
+def app(settings: Settings, redis_service: RedisService, test_calendar: TradingCalendar) -> FastAPI:
+    return build_app(settings, redis_service, test_calendar)
 
 
 @pytest.fixture
 async def client(app: FastAPI) -> AsyncIterator[httpx.AsyncClient]:
     transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
+        yield c
+
+
+@pytest.fixture(params=PROXY_MODES)
+def proxy_mode(request: pytest.FixtureRequest) -> ProxyMode:
+    return request.param  # type: ignore[no-any-return]
+
+
+@pytest.fixture
+def proxied_app(
+    proxy_mode: ProxyMode,
+    settings: Settings,
+    redis_service: RedisService,
+    test_calendar: TradingCalendar,
+) -> FastAPI:
+    """App configurado com o ROOT_PATH do modo de proxy corrente."""
+    prefixed = settings.model_copy(update={"root_path": proxy_mode.root_path})
+    return build_app(prefixed, redis_service, test_calendar)
+
+
+@pytest.fixture
+async def proxied_client(
+    proxied_app: FastAPI, proxy_mode: ProxyMode
+) -> AsyncIterator[httpx.AsyncClient]:
+    """Cliente que entrega ao app o que o proxy entregaria.
+
+    ``root_path`` no transporte espelha o que o servidor ASGI informa; com ROOT_PATH
+    definido, o FastAPI sobrescreve o valor de qualquer forma.
+    """
+    transport = httpx.ASGITransport(app=proxied_app, root_path=proxy_mode.root_path)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
 

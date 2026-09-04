@@ -7,6 +7,20 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ## [Não publicado]
 
+### Alterado
+
+- URLs com barra final (`/docs/`, `/v1/hours/`) respondem `404` em vez de `307`. O redirecionamento era montado com o header `Host` recebido do proxy e, atrás do Kong com `preserve_host: false`, apontava para o endereço interno do upstream sem o prefixo — destino inalcançável que ainda expunha IP e porta internos. Nenhuma URL documentada tem barra final. (#23)
+
+### Corrigido
+
+- `/docs` e `/redoc` ficavam em branco atrás do Kong com `strip_path: true`: a página carregava, mas `/<prefixo>/static/*` respondia `404`. O Kong removia o prefixo de `path` enquanto `ROOT_PATH` o mantinha em `root_path`, violando o contrato ASGI de que `path` começa com `root_path`; o `Mount("/static")` propagava então um `root_path` que o `StaticFiles` não conseguia remover e procurava `static/<arquivo>` dentro do diretório de assets. Um middleware recompõe o prefixo, e as duas configurações do Kong (`strip_path` `true` e `false`) passam a funcionar. (#23)
+- A documentação afirmava que `strip_path: false` fazia tudo responder `404`; com o Starlette 1.x era o oposto. (#23)
+
+### Segurança
+
+- Redirecionamentos não expõem mais host e porta internos do upstream no header `Location`. (#23)
+- `/static` deixa de servir arquivos do pacote Python (`/static/__init__.py` respondia `200 text/x-python`): os assets passam a viver em `src/static/assets/`. (#23)
+
 ## [2.0.0] - 2026-08-17
 
 Esta versão corrige respostas que antes eram **silenciosamente erradas**. As mudanças de

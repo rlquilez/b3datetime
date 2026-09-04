@@ -69,13 +69,6 @@ async def test_redoc_servido_sem_cdn(client: httpx.AsyncClient) -> None:
     assert "fonts.googleapis.com" not in html
 
 
-@pytest.mark.parametrize("asset", [SWAGGER_JS, SWAGGER_CSS, REDOC_JS, "favicon.png"])
-async def test_assets_estaticos_existem(client: httpx.AsyncClient, asset: str) -> None:
-    r = await client.get(f"/static/{asset}")
-    assert r.status_code == 200
-    assert len(r.content) > 1000
-
-
 async def test_cors_sem_credenciais(client: httpx.AsyncClient) -> None:
     """Regressão: allow_origins=["*"] com allow_credentials=True fazia o Starlette
     refletir o Origin do chamador, equivalendo a confiar em toda origem."""
@@ -85,12 +78,6 @@ async def test_cors_sem_credenciais(client: httpx.AsyncClient) -> None:
 
 async def test_rota_desconhecida(client: httpx.AsyncClient) -> None:
     assert (await client.get("/nao-existe")).status_code == 404
-
-
-async def test_root_path_normalizado(settings: Settings) -> None:
-    """ROOT_PATH com barra final produzia caminhos com barra dupla."""
-    app = create_app(settings.model_copy(update={"root_path": "/b3datetime/"}))
-    assert app.root_path == "/b3datetime"
 
 
 # --- wiring do lifespan ---------------------------------------------------

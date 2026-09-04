@@ -41,3 +41,6 @@ LICENSE
 
 # Sistema operacional
 .DS_Store
+
+# Scripts de CI/desenvolvimento: não fazem parte da imagem
+scripts/

@@ -7,13 +7,16 @@ renderizavam em branco em rede sem egress, atrás de proxy corporativo ou sob CS
 
 Os arquivos são versionados no repositório e copiados para a imagem junto com `src/`.
 Para atualizar, baixe a nova versão, ajuste as constantes abaixo e valide as páginas.
+
+Ficam em ``assets/``, e não na raiz do pacote: o mount apontava para o diretório do
+próprio pacote e servia ``__init__.py`` (este arquivo) como ``text/x-python``.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-STATIC_DIR = Path(__file__).resolve().parent
+STATIC_DIR = Path(__file__).resolve().parent / "assets"
 
 SWAGGER_UI_VERSION = "5.17.14"
 REDOC_VERSION = "2.1.5"

@@ -216,8 +216,9 @@ O cliente Redis **nunca é descartado**: se o Redis estiver fora no start do pro
 
 ## 🌐 Proxy reverso (Kong)
 
-- `ROOT_PATH` deve conter o prefixo (ex.: `/b3datetime`). Barra final é normalizada.
-- **A aplicação assume que o Kong remove o prefixo** antes de encaminhar, isto é, `strip_path: true`. Com `strip_path: false` nenhuma rota casa e todas as respostas são `404`.
+- `ROOT_PATH` deve conter o prefixo (ex.: `/b3datetime`). Barra final é normalizada. O prefixo não pode coincidir com uma rota da própria API (`/v1`, `/docs`, `/redoc`, `/static`, `/openapi.json`).
+- **Os dois modos do Kong funcionam.** Com `strip_path: true` (padrão) o prefixo chega removido e um middleware o recompõe no scope ASGI — sem isso, `/static/*` respondia `404` e a documentação ficava em branco. Com `strip_path: false` o prefixo já vem no caminho e nada é alterado.
+- **Barra final não redireciona**: `/docs/` e `/v1/hours/` respondem `404`. O redirecionamento anterior era montado com o header `Host` recebido do proxy e apontava para o endereço interno do upstream.
 - O container roda o uvicorn com `--proxy-headers` e `--forwarded-allow-ips`, para que `X-Forwarded-Proto` e `X-Forwarded-For` sejam respeitados.
 - **CORS deve ser configurado em uma única camada.** A aplicação emite CORS permissivo sem credenciais; se o Kong também tiver o plugin de CORS ativo, os headers duplicados fazem o browser rejeitar a resposta.
 

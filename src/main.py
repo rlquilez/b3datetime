@@ -23,6 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
 from src.config import Settings, get_settings
+from src.middleware import RootPathPrefixMiddleware
 from src.routers import dates, health, hours
 from src.services.calendar_service import CalendarUnavailableError, build_bvmf_calendar
 from src.services.redis_service import KeyNotFoundError, RedisService, RedisUnavailableError
@@ -125,6 +126,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         description=settings.api_description,
         version=settings.api_version,
         root_path=settings.root_path.rstrip("/"),
+        # Sem redirect de barra final: o Location era montado com o header Host recebido
+        # do proxy e, atrás do Kong com preserve_host=false, apontava para o endereço
+        # interno do upstream — destino inalcançável que ainda expunha IP e porta.
+        redirect_slashes=False,
         docs_url=None,  # servido abaixo, com assets locais
         redoc_url=None,
         openapi_url="/openapi.json",
@@ -144,6 +149,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_methods=["GET", "OPTIONS"],
         allow_headers=["*"],
     )
+    # Adicionado por último = camada mais externa: o scope é corrigido antes de qualquer
+    # coisa que leia `path` (router, Mount). Ver o docstring de src/middleware.py.
+    app.add_middleware(RootPathPrefixMiddleware)
 
     _register_exception_handlers(app)
 

@@ -51,11 +51,13 @@ cp .env.example .env
 uvicorn src.main:app --reload --port 8000   # or: python -m src
 
 ruff check . && ruff format --check . && mypy src
-pytest                  # 136 tests, coverage gate at 90% (currently 99.8%)
+pytest                  # ~200 tests (`pytest --co -q | tail -1`), coverage gate at 90% (currently ~99.8%)
 pytest -m "not slow"    # skips the tests that build the real BVMF calendar
+
+docker build -t b3datetime:ci . && IMAGE=b3datetime:ci scripts/smoke_image.sh   # the CI smoke test, locally
 ```
 
-Docs at `/docs`, `/redoc`, `/openapi.json` — all assets served locally from `src/static/`, no CDN.
+Docs at `/docs`, `/redoc`, `/openapi.json` — all assets served locally from `src/static/assets/`, no CDN. The assets live in a subdirectory on purpose: mounting the package directory itself served `__init__.py` (`tests/api/test_static.py::test_static_nao_serve_o_pacote`).
 
 Seed Redis so `/v1/hours` returns 200 rather than 404:
 
@@ -65,20 +67,6 @@ redis-cli SET b3:trading:hours:close "18:00"
 ```
 
 ## Architecture
-
-```
-src/main.py                       create_app() factory + lifespan + exception handlers
-src/config.py                     Settings (pydantic-settings), redact_url(), get_settings()
-src/dependencies.py               Depends providers reading app.state
-src/routers/hours.py              /v1/hours{,/open,/close}
-src/routers/dates.py              /v1/is-trading-day, /v1/trading-days, /v1/calendar-info
-src/routers/health.py             /v1/health
-src/routers/openapi_examples.py   shared `responses` blocks (kept out of CPD)
-src/services/redis_service.py     async Redis + in-memory fallback cache
-src/services/calendar_service.py  TradingCalendar + build_bvmf_calendar()
-src/static/                       vendored Swagger UI / ReDoc assets
-src/__main__.py                   dev entrypoint (`python -m src`)
-```
 
 **Nothing does I/O at import time.** Services are built in `lifespan` (`main.py`) and stored on `app.state`; routers receive them via `Depends` (`src/dependencies.py`). This is load-bearing — see below.
 
@@ -93,6 +81,8 @@ Each of these has a named regression test. Reverting any of them makes a specifi
 - **Missing key and unavailable Redis are different.** 404 vs 503. Collapsing them made the API claim "Redis indisponível" when the fix was one `SET`.
 - **`/v1/health` returns 503 when `unhealthy`.** With 200 in every state, the Dockerfile `HEALTHCHECK` and k8s probes could never detect a failure.
 - **`/v1/trading-days` bounds the range.** `max_range_days` plus a hashed membership set. An unbounded range cost ~77 s of CPU and ~117 MB on the event loop.
+- **`scope["path"]` always starts with `scope["root_path"]`** (`src/middleware.py`, `RootPathPrefixMiddleware`). Kong strips the prefix (`strip_path: true`) while `ROOT_PATH` keeps it in `root_path`; Starlette ≥ 0.35 relies on the ASGI contract in `get_route_path()`, so plain routes still matched but `Mount("/static")` propagated a `root_path` that `StaticFiles` could not strip — every asset 404'd and the docs rendered blank in production while the suite stayed green. `tests/api/test_proxy_prefix.py::test_static_atras_do_kong_com_strip_path_true`.
+- **No trailing-slash redirects** (`redirect_slashes=False`). Starlette built the `Location` from `scope["path"]` (no prefix) and the incoming `Host` — behind Kong with `preserve_host: false`, the upstream's internal IP:port. `tests/api/test_proxy_prefix.py::test_barra_final_nao_redireciona_para_host_interno`.
 
 ### The calendar window
 
@@ -104,9 +94,9 @@ Any test touching the **real** calendar must pass explicit `start`/`end`, or it 
 
 ### Reverse proxy
 
-- `ROOT_PATH` carries the Kong prefix; a trailing slash is normalized in `create_app`.
-- The app **assumes Kong strips the prefix** (`strip_path: true`). With `strip_path: false`, nothing matches and everything 404s.
-- `/docs`, `/redoc` and `GET /` reference `./openapi.json` **relatively** (constant `OPENAPI_RELATIVE_URL`). An absolute path breaks the docs behind the prefix.
+- `ROOT_PATH` carries the Kong prefix; a trailing slash is normalized in `create_app`. It must not collide with a route prefix of the API itself (`/v1`, `/docs`, `/redoc`, `/static`, `/openapi.json`) — the middleware's "already prefixed?" check would be ambiguous.
+- **Both Kong modes work.** `strip_path: true` (default): the prefix arrives stripped and `RootPathPrefixMiddleware` re-adds it to `scope["path"]`/`raw_path`. `strip_path: false` or `uvicorn --root-path`: the path already carries it and the middleware is a no-op. The `proxy_mode` fixture runs the page/asset/endpoint tests in all three shapes.
+- `/docs` and `/redoc` reference `./openapi.json` and `./static/…` **relatively** (constant `OPENAPI_RELATIVE_URL`): the browser resolves them against the public URL, which is the only thing that works regardless of proxy config. The regression test parses the HTML and fetches every referenced asset the way the browser would (`test_paginas_referenciam_assets_que_respondem`).
 - The container runs uvicorn with `--proxy-headers --forwarded-allow-ips "*"`.
 - **CORS must be owned by exactly one layer.** The app sends permissive CORS without credentials; if Kong's CORS plugin is also on, duplicate headers make browsers reject the response.
 
@@ -123,6 +113,8 @@ The API **authenticates nothing** — there is no apikey code here. Kong validat
 - **`freezegun` only at the API level**, never around calendar construction (known flake with `pd.Timestamp.now()`).
 - **`Settings(_env_file=None)` in every fixture**, so a developer's local `.env` cannot change results.
 - `ASGITransport` does **not** run lifespan; the `lifespan_app` fixture uses `asgi-lifespan` for the wiring tests.
+- **`proxy_mode` / `proxied_client`** (`tests/conftest.py`) parametrize a test over the three proxy shapes (no proxy, Kong stripped, Kong unstripped); `ProxyMode.upstream()` converts a public path into what the app actually receives. With `ROOT_PATH` set, FastAPI overwrites `scope["root_path"]` before the middleware stack, so the bug shape is simply `client.get("/docs")` against an app created with `root_path="/b3datetime"`.
+- `scripts/smoke_image.sh` drives the **built image** (no Redis / Redis + `ROOT_PATH`, both path shapes, trailing slash, negatives, Docker `HEALTHCHECK`); `curl --path-as-is` is what lets the traversal cases reach the app.
 - The performance test asserts **scaling**, not wall time: with `max_range_days` capping the span, even the quadratic version finishes in ~0.1 s, so an absolute threshold would pass with the bug present.
 
 Integration tests against real Redis auto-skip when none is reachable, and use **db 15** because teardown calls `flushdb`.
