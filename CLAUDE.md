@@ -32,6 +32,8 @@ Mensagens de commit seguem [Conventional Commits](https://www.conventionalcommit
 
 FastAPI service exposing B3 (Brazilian stock exchange) trading hours and trading-day calendar over REST. Two data sources: trading hours come from **Redis** (written by something outside this repo), trading days come from the **`exchange_calendars` BVMF calendar** built in-process. Deployed as a Docker image behind **Kong Gateway**.
 
+**Production is public and unauthenticated**: base `https://api.quilez.cloud/b3datetime/v1/`, docs at `https://api.quilez.cloud/b3datetime/docs`, `ROOT_PATH=/b3datetime`, Kong `strip_path: true`. Production pulls the `latest` image automatically after `docker-publish` on `main`, so "verify in production" means: CI green → wait for the pull → `curl` the public URL without any header. The README documents the real URL with cURL/Python examples that must keep working as written (run them after touching endpoints). The one thing that must never appear in the repo is the upstream's **internal** address (it used to leak through the trailing-slash redirect).
+
 ## Commands
 
 Local `python3` on this machine is 3.9.6 and the project needs **3.11+**. There is no 3.11 interpreter installed, so the practical way to run tests and lint locally is Docker, which also matches the deployed runtime exactly:
@@ -67,6 +69,8 @@ redis-cli SET b3:trading:hours:close "18:00"
 ```
 
 ## Architecture
+
+The module map lives in the README (`Arquitetura → Mapa de módulos`, a Mermaid diagram) — keep it in sync when adding a module. Routers: `root.py` (`GET /`), `hours.py`, `dates.py`, `health.py`; shared OpenAPI metadata (tags, security scheme, examples) in `routers/openapi_examples.py`; `middleware.py` holds the proxy-prefix middleware.
 
 **Nothing does I/O at import time.** Services are built in `lifespan` (`main.py`) and stored on `app.state`; routers receive them via `Depends` (`src/dependencies.py`). This is load-bearing — see below.
 
@@ -140,4 +144,6 @@ Integration tests against real Redis auto-skip when none is reachable, and use *
 - Both `requirements.txt` and `requirements-dev.txt` pin exact versions. `pandas` and `starlette` are pinned deliberately: `exchange-calendars` declares no pandas constraint, and FastAPI declares no starlette upper bound.
 - `pytest` runs with `filterwarnings = ["error"]`. A new pydantic deprecation fails the suite at import — that is intentional.
 - `.history/` is VS Code Local History noise — never read, edit, or grep it.
-- The version lives in `src/config.py` (`api_version`) and is duplicated in `README.md` and `CHANGELOG.md`. `release.yml` enforces the agreement. See the `release` skill.
+- The version lives in `src/config.py` (`api_version`) and is duplicated in **`pyproject.toml`**, `README.md` (`Versão atual: X`) and `CHANGELOG.md`. `release.yml` enforces three of them on the tag; `tests/unit/test_config.py::test_versao_sincronizada_com_pyproject` covers the fourth before the push. See the `release` skill — and push the tag only after the CI of the release commit has published `sha-<7>`, because `retag` does not rebuild.
+- Tag names, the security scheme and shared examples live in `src/routers/openapi_examples.py`; the OpenAPI contract test derives the route set from `app.routes` (flattening FastAPI's `_IncludedRouter`), so a new router shows up there automatically and must get a row in `DOCUMENTED_CODES`.
+- CHANGELOG sections follow the canonical order of the `release` skill: Adicionado, Alterado, Descontinuado, Removido, Corrigido, Segurança.

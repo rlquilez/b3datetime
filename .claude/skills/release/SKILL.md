@@ -31,11 +31,12 @@ Regras que evitam erro:
 | Lugar | O que atualizar |
 |---|---|
 | `src/config.py` | `api_version: str = "X.Y.Z"` |
-| `README.md` | a versão citada no exemplo de resposta de `GET /` |
-| `CHANGELOG.md` | nova seção `## [X.Y.Z] - AAAA-MM-DD` |
+| `pyproject.toml` | `version = "X.Y.Z"` em `[project]` |
+| `README.md` | a linha `<strong>Versão atual: X.Y.Z</strong>` do cabeçalho (é o que o `release.yml` verifica com `grep`); o exemplo de `GET /` na seção de endpoints também cita a versão |
+| `CHANGELOG.md` | nova seção `## [X.Y.Z] - AAAA-MM-DD` e os links de comparação no rodapé |
 | tag git | `vX.Y.Z` (com o `v`; a tag é a única forma que leva prefixo) |
 
-`.github/workflows/release.yml` **impõe** essa sincronia: o job `verify` reprova a tag se `${GITHUB_REF_NAME#v}` divergir de `api_version` ou da versão do README. Se o job reprovar, o erro é real — corrija a fonte, não o workflow.
+`.github/workflows/release.yml` **impõe** essa sincronia: o job `verify` reprova a tag se `${GITHUB_REF_NAME#v}` divergir de `api_version`, da versão do README ou da seção do CHANGELOG. O `pyproject.toml` não é verificado pelo workflow — é `tests/unit/test_config.py::test_versao_sincronizada_com_pyproject` (e `::test_versao_sincronizada_com_readme_e_changelog`) que o cobre, então a suíte quebra antes do push se algum lugar ficar para trás. Se o job reprovar, o erro é real — corrija a fonte, não o workflow.
 
 ## 3. Formato do CHANGELOG
 
@@ -81,22 +82,25 @@ Regras de escrita:
 ## 4. Passos
 
 ```bash
-# 1. Versão nova em src/config.py e README.md sincronizados
-# 2. Seção do CHANGELOG escrita, com a data de hoje
+# 1. Versão nova em src/config.py, pyproject.toml e README.md sincronizados
+# 2. Seção do CHANGELOG escrita, com a data de hoje, e links de comparação atualizados
 
-# 3. Commit
+# 3. Commit e push da main
 git add -A
 git commit -m "chore(release): v2.0.0
 
 Refs #11"
-
-# 4. Tag e push
-git tag -a v2.0.0 -m "v2.0.0"
 git push origin main
+
+# 4. Aguarde o CI do commit de release publicar a imagem sha-<7 caracteres>
+gh run watch "$(gh run list --workflow CI --branch main --limit 1 --json databaseId --jq '.[0].databaseId')" --exit-status
+
+# 5. Só então a tag
+git tag -a v2.0.0 -m "v2.0.0"
 git push origin v2.0.0
 ```
 
-O push da tag dispara `release.yml`, que valida a sincronia, extrai a seção do CHANGELOG, retagueia a imagem Docker (`2`, `2.0`, `2.0.0`) e cria a página de Release.
+O push da tag dispara `release.yml`, que valida a sincronia, extrai a seção do CHANGELOG, retagueia a imagem Docker (`2`, `2.0`, `2.0.0`) e cria a página de Release. O `retag` **não rebuilda**: ele adiciona tags ao manifest `sha-<7>` que o `ci.yml` publicou para aquele commit — por isso a tag só pode ir depois que o CI da `main` terminou (passo 4); enviada antes, o job falha com "não existe no registry".
 
 Se o workflow não estiver disponível, o equivalente manual:
 

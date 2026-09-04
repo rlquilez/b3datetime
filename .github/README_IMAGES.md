@@ -1,55 +1,53 @@
-# B3 DateTime API - Assets
+# B3 DateTime API — Assets visuais
 
-Este diretório contém os recursos visuais do projeto.
+Recursos visuais do projeto. Só o `logo.svg` é usado pelo repositório; os ícones são a
+arte-fonte para gerar favicons e ícones de aplicativo quando necessário.
 
-## 📁 Arquivos Disponíveis
+## 📁 Arquivos
 
-### Logo
-- **logo.svg** - Logo completo horizontal (400x120px) para README e documentação
+| Arquivo | Uso |
+|---------|-----|
+| `logo.svg` | Logo horizontal (400×120 px). Usado no cabeçalho do `README.md`. |
+| `icon.svg` | Ícone completo (512×512 px). Arte-fonte; não é usado pela aplicação. |
+| `icon-simple.svg` | Ícone simplificado (256×256 px) para tamanhos pequenos. Arte-fonte. |
 
-### Ícones
-- **icon.svg** - Ícone completo (512x512px) com detalhes para aplicações
-- **icon-simple.svg** - Ícone simplificado (256x256px) para uso em tamanhos menores
+O favicon servido pela API em `/static/favicon.png` está em `src/static/assets/favicon.png`,
+junto com os demais assets da documentação (Swagger UI e ReDoc).
 
-## 🎨 Como Usar
+## 🎨 Como o README usa o logo
 
-### No README
-```markdown
-![B3 DateTime API](.github/logo.svg)
+O cabeçalho é HTML centralizado, para controlar a largura:
+
+```html
+<div align="center">
+  <img src=".github/logo.svg" alt="B3 DateTime API" width="400">
+</div>
 ```
 
-### Como Favicon
-Para converter o ícone SVG em PNG/ICO para favicon, use ferramentas como:
+## 🖼️ Gerando favicons a partir dos ícones
 
 **ImageMagick:**
+
 ```bash
-# Gerar PNG em diferentes tamanhos
 convert .github/icon-simple.svg -resize 16x16 favicon-16.png
 convert .github/icon-simple.svg -resize 32x32 favicon-32.png
 convert .github/icon-simple.svg -resize 180x180 apple-touch-icon.png
 convert .github/icon-simple.svg -resize 512x512 icon-512.png
 ```
 
-**Online:**
-- [Favicon Generator](https://favicon.io/favicon-converter/)
-- [Real Favicon Generator](https://realfavicongenerator.net/)
+**Online:** [Favicon Generator](https://favicon.io/favicon-converter/) · [Real Favicon Generator](https://realfavicongenerator.net/)
 
-### Em Aplicações
-Use os arquivos SVG diretamente ou converta para PNG nos tamanhos necessários:
-- **16x16, 32x32** - Favicon
-- **180x180** - Apple Touch Icon
-- **192x192, 512x512** - PWA Icons
-- **1024x1024** - App Store / Play Store
+Tamanhos usuais: 16×16 e 32×32 (favicon), 180×180 (Apple Touch Icon), 192×192 e 512×512 (PWA).
 
-## 🎨 Paleta de Cores
+## 🎨 Paleta de cores
 
-- **Azul Escuro**: `#1e40af`
-- **Azul Médio**: `#3b82f6`
-- **Azul Claro**: `#60a5fa`
+- **Azul escuro**: `#1e40af`
+- **Azul médio**: `#3b82f6`
+- **Azul claro**: `#60a5fa`
 - **Fundo**: `#0f172a`
-- **Texto Secundário**: `#94a3b8`
+- **Texto secundário**: `#94a3b8`
 - **Branco**: `#ffffff`
 
 ## 📝 Licença
 
-Os assets deste projeto seguem a mesma licença do repositório principal.
+Os assets seguem a mesma licença do repositório (MIT).

@@ -22,7 +22,6 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 ### Corrigido
 
 - A documentação (OpenAPI, `GET /` e README) afirmava uma autenticação por `apikey` que não existe no momento. (#24)
-
 - `/docs` e `/redoc` ficavam em branco atrás do Kong com `strip_path: true`: a página carregava, mas `/<prefixo>/static/*` respondia `404`. O Kong removia o prefixo de `path` enquanto `ROOT_PATH` o mantinha em `root_path`, violando o contrato ASGI de que `path` começa com `root_path`; o `Mount("/static")` propagava então um `root_path` que o `StaticFiles` não conseguia remover e procurava `static/<arquivo>` dentro do diretório de assets. Um middleware recompõe o prefixo, e as duas configurações do Kong (`strip_path` `true` e `false`) passam a funcionar. (#23)
 - A documentação afirmava que `strip_path: false` fazia tudo responder `404`; com o Starlette 1.x era o oposto. (#23)
 
@@ -38,6 +37,16 @@ código de status são a razão do incremento MAJOR: mesmo onde o comportamento 
 estava errado, clientes e orquestradores reagem ao status. Veja o guia de migração no
 [README](README.md#-migração-da-v1-para-a-v2).
 
+### Adicionado
+
+- `GET /v1/calendar-info`, expondo `coverage_start`, `coverage_end`, `first_session`, `last_session`, `sessions_count` e `max_range_days`. (#6)
+- Suíte de testes com 136 casos e 99,8% de coverage, incluindo um teste de regressão nomeado por defeito corrigido. (#8)
+- Pipeline de CI com lint (ruff), tipagem (mypy), testes em Python 3.11 e 3.12, SAST (bandit, CodeQL), CVEs em dependências (pip-audit), varredura de segredos (gitleaks), scan de imagem e filesystem (Trivy), SBOM e quality gate bloqueante do SonarQube. (#9)
+- Workflow de release disparado por tag, que valida a consistência da versão e retagueia a imagem com o semver sem rebuild. (#11)
+- Variáveis de configuração `MAX_RANGE_DAYS`, `CALENDAR_START_OFFSET_YEARS`, `REDIS_RECONNECT_INTERVAL_SECONDS` e `REDIS_SOCKET_TIMEOUT_SECONDS`. (#5)
+- `LICENSE` (MIT), `CHANGELOG.md`, `.dockerignore` e `.github/dependabot.yml`. (#2)
+- Fluxo de trabalho permanente no `CLAUDE.md` e skill `release` em `.claude/skills/release/SKILL.md`. (#1)
+
 ### Alterado
 
 - **BREAKING** `/v1/trading-days` rejeita com `400` períodos fora da janela do calendário. Antes, um período não coberto devolvia `200` com lista vazia — afirmando que a B3 não teve nenhum dia de negociação no período — ou, com `exclude=true`, devolvia **todos** os dias do período como "sem negociação". (#6)
@@ -50,15 +59,11 @@ estava errado, clientes e orquestradores reagem ao status. Veja o guia de migra�
 - A janela de datas deixa de ser anunciada como "a partir de 01/01/2006". A cobertura é móvel e passa a ser consultável em `GET /v1/calendar-info`. (#6)
 - `/v1/hours` lê as duas chaves num único `MGET`. As leituras sequenciais anteriores não eram atômicas: um escritor concorrente podia produzir uma resposta com o horário de abertura de ontem e o de fechamento de hoje. (#4)
 
-### Adicionado
+### Removido
 
-- `GET /v1/calendar-info`, expondo `coverage_start`, `coverage_end`, `first_session`, `last_session`, `sessions_count` e `max_range_days`. (#6)
-- Suíte de testes com 136 casos e 99,8% de coverage, incluindo um teste de regressão nomeado por defeito corrigido. (#8)
-- Pipeline de CI com lint (ruff), tipagem (mypy), testes em Python 3.11 e 3.12, SAST (bandit, CodeQL), CVEs em dependências (pip-audit), varredura de segredos (gitleaks), scan de imagem e filesystem (Trivy), SBOM e quality gate bloqueante do SonarQube. (#9)
-- Workflow de release disparado por tag, que valida a consistência da versão e retagueia a imagem com o semver sem rebuild. (#11)
-- Variáveis de configuração `MAX_RANGE_DAYS`, `CALENDAR_START_OFFSET_YEARS`, `REDIS_RECONNECT_INTERVAL_SECONDS` e `REDIS_SOCKET_TIMEOUT_SECONDS`. (#5)
-- `LICENSE` (MIT), `CHANGELOG.md`, `.dockerignore` e `.github/dependabot.yml`. (#2)
-- Fluxo de trabalho permanente no `CLAUDE.md` e skill `release` em `.claude/skills/release/SKILL.md`. (#1)
+- `pytz`, substituído por `zoneinfo` da biblioteca padrão. (#5)
+- A configuração `min_date_year`. A validação passa a derivar dos limites reais do calendário. (#6)
+- `.github/workflows/docker-build.yml`, absorvido pelo `ci.yml`. O workflow anterior construía e publicava a imagem sem executar nenhuma verificação, e sobrescrevia a tag `latest` a partir de qualquer branch. (#9)
 
 ### Corrigido
 
@@ -79,12 +84,6 @@ estava errado, clientes e orquestradores reagem ao status. Veja o guia de migra�
 - A imagem roda como usuário sem privilégios (`app`, uid 1001) e não contém mais `pip`, `setuptools` nem `wheel`, que eram fonte de CVE de severidade alta herdada da base (CVE-2026-24049, CVE-2026-23949) e permitiam `pip install` dentro de um container comprometido. Patches de segurança do sistema aplicados no build cobrem CVE-2026-53615. (#10)
 - `uvicorn` passa a rodar com `--proxy-headers` e `--forwarded-allow-ips`. Sem eles, atrás do Kong em outro host os headers `X-Forwarded-Proto`/`For` eram descartados, e URLs geradas e redirecionamentos saíam como `http://` num site HTTPS. (#10)
 - `pandas` passa a ser declarado e pinado. Era dependência direta resolvida apenas de forma transitiva por `exchange-calendars`, que não impõe constraint de versão — cada rebuild da imagem instalava uma versão arbitrária. (#2)
-
-### Removido
-
-- `pytz`, substituído por `zoneinfo` da biblioteca padrão. (#5)
-- A configuração `min_date_year`. A validação passa a derivar dos limites reais do calendário. (#6)
-- `.github/workflows/docker-build.yml`, absorvido pelo `ci.yml`. O workflow anterior construía e publicava a imagem sem executar nenhuma verificação, e sobrescrevia a tag `latest` a partir de qualquer branch. (#9)
 
 ## [1.0.0] - 2026-03-12
 
