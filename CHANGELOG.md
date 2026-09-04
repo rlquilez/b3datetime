@@ -7,6 +7,8 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ## [Não publicado]
 
+## [2.0.1] - 2026-09-04
+
 ### Adicionado
 
 - `API_KEY_REQUIRED` (padrão `false`): quando `true`, o OpenAPI declara o esquema de segurança `ApiKeyAuth` (header `apikey`) como requisito global, o Swagger UI exibe **Authorize** e `GET /` informa `authentication.required: true`. É só metadado — a validação continua no Kong e a aplicação não autentica nada. (#24)
@@ -102,6 +104,7 @@ Primeira versão da API, desenvolvida entre 2025-12-26 e 2026-03-12.
 - Imagem Docker multi-arquitetura (`linux/amd64`, `linux/arm64`) publicada por GitHub Actions.
 - Timezone `America/Sao_Paulo` em todas as operações de data e hora.
 
-[Não publicado]: https://github.com/rlquilez/b3datetime/compare/v2.0.0...HEAD
+[Não publicado]: https://github.com/rlquilez/b3datetime/compare/v2.0.1...HEAD
+[2.0.1]: https://github.com/rlquilez/b3datetime/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/rlquilez/b3datetime/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/rlquilez/b3datetime/releases/tag/v1.0.0
