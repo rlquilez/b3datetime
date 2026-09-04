@@ -330,3 +330,36 @@ async def test_valores_em_bytes_sao_decodificados(settings: Settings, clock: Fak
 
     service = RedisService(settings, client_factory=lambda: ClienteEmBytes(), now_fn=clock)  # type: ignore[arg-type,return-value]
     assert await service.get_trading_hours() == ("10:00", "18:00")
+
+
+async def test_conexao_concorrente_conecta_uma_vez(settings: Settings, clock: FakeClock) -> None:
+    """Double-checked locking de `_ensure_client`: duas requisições simultâneas com o
+    cliente ainda nulo. A segunda espera o lock e reaproveita o cliente da primeira —
+    um único cliente criado, um único ping. No Python 3.14 o ping do fakeredis não
+    cede o loop, então só um ping que realmente suspende exercita esse caminho."""
+
+    class SlowPingClient:
+        pings = 0
+
+        async def ping(self) -> bool:
+            SlowPingClient.pings += 1
+            await asyncio.sleep(0)  # cede o loop com o lock em mãos
+            return True
+
+        async def aclose(self) -> None:
+            return None
+
+    created = 0
+
+    def factory() -> SlowPingClient:
+        nonlocal created
+        created += 1
+        return SlowPingClient()
+
+    service = RedisService(settings, client_factory=factory, now_fn=clock)  # type: ignore[arg-type]
+    first, second = await asyncio.gather(service._ensure_client(), service._ensure_client())
+
+    assert first is not None
+    assert first is second
+    assert created == 1
+    assert SlowPingClient.pings == 1
