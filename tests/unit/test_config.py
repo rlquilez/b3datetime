@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -9,6 +11,23 @@ import pytest
 from src.config import Settings, get_settings, redact_url
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_versao_sincronizada_com_pyproject() -> None:
+    """release.yml confere config.py, README e CHANGELOG, mas não o pyproject.toml —
+    este teste é a única guarda da quarta cópia da versão."""
+    pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    assert pyproject["project"]["version"] == Settings(_env_file=None).api_version
+
+
+def test_versao_sincronizada_com_readme_e_changelog() -> None:
+    """Mesma verificação que o job `verify` do release.yml faz na tag, antecipada."""
+    version = Settings(_env_file=None).api_version
+    readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert f"Versão atual: {version}" in readme
+    secao = rf"^## \[{re.escape(version)}\] - \d{{4}}-\d{{2}}-\d{{2}}$"
+    assert re.search(secao, changelog, re.MULTILINE), f"CHANGELOG sem a seção [{version}]"
 
 
 def test_defaults_sem_ambiente() -> None:

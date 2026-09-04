@@ -14,6 +14,8 @@ from src.services.calendar_service import TradingCalendar
 from src.services.redis_service import RedisService
 from tests.conftest import FakeClock, SpyRedis
 
+HOURS_PATHS = ["/v1/hours", "/v1/hours/open", "/v1/hours/close"]
+
 
 async def test_hours(client: httpx.AsyncClient) -> None:
     r = await client.get("/v1/hours")
@@ -55,12 +57,14 @@ async def test_metodo_nao_permitido(client: httpx.AsyncClient) -> None:
     assert (await client.post("/v1/hours")).status_code == 405
 
 
+@pytest.mark.parametrize("path", HOURS_PATHS)
 async def test_503_sem_redis_e_sem_cache(
     settings: Settings,
     fake_server: fakeredis.FakeServer,
     clock: FakeClock,
     test_calendar: TradingCalendar,
     make_client: object,
+    path: str,
 ) -> None:
     fake_server.connected = False
     cliente = fakeredis.aioredis.FakeRedis(server=fake_server, decode_responses=True)
@@ -69,7 +73,7 @@ async def test_503_sem_redis_e_sem_cache(
     app.state.calendar = test_calendar
 
     async with make_client(app) as c:  # type: ignore[operator]
-        r = await c.get("/v1/hours")
+        r = await c.get(path)
     assert r.status_code == 503
     detail = r.json()["detail"]
     assert detail["error"] == "Service Unavailable"
@@ -77,15 +81,21 @@ async def test_503_sem_redis_e_sem_cache(
     assert detail["key"]
 
 
+@pytest.mark.parametrize(
+    ("path", "missing"),
+    [("/v1/hours", "open"), ("/v1/hours/open", "open"), ("/v1/hours/close", "close")],
+)
 async def test_404_quando_a_chave_nao_existe(
     settings: Settings,
     fake_redis: fakeredis.aioredis.FakeRedis,
     clock: FakeClock,
     test_calendar: TradingCalendar,
     make_client: object,
+    path: str,
+    missing: str,
 ) -> None:
     """Regressão: com o Redis no ar e a chave ausente, a resposta era 503
-    "Redis indisponível" — uma afirmação falsa."""
+    "Redis indisponível" — uma afirmação falsa. O `key` aponta a chave que falta."""
     app = create_app(settings)
     app.state.redis_service = RedisService(
         settings, client_factory=lambda: fake_redis, now_fn=clock
@@ -93,11 +103,11 @@ async def test_404_quando_a_chave_nao_existe(
     app.state.calendar = test_calendar
 
     async with make_client(app) as c:  # type: ignore[operator]
-        r = await c.get("/v1/hours")
+        r = await c.get(path)
     assert r.status_code == 404
     detail = r.json()["detail"]
     assert detail["error"] == "Not Found"
-    assert detail["key"] == settings.redis_key_open
+    assert detail["key"] == getattr(settings, f"redis_key_{missing}")
 
 
 async def test_503_com_cache_expirado_informa_a_idade(
@@ -147,6 +157,30 @@ async def test_valor_invalido_no_redis_nao_e_servido_como_200(
 
     async with make_client(app) as c:  # type: ignore[operator]
         r = await c.get("/v1/hours")
+    assert r.status_code == 502
+    assert r.json()["detail"]["error"] == "Bad Gateway"
+
+
+@pytest.mark.parametrize("path", HOURS_PATHS)
+async def test_valor_invalido_e_502_em_todos_os_endpoints(
+    settings: Settings,
+    fake_redis: fakeredis.aioredis.FakeRedis,
+    clock: FakeClock,
+    test_calendar: TradingCalendar,
+    make_client: object,
+    path: str,
+) -> None:
+    """Os três endpoints validam o formato; nenhum pode servir lixo como 200."""
+    await fake_redis.set(settings.redis_key_open, "25:00")
+    await fake_redis.set(settings.redis_key_close, "abc")
+    app = create_app(settings)
+    app.state.redis_service = RedisService(
+        settings, client_factory=lambda: fake_redis, now_fn=clock
+    )
+    app.state.calendar = test_calendar
+
+    async with make_client(app) as c:  # type: ignore[operator]
+        r = await c.get(path)
     assert r.status_code == 502
     assert r.json()["detail"]["error"] == "Bad Gateway"
 

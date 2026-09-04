@@ -11,6 +11,7 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 - `API_KEY_REQUIRED` (padrão `false`): quando `true`, o OpenAPI declara o esquema de segurança `ApiKeyAuth` (header `apikey`) como requisito global, o Swagger UI exibe **Authorize** e `GET /` informa `authentication.required: true`. É só metadado — a validação continua no Kong e a aplicação não autentica nada. (#24)
 - Tags com descrição e ordem fixa, `502` documentado em `/v1/hours*`, exemplo de resposta em `GET /v1/calendar-info`, descrição em todos os campos, tabela de códigos de resposta na descrição da API, link para o README em `externalDocs` e schemas nomeados para `cache` e `calendar` de `/v1/health` e para `GET /`. O JSON das respostas não muda. (#24)
+- Suíte de testes cobre todos os endpoints e páginas nos três modos de proxy (sem proxy, Kong com `strip_path` `true` e `false`), os erros 404/502/503 nos três endpoints de horários, o 503 de `/v1/calendar-info` sem calendário, o preflight CORS, os assets estáticos (content-type, `HEAD`, traversal, arquivos do pacote) e a sincronia da versão entre `src/config.py`, `pyproject.toml`, README e CHANGELOG. (#25)
 
 ### Alterado
 

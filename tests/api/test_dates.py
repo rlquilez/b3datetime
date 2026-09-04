@@ -158,9 +158,13 @@ async def test_503_sem_calendario(
     app.state.calendar = None
 
     async with make_client(app) as c:  # type: ignore[operator]
-        for path in ["/v1/trading-days?start=2024-01-01&end=2024-01-10", "/v1/is-trading-day"]:
+        for path in [
+            "/v1/trading-days?start=2024-01-01&end=2024-01-10",
+            "/v1/is-trading-day",
+            "/v1/calendar-info",
+        ]:
             r = await c.get(path)
-            assert r.status_code == 503
+            assert r.status_code == 503, path
             assert "Calendário" in r.json()["detail"]["message"]
         # E o restante da API continua de pé.
         assert (await c.get("/v1/hours")).status_code == 200

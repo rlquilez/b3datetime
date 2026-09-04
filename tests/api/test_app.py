@@ -64,6 +64,25 @@ async def test_cors_sem_credenciais(client: httpx.AsyncClient) -> None:
     assert r.headers.get("access-control-allow-credentials") != "true"
 
 
+async def test_preflight_cors_permite_get(client: httpx.AsyncClient) -> None:
+    r = await client.options(
+        "/v1/health",
+        headers={"Origin": "https://app.example", "Access-Control-Request-Method": "GET"},
+    )
+    assert r.status_code == 200
+    assert r.headers["access-control-allow-origin"] == "*"
+    assert "GET" in r.headers["access-control-allow-methods"]
+
+
+async def test_preflight_cors_rejeita_post(client: httpx.AsyncClient) -> None:
+    """A API é só leitura: o preflight de um POST é recusado."""
+    r = await client.options(
+        "/v1/health",
+        headers={"Origin": "https://app.example", "Access-Control-Request-Method": "POST"},
+    )
+    assert r.status_code == 400
+
+
 async def test_rota_desconhecida(client: httpx.AsyncClient) -> None:
     assert (await client.get("/nao-existe")).status_code == 404
 
