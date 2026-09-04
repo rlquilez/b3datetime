@@ -75,7 +75,7 @@ wait_ready
 # Sem Redis, o estado correto é unhealthy com 503. Um 200 aqui significa que o health
 # voltou a ser decorativo e o HEALTHCHECK não detecta nada.
 expect GET /v1/health 503 application/json '"status":"unhealthy"'
-expect GET / 200 application/json '"version"'
+expect GET / 200 application/json '"swagger":"/docs"'
 expect GET /docs 200 text/html './static/swagger-ui.css'
 expect GET /static/swagger-ui.css 200 text/css
 docker rm -f smoke-app >/dev/null
@@ -106,7 +106,12 @@ expect GET "/v1/trading-days?start=${year}-01-02&end=${year}-01-31&exclude=true"
 expect GET "/v1/trading-days?start=${year}-01-31&end=${year}-01-02" 400 application/json '"Bad Request"'
 expect GET "/v1/trading-days?start=${year}-13-01&end=${year}-01-31" 422 application/json
 expect GET /openapi.json 200 application/json "\"servers\":[{\"url\":\"$PREFIX\"}]"
-expect GET / 200 application/json '"version"'
+# Sem autenticação no momento (API_KEY_REQUIRED=false): nada de segurança no schema.
+if curl -sS "$BASE/openapi.json" | grep -q securitySchemes; then
+  log "FALHA /openapi.json declara securitySchemes sem API_KEY_REQUIRED"; fail=1
+fi
+expect GET / 200 application/json "\"swagger\":\"$PREFIX/docs\""
+expect GET / 200 application/json '"required":false'
 expect GET /docs 200 text/html './static/swagger-ui-bundle.js'
 expect GET /docs 200 text/html "url: './openapi.json'"
 expect GET /redoc 200 text/html 'spec-url="./openapi.json"'

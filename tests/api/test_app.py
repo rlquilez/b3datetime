@@ -21,31 +21,19 @@ async def test_root(client: httpx.AsyncClient, settings: Settings) -> None:
     r = await client.get("/")
     assert r.status_code == 200
     body = r.json()
+    assert body["name"] == settings.api_title
     assert body["version"] == settings.api_version
     assert body["endpoints"]["health"] == "/v1/health"
     assert body["endpoints"]["dates"]["calendar_info"] == "/v1/calendar-info"
+    assert set(body) == {"name", "version", "description", "docs", "endpoints", "authentication"}
 
 
-async def test_root_usa_caminho_relativo_para_openapi(client: httpx.AsyncClient) -> None:
-    """Atrás do Kong com prefixo, um caminho absoluto quebra a documentação."""
-    assert (await client.get("/")).json()["docs"]["openapi"] == "./openapi.json"
-
-
-async def test_openapi(client: httpx.AsyncClient) -> None:
-    r = await client.get("/openapi.json")
-    assert r.status_code == 200
-    schema = r.json()
-    assert schema["info"]["license"]["name"] == "MIT"
-    for path in [
-        "/v1/hours",
-        "/v1/hours/open",
-        "/v1/hours/close",
-        "/v1/health",
-        "/v1/is-trading-day",
-        "/v1/trading-days",
-        "/v1/calendar-info",
-    ]:
-        assert path in schema["paths"], f"{path} ausente no schema"
+async def test_root_sem_prefixo_usa_caminhos_absolutos(client: httpx.AsyncClient) -> None:
+    """`docs.openapi` era `./openapi.json`: resolvido por um cliente contra `/<prefixo>`,
+    caía em `/openapi.json`, fora do prefixo (a RFC 3986 descarta o último segmento).
+    No JSON os links são absolutos; só as páginas HTML usam URLs relativas."""
+    body = (await client.get("/")).json()
+    assert body["docs"] == {"swagger": "/docs", "redoc": "/redoc", "openapi": "/openapi.json"}
 
 
 async def test_docs_servido_sem_cdn(client: httpx.AsyncClient) -> None:

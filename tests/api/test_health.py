@@ -136,14 +136,25 @@ async def test_calendario_indisponivel_e_unhealthy(
     assert r.status_code == 503
     body = r.json()
     assert body["status"] == "unhealthy"
-    assert body["calendar"]["available"] is False
+    # Igualdade exata: o schema tipado de `calendar` (response_model_exclude_unset)
+    # não pode acrescentar chaves nulas ao JSON que os clientes já conhecem.
+    assert body["calendar"] == {"available": False}
 
 
 async def test_corpo_traz_ttl_e_limites(client: httpx.AsyncClient) -> None:
     body = (await client.get("/v1/health")).json()
     assert body["cache"]["cache_ttl_seconds"] == 3600
+    assert set(body["cache"]) == {
+        "redis_connected",
+        "open_cache_age_seconds",
+        "close_cache_age_seconds",
+        "open_cache_expired",
+        "close_cache_expired",
+        "cache_ttl_seconds",
+    }
     assert body["calendar"]["first_session"] == "2024-01-01"
     assert body["calendar"]["sessions_count"] > 240
+    assert set(body["calendar"]) == {"available", "first_session", "last_session", "sessions_count"}
 
 
 async def test_timestamp_com_fuso_de_sao_paulo(client: httpx.AsyncClient) -> None:

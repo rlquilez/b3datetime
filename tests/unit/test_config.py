@@ -114,6 +114,16 @@ def test_tz_property() -> None:
     assert str(Settings(_env_file=None).tz) == "America/Sao_Paulo"
 
 
+def test_api_key_required_desligado_por_padrao() -> None:
+    """Não há autenticação no momento; a documentação não pode prometer um header."""
+    assert Settings(_env_file=None).api_key_required is False
+
+
+def test_api_key_required_lido_do_ambiente(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("API_KEY_REQUIRED", "true")
+    assert Settings(_env_file=None).api_key_required is True
+
+
 def test_redact_url_com_entrada_sem_host() -> None:
     """Uma string que não é URL não deve estourar nem ser propagada inteira."""
     assert redact_url("nao-e-uma-url") == "nao-e-uma-url"

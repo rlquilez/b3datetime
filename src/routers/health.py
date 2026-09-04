@@ -20,13 +20,41 @@ from pydantic import BaseModel, Field
 
 from src.config import get_current_datetime
 from src.dependencies import RedisDep, SettingsDep
-from src.routers.openapi_examples import AUTH_NOTE, examples_response
+from src.routers.openapi_examples import TAG_HEALTH, examples_response
 
-router = APIRouter(prefix="/v1", tags=["Health Check"])
+router = APIRouter(prefix="/v1", tags=[TAG_HEALTH])
 
 STATUS_HEALTHY = "healthy"
 STATUS_DEGRADED = "degraded"
 STATUS_UNHEALTHY = "unhealthy"
+
+
+class CacheStatus(BaseModel):
+    """Estado do cache local dos horários."""
+
+    redis_connected: bool = Field(..., description="Ping ao Redis bem-sucedido nesta verificação")
+    open_cache_age_seconds: int | None = Field(
+        ..., description="Idade do cache da abertura, em segundos; null se nunca populado"
+    )
+    close_cache_age_seconds: int | None = Field(
+        ..., description="Idade do cache do fechamento, em segundos; null se nunca populado"
+    )
+    open_cache_expired: bool = Field(
+        ..., description="Cache da abertura ausente ou mais velho que o TTL"
+    )
+    close_cache_expired: bool = Field(
+        ..., description="Cache do fechamento ausente ou mais velho que o TTL"
+    )
+    cache_ttl_seconds: int = Field(..., description="TTL configurado (CACHE_TTL_SECONDS)")
+
+
+class CalendarStatus(BaseModel):
+    """Estado do calendário de negociação. Os limites só aparecem quando ele existe."""
+
+    available: bool = Field(..., description="Calendário construído no arranque")
+    first_session: str | None = Field(default=None, description="Primeira sessão carregada")
+    last_session: str | None = Field(default=None, description="Última sessão carregada")
+    sessions_count: int | None = Field(default=None, description="Quantidade de sessões carregadas")
 
 
 class HealthResponse(BaseModel):
@@ -40,15 +68,15 @@ class HealthResponse(BaseModel):
     timestamp: str = Field(
         ...,
         description="Momento da verificação, em ISO 8601",
-        json_schema_extra={"example": "2024-01-15T10:30:00-03:00"},
+        json_schema_extra={"example": "2026-09-04T10:30:00-03:00"},
     )
     redis_status: str = Field(
         ...,
-        description="Estado da conexão com o Redis",
+        description="Estado da conexão com o Redis: connected ou disconnected",
         json_schema_extra={"example": "connected"},
     )
-    cache: dict[str, Any] = Field(..., description="Estado do cache local")
-    calendar: dict[str, Any] = Field(..., description="Estado do calendário de negociação")
+    cache: CacheStatus = Field(..., description="Estado do cache local")
+    calendar: CalendarStatus = Field(..., description="Estado do calendário de negociação")
 
 
 def _evaluate(cache: dict[str, Any], calendar_available: bool) -> str:
@@ -75,20 +103,19 @@ def _evaluate(cache: dict[str, Any], calendar_available: bool) -> str:
 @router.get(
     "/health",
     summary="Verificar saúde da API",
-    description=f"""
-    Retorna o estado da API e de suas dependências.
+    description="""Retorna o estado da API e de suas dependências.
 
-    **Estados e códigos HTTP**
-    - `healthy` (200): Redis conectado e calendário carregado
-    - `degraded` (200): Redis desconectado, mas ambas as chaves têm cache local válido
-    - `unhealthy` (**503**): sem cache utilizável, ou cache expirado, ou calendário
-      indisponível
+**Estados e códigos HTTP**
+- `healthy` (200): Redis conectado e calendário carregado
+- `degraded` (200): Redis desconectado, mas ambas as chaves têm cache local válido
+- `unhealthy` (**503**): sem cache utilizável, ou cache expirado, ou calendário
+  indisponível
 
-    O 503 em `unhealthy` é o que permite ao Docker HEALTHCHECK e a probes do Kubernetes
-    detectarem a falha.
-
-    {AUTH_NOTE}
-    """,
+O 503 em `unhealthy` é o que permite ao Docker HEALTHCHECK e a probes do Kubernetes
+detectarem a falha.""",
+    # exclude_unset: sem calendário, `calendar` continua sendo só {"available": false},
+    # exatamente como antes de o campo ganhar um schema tipado.
+    response_model_exclude_unset=True,
     responses={
         200: examples_response(
             "API saudável ou degradada",
@@ -97,7 +124,7 @@ def _evaluate(cache: dict[str, Any], calendar_available: bool) -> str:
                     "summary": "Sistema saudável",
                     "value": {
                         "status": STATUS_HEALTHY,
-                        "timestamp": "2024-01-15T10:30:00-03:00",
+                        "timestamp": "2026-09-04T10:30:00-03:00",
                         "redis_status": "connected",
                         "cache": {
                             "redis_connected": True,
@@ -109,8 +136,8 @@ def _evaluate(cache: dict[str, Any], calendar_available: bool) -> str:
                         },
                         "calendar": {
                             "available": True,
-                            "first_session": "2016-08-17",
-                            "last_session": "2027-08-17",
+                            "first_session": "2016-09-04",
+                            "last_session": "2027-09-03",
                             "sessions_count": 2730,
                         },
                     },
@@ -119,7 +146,7 @@ def _evaluate(cache: dict[str, Any], calendar_available: bool) -> str:
                     "summary": "Redis offline, cache local ainda válido",
                     "value": {
                         "status": STATUS_DEGRADED,
-                        "timestamp": "2024-01-15T10:30:00-03:00",
+                        "timestamp": "2026-09-04T10:30:00-03:00",
                         "redis_status": "disconnected",
                         "cache": {
                             "redis_connected": False,
@@ -129,7 +156,12 @@ def _evaluate(cache: dict[str, Any], calendar_available: bool) -> str:
                             "close_cache_expired": False,
                             "cache_ttl_seconds": 3600,
                         },
-                        "calendar": {"available": True},
+                        "calendar": {
+                            "available": True,
+                            "first_session": "2016-09-04",
+                            "last_session": "2027-09-03",
+                            "sessions_count": 2730,
+                        },
                     },
                 },
             },
@@ -141,7 +173,7 @@ def _evaluate(cache: dict[str, Any], calendar_available: bool) -> str:
                     "summary": "Redis offline e sem cache utilizável",
                     "value": {
                         "status": STATUS_UNHEALTHY,
-                        "timestamp": "2024-01-15T10:30:00-03:00",
+                        "timestamp": "2026-09-04T10:30:00-03:00",
                         "redis_status": "disconnected",
                         "cache": {
                             "redis_connected": False,
@@ -165,15 +197,14 @@ async def health_check(
     cache_status = await redis.get_cache_status()
 
     calendar = getattr(request.app.state, "calendar", None)
-    calendar_info: dict[str, Any] = {"available": calendar is not None}
+    calendar_status = CalendarStatus(available=False)
     if calendar is not None:
         first, last = calendar.bounds
-        calendar_info.update(
-            {
-                "first_session": first.isoformat() if first else None,
-                "last_session": last.isoformat() if last else None,
-                "sessions_count": len(calendar),
-            }
+        calendar_status = CalendarStatus(
+            available=True,
+            first_session=first.isoformat() if first else None,
+            last_session=last.isoformat() if last else None,
+            sessions_count=len(calendar),
         )
 
     overall = _evaluate(cache_status, calendar is not None)
@@ -184,6 +215,6 @@ async def health_check(
         status=overall,
         timestamp=get_current_datetime(settings.tz).isoformat(),
         redis_status="connected" if cache_status["redis_connected"] else "disconnected",
-        cache=cache_status,
-        calendar=calendar_info,
+        cache=CacheStatus.model_validate(cache_status),
+        calendar=calendar_status,
     )

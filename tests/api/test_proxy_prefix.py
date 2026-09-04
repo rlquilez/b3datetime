@@ -118,6 +118,45 @@ async def test_barra_final_nao_redireciona_para_host_interno(
     assert "location" not in r.headers
 
 
+async def test_links_do_root_sao_prefixados(
+    proxied_client: httpx.AsyncClient, proxy_mode: ProxyMode
+) -> None:
+    """Regressão: `GET /` devolvia `/docs` e `./openapi.json` mesmo atrás do prefixo —
+    o primeiro apontava para fora dele e o segundo caía em `/openapi.json`."""
+    rp = proxy_mode.root_path
+    body = (await proxied_client.get(proxy_mode.upstream(rp + "/"))).json()
+    assert body["docs"] == {
+        "swagger": f"{rp}/docs",
+        "redoc": f"{rp}/redoc",
+        "openapi": f"{rp}/openapi.json",
+    }
+    assert body["endpoints"]["health"] == f"{rp}/v1/health"
+    assert body["endpoints"]["hours"]["all"] == f"{rp}/v1/hours"
+    assert body["endpoints"]["dates"]["calendar_info"] == f"{rp}/v1/calendar-info"
+
+
+def _links(node: object) -> list[str]:
+    """Todos os caminhos (strings começando com /) de uma estrutura aninhada."""
+    if isinstance(node, str):
+        return [node] if node.startswith("/") else []
+    if isinstance(node, dict):
+        return [link for value in node.values() for link in _links(value)]
+    return []
+
+
+async def test_nenhum_link_do_root_responde_404(
+    proxied_client: httpx.AsyncClient, proxy_mode: ProxyMode
+) -> None:
+    """Cada link anunciado por `GET /` precisa existir pelo caminho que o Kong entrega."""
+    body = (await proxied_client.get(proxy_mode.upstream(proxy_mode.root_path + "/"))).json()
+    links = _links({"docs": body["docs"], "endpoints": body["endpoints"]})
+    assert len(links) >= 9
+    for link in links:
+        path = link.split("?")[0]
+        r = await proxied_client.get(proxy_mode.upstream(path))
+        assert r.status_code != 404, link
+
+
 async def test_root_path_fornecido_pelo_servidor(
     settings: Settings, redis_service: RedisService, test_calendar: TradingCalendar
 ) -> None:

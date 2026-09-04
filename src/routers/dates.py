@@ -20,14 +20,16 @@ from pydantic import BaseModel, Field
 from src.config import get_current_datetime
 from src.dependencies import CalendarDep, SettingsDep
 from src.routers.openapi_examples import (
-    AUTH_NOTE,
+    CALENDAR_INFO_EXAMPLE,
     RESPONSE_CALENDAR_UNAVAILABLE,
     RESPONSE_RANGE_INVALID,
+    TAG_DATES,
     examples_response,
+    success_response,
 )
 from src.services.calendar_service import CalendarRangeOutOfBoundsError, TradingCalendar
 
-router = APIRouter(prefix="/v1", tags=["Dias de Negociação"])
+router = APIRouter(prefix="/v1", tags=[TAG_DATES])
 
 
 class TradingDayResponse(BaseModel):
@@ -36,7 +38,7 @@ class TradingDayResponse(BaseModel):
     date: str = Field(
         ...,
         description="Data verificada no formato YYYY-MM-DD",
-        json_schema_extra={"example": "2024-01-15"},
+        json_schema_extra={"example": "2026-09-04"},
     )
     is_trading_day: bool = Field(
         ...,
@@ -48,24 +50,36 @@ class TradingDayResponse(BaseModel):
 class CalendarInfoResponse(BaseModel):
     """Limites vigentes do calendário carregado."""
 
-    exchange: str = Field(..., json_schema_extra={"example": "BVMF"})
+    exchange: str = Field(
+        ...,
+        description="Código da bolsa no exchange_calendars",
+        json_schema_extra={"example": "BVMF"},
+    )
     coverage_start: str = Field(
         ...,
         description="Primeira data respondível. Períodos que comecem antes são rejeitados",
-        json_schema_extra={"example": "2016-08-17"},
+        json_schema_extra={"example": "2016-09-04"},
     )
     coverage_end: str = Field(
         ...,
         description="Última data respondível",
-        json_schema_extra={"example": "2027-08-17"},
+        json_schema_extra={"example": "2027-09-03"},
     )
     first_session: str = Field(
         ...,
         description="Primeiro dia de negociação dentro da cobertura",
-        json_schema_extra={"example": "2016-08-17"},
+        json_schema_extra={"example": "2016-09-05"},
     )
-    last_session: str = Field(..., json_schema_extra={"example": "2027-08-17"})
-    sessions_count: int = Field(..., json_schema_extra={"example": 2730})
+    last_session: str = Field(
+        ...,
+        description="Último dia de negociação dentro da cobertura",
+        json_schema_extra={"example": "2027-09-03"},
+    )
+    sessions_count: int = Field(
+        ...,
+        description="Quantidade de dias de negociação na cobertura",
+        json_schema_extra={"example": 2730},
+    )
     max_range_days: int = Field(
         ...,
         description="Span máximo aceito por /v1/trading-days, em dias",
@@ -101,16 +115,19 @@ def _validate_range(calendar: TradingCalendar, start: date, end: date, max_range
 @router.get(
     "/calendar-info",
     summary="Consultar os limites do calendário",
-    description=f"""
-    Retorna os limites vigentes do calendário carregado.
+    description="""Retorna os limites vigentes do calendário carregado.
 
-    A janela do calendário é **móvel** e se desloca conforme o tempo passa, portanto
-    consulte este endpoint em vez de assumir uma data mínima fixa. Períodos fora destes
-    limites são rejeitados com 400 por `/v1/trading-days`.
+A janela do calendário é **móvel** e se desloca conforme o tempo passa, portanto
+consulte este endpoint em vez de assumir uma data mínima fixa. Períodos fora destes
+limites são rejeitados com 400 por `/v1/trading-days`.
 
-    {AUTH_NOTE}
-    """,
-    responses={503: RESPONSE_CALENDAR_UNAVAILABLE},
+`coverage_*` é o intervalo respondível; `first_session`/`last_session` são o primeiro e
+o último pregão dentro dele. Os dois diferem quando a janela começa num feriado ou fim
+de semana.""",
+    responses={
+        200: success_response("Limites obtidos com sucesso", CALENDAR_INFO_EXAMPLE),
+        503: RESPONSE_CALENDAR_UNAVAILABLE,
+    },
 )
 async def get_calendar_info(calendar: CalendarDep, settings: SettingsDep) -> CalendarInfoResponse:
     """Limites vigentes do calendário."""
@@ -135,25 +152,23 @@ async def get_calendar_info(calendar: CalendarDep, settings: SettingsDep) -> Cal
 @router.get(
     "/is-trading-day",
     summary="Verificar se hoje é dia de negociação",
-    description=f"""
-    Verifica se o dia atual é um dia de negociação na B3, considerando feriados e finais
-    de semana do calendário BVMF.
+    description="""Verifica se o dia atual é um dia de negociação na B3, considerando feriados e
+finais de semana do calendário BVMF.
 
-    O "dia atual" é determinado no timezone America/Sao_Paulo.
-
-    {AUTH_NOTE}
-    """,
+O "dia atual" é determinado no timezone America/Sao_Paulo. Se ele estiver fora da
+janela do calendário a resposta é 503 — nunca `false`, que seria indistinguível de um
+feriado legítimo.""",
     responses={
         200: examples_response(
             "Verificação realizada com sucesso",
             {
                 "trading_day": {
                     "summary": "Dia de negociação",
-                    "value": {"date": "2024-01-15", "is_trading_day": True},
+                    "value": {"date": "2026-09-04", "is_trading_day": True},
                 },
                 "non_trading_day": {
                     "summary": "Não é dia de negociação",
-                    "value": {"date": "2024-01-20", "is_trading_day": False},
+                    "value": {"date": "2026-09-05", "is_trading_day": False},
                 },
             },
         ),
@@ -179,33 +194,32 @@ async def is_trading_day(calendar: CalendarDep, settings: SettingsDep) -> Tradin
 @router.get(
     "/trading-days",
     summary="Listar dias de negociação em um período",
-    description=f"""
-    Retorna os dias de negociação (ou de não-negociação) num período.
+    description="""Retorna os dias de negociação (ou de não-negociação) num período.
 
-    **Parâmetros**
-    - `start`: data inicial no formato YYYY-MM-DD
-    - `end`: data final no formato YYYY-MM-DD, maior ou igual a `start`
-    - `exclude`: se `true`, retorna os dias **sem** negociação; se `false` (padrão), os
-      dias **com** negociação
+**Parâmetros**
+- `start`: data inicial no formato YYYY-MM-DD
+- `end`: data final no formato YYYY-MM-DD, maior ou igual a `start`
+- `exclude`: se `true`, retorna os dias **sem** negociação; se `false` (padrão), os
+  dias **com** negociação
 
-    **Restrições**
-    - O período deve estar inteiramente dentro da janela do calendário. Consulte
-      `GET /v1/calendar-info` para os limites vigentes.
-    - O span máximo por requisição é limitado; períodos maiores são rejeitados com 400.
-
-    {AUTH_NOTE}
-    """,
+**Restrições**
+- O período deve estar inteiramente dentro da janela do calendário. Consulte
+  `GET /v1/calendar-info` para os limites vigentes. Fora dela a resposta é 400 — a API
+  não devolve resultado parcial em silêncio.
+- O span máximo por requisição é limitado (`max_range_days`); períodos maiores são
+  rejeitados com 400.
+- Data mal formada responde 422.""",
     responses={
         200: examples_response(
             "Lista de datas obtida com sucesso",
             {
                 "trading_days": {
                     "summary": "Dias de negociação",
-                    "value": ["2024-01-02", "2024-01-03", "2024-01-04"],
+                    "value": ["2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04"],
                 },
                 "non_trading_days": {
                     "summary": "Dias sem negociação (exclude=true)",
-                    "value": ["2024-01-01", "2024-01-06", "2024-01-07"],
+                    "value": ["2026-09-05", "2026-09-06", "2026-09-07"],
                 },
             },
         ),

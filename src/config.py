@@ -15,21 +15,31 @@ from zoneinfo import ZoneInfo
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-API_DESCRIPTION = """
-API para consultar horários de operação e dias de negociação da B3 (Bolsa de Valores de São Paulo).
-
-## Autenticação
-
-Todas as requisições devem incluir o header `apikey` com uma chave válida gerenciada pelo Kong Gateway.
+# A seção de autenticação não está aqui: ela depende de API_KEY_REQUIRED e é anexada
+# por create_app() (ver src/routers/openapi_examples.py::auth_description).
+API_DESCRIPTION = """API para consultar horários de operação e dias de negociação da B3 (Bolsa de Valores de São Paulo).
 
 ## Características
 
-* **Horários de Operação**: Consulte horários de abertura e fechamento via Redis (cache local de 1h)
-* **Dias de Negociação**: Valide se um dia é útil na B3 usando exchange_calendars
-* **Janela de dados**: O calendário cobre uma janela móvel; consulte `GET /v1/calendar-info`
+* **Horários de Operação**: abertura e fechamento lidos do Redis, com cache local de 1 h
+* **Dias de Negociação**: dias úteis na B3 segundo o calendário BVMF do `exchange_calendars`
+* **Janela de dados**: o calendário cobre uma janela móvel; consulte `GET /v1/calendar-info`
   para os limites vigentes
-* **Timezone**: Todos os horários e datas utilizam timezone America/Sao_Paulo
-"""
+* **Timezone**: todos os horários e datas usam America/Sao_Paulo
+
+## Códigos de resposta
+
+| Código | Quando |
+|---|---|
+| `200` | Sucesso |
+| `400` | Período inválido em `/v1/trading-days`: ordem, span acima do máximo ou fora da janela |
+| `404` | Redis disponível, mas a chave não existe |
+| `422` | Data mal formada |
+| `502` | Valor no Redis fora do formato `HH:MM` |
+| `503` | Redis indisponível sem cache válido, ou calendário indisponível |
+
+As URLs canônicas não têm barra final (`/docs/` responde 404). Código, guia de migração e
+CHANGELOG: [github.com/rlquilez/b3datetime](https://github.com/rlquilez/b3datetime)."""
 
 
 def redact_url(url: str) -> str:
@@ -102,6 +112,10 @@ class Settings(BaseSettings):
     api_description: str = API_DESCRIPTION
     api_version: str = "2.0.0"
     root_path: str = ""
+    # Só afeta a documentação: com `true`, o OpenAPI declara o esquema `ApiKeyAuth` e
+    # `GET /` informa que o header `apikey` é obrigatório. Quem valida a chave é o Kong;
+    # a aplicação não tem — e não deve ganhar — código de autenticação.
+    api_key_required: bool = False
 
     @property
     def tz(self) -> ZoneInfo:

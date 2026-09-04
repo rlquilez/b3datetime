@@ -102,7 +102,7 @@ Any test touching the **real** calendar must pass explicit `start`/`end`, or it 
 
 ### Auth
 
-The API **authenticates nothing** — there is no apikey code here. Kong validates the header upstream; the endpoint docs mention it for client-facing documentation only.
+The API **authenticates nothing** — there is no apikey code here, and there must not be. **There is no authentication in production today** (Kong's key-auth is off), so the docs must not claim `apikey` is required. `API_KEY_REQUIRED` (default `false`) only drives documentation: `B3DateTimeAPI.openapi()` declares `ApiKeyAuth` + a global `security` requirement, `GET /` reports `authentication.required`, and the API description switches text (`openapi_examples.auth_description`). `tests/api/test_openapi.py::test_sem_autenticacao_por_padrao` and `::test_esquema_apikey_quando_exigido` lock both states.
 
 ## Testing
 

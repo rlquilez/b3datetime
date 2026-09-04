@@ -7,11 +7,20 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ## [Não publicado]
 
+### Adicionado
+
+- `API_KEY_REQUIRED` (padrão `false`): quando `true`, o OpenAPI declara o esquema de segurança `ApiKeyAuth` (header `apikey`) como requisito global, o Swagger UI exibe **Authorize** e `GET /` informa `authentication.required: true`. É só metadado — a validação continua no Kong e a aplicação não autentica nada. (#24)
+- Tags com descrição e ordem fixa, `502` documentado em `/v1/hours*`, exemplo de resposta em `GET /v1/calendar-info`, descrição em todos os campos, tabela de códigos de resposta na descrição da API, link para o README em `externalDocs` e schemas nomeados para `cache` e `calendar` de `/v1/health` e para `GET /`. O JSON das respostas não muda. (#24)
+
 ### Alterado
 
 - URLs com barra final (`/docs/`, `/v1/hours/`) respondem `404` em vez de `307`. O redirecionamento era montado com o header `Host` recebido do proxy e, atrás do Kong com `preserve_host: false`, apontava para o endereço interno do upstream sem o prefixo — destino inalcançável que ainda expunha IP e porta internos. Nenhuma URL documentada tem barra final. (#23)
+- Os links de `GET /` incluem o prefixo do proxy (`/<prefixo>/docs`, `/<prefixo>/v1/hours`, ...) e `docs.openapi` deixa de ser relativo: resolvido contra `/<prefixo>` por um cliente, `./openapi.json` caía em `/openapi.json`, fora do prefixo. (#24)
+- `GET /` e a documentação deixam de afirmar que o header `apikey` é obrigatório: `authentication` ganha o campo `required` e hoje informa `false`, porque não há autenticação em vigor. (#24)
 
 ### Corrigido
+
+- A documentação (OpenAPI, `GET /` e README) afirmava uma autenticação por `apikey` que não existe no momento. (#24)
 
 - `/docs` e `/redoc` ficavam em branco atrás do Kong com `strip_path: true`: a página carregava, mas `/<prefixo>/static/*` respondia `404`. O Kong removia o prefixo de `path` enquanto `ROOT_PATH` o mantinha em `root_path`, violando o contrato ASGI de que `path` começa com `root_path`; o `Mount("/static")` propagava então um `root_path` que o `StaticFiles` não conseguia remover e procurava `static/<arquivo>` dentro do diretório de assets. Um middleware recompõe o prefixo, e as duas configurações do Kong (`strip_path` `true` e `false`) passam a funcionar. (#23)
 - A documentação afirmava que `strip_path: false` fazia tudo responder `404`; com o Starlette 1.x era o oposto. (#23)

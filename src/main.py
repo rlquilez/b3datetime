@@ -14,6 +14,7 @@ import asyncio
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -24,16 +25,48 @@ from pydantic import ValidationError
 
 from src.config import Settings, get_settings
 from src.middleware import RootPathPrefixMiddleware
-from src.routers import dates, health, hours
+from src.routers import dates, health, hours, root
+from src.routers.openapi_examples import (
+    API_KEY_SCHEME,
+    BAD_GATEWAY_MESSAGE,
+    OPENAPI_TAGS,
+    SECURITY_SCHEMES,
+    auth_description,
+)
 from src.services.calendar_service import CalendarUnavailableError, build_bvmf_calendar
 from src.services.redis_service import KeyNotFoundError, RedisService, RedisUnavailableError
 from src.static import REDOC_JS, STATIC_DIR, SWAGGER_CSS, SWAGGER_JS
 
 logger = logging.getLogger(__name__)
 
-# Caminho relativo: atrás do Kong com prefixo, um caminho absoluto para
-# openapi.json quebra as páginas de documentação.
+# Caminho relativo nas páginas HTML: o browser o resolve contra a URL pública, que é a
+# única coisa que funciona qualquer que seja a configuração do proxy. (No JSON de
+# `GET /` a regra é outra: caminhos absolutos com o prefixo — ver src/routers/root.py.)
 OPENAPI_RELATIVE_URL = "./openapi.json"
+
+EXTERNAL_DOCS = {
+    "description": "README, guia de migração e CHANGELOG",
+    "url": "https://github.com/rlquilez/b3datetime#readme",
+}
+
+
+class B3DateTimeAPI(FastAPI):
+    """FastAPI cujo schema declara o esquema de segurança `apikey` quando ele é exigido.
+
+    Só metadado: a chave é validada pelo Kong e a aplicação continua sem nenhum código
+    de autenticação. Com ``API_KEY_REQUIRED=true`` o Swagger UI exibe "Authorize" e envia
+    o header no "Try it out"; com ``false`` nada de segurança é declarado. O FastAPI
+    cacheia o schema em ``openapi_schema``; a mutação abaixo é idempotente.
+    """
+
+    def openapi(self) -> dict[str, Any]:
+        schema = super().openapi()
+        schema["externalDocs"] = EXTERNAL_DOCS
+        settings: Settings = self.state.settings
+        if settings.api_key_required:
+            schema.setdefault("components", {})["securitySchemes"] = SECURITY_SCHEMES
+            schema["security"] = [{API_KEY_SCHEME: []}]
+        return schema
 
 
 def configure_logging() -> None:
@@ -97,12 +130,7 @@ def _register_exception_handlers(app: FastAPI) -> None:
         logger.error("Valor inválido lido do Redis: %s", exc.errors())
         return JSONResponse(
             status_code=502,
-            content={
-                "detail": {
-                    "error": "Bad Gateway",
-                    "message": "O valor armazenado no Redis não está no formato esperado",
-                }
-            },
+            content={"detail": {"error": "Bad Gateway", "message": BAD_GATEWAY_MESSAGE}},
         )
 
     @app.exception_handler(RedisUnavailableError)
@@ -121,9 +149,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     """Constrói a aplicação. Não executa I/O — isso é papel do ``lifespan``."""
     settings = settings or get_settings()
 
-    app = FastAPI(
+    app = B3DateTimeAPI(
         title=settings.api_title,
-        description=settings.api_description,
+        description=f"{settings.api_description}\n\n{auth_description(settings.api_key_required)}",
         version=settings.api_version,
         root_path=settings.root_path.rstrip("/"),
         # Sem redirect de barra final: o Location era montado com o header Host recebido
@@ -133,15 +161,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         docs_url=None,  # servido abaixo, com assets locais
         redoc_url=None,
         openapi_url="/openapi.json",
+        openapi_tags=OPENAPI_TAGS,
         lifespan=lifespan,
-        contact={"name": "B3 DateTime API", "url": "https://github.com/rlquilez/b3datetime"},
+        contact={"name": "Rodrigo Quilez", "url": "https://github.com/rlquilez/b3datetime"},
         license_info={"name": "MIT", "url": "https://opensource.org/licenses/MIT"},
     )
     app.state.settings = settings
 
+    # Corrige o scope antes de qualquer coisa que leia `path` (router, Mount). Ver o
+    # docstring de src/middleware.py. Registrado ANTES do CORS: o CORS precisa ser a
+    # camada mais externa (Sonar python:S8414), e a ordem entre os dois é indiferente —
+    # o CORS só olha método e headers.
+    app.add_middleware(RootPathPrefixMiddleware)
+
     # allow_credentials fica desligado: combinado com allow_origins=["*"], o Starlette
     # passa a refletir o Origin do chamador, o que equivale a confiar em toda origem
-    # com credenciais. A autenticação desta API é o header `apikey`, validado no Kong.
+    # com credenciais. Se houver autenticação, ela é o header `apikey`, validado no Kong.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -149,9 +184,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_methods=["GET", "OPTIONS"],
         allow_headers=["*"],
     )
-    # Adicionado por último = camada mais externa: o scope é corrigido antes de qualquer
-    # coisa que leia `path` (router, Mount). Ver o docstring de src/middleware.py.
-    app.add_middleware(RootPathPrefixMiddleware)
 
     _register_exception_handlers(app)
 
@@ -159,6 +191,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(hours.router)
     app.include_router(dates.router)
     app.include_router(health.router)
+    app.include_router(root.router)
 
     @app.get("/docs", include_in_schema=False)
     async def swagger_ui() -> object:
@@ -179,37 +212,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             redoc_favicon_url="./static/favicon.png",
             with_google_fonts=False,
         )
-
-    @app.get("/", tags=["Root"], summary="Informações da API")
-    async def root() -> dict[str, object]:
-        return {
-            "name": settings.api_title,
-            "version": settings.api_version,
-            "description": "API para consultar horários e dias de operação da B3",
-            "docs": {
-                "swagger": "/docs",
-                "redoc": "/redoc",
-                "openapi": OPENAPI_RELATIVE_URL,
-            },
-            "endpoints": {
-                "hours": {
-                    "all": "/v1/hours",
-                    "open": "/v1/hours/open",
-                    "close": "/v1/hours/close",
-                },
-                "dates": {
-                    "is_trading_day": "/v1/is-trading-day",
-                    "trading_days": "/v1/trading-days?start=YYYY-MM-DD&end=YYYY-MM-DD&exclude=false",
-                    "calendar_info": "/v1/calendar-info",
-                },
-                "health": "/v1/health",
-            },
-            "authentication": {
-                "type": "API Key",
-                "header": "apikey",
-                "managed_by": "Kong Gateway",
-            },
-        }
 
     return app
 

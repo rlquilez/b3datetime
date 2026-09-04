@@ -172,13 +172,13 @@ Metadados, endpoints disponíveis e forma de autenticação.
 
 ## 🔐 Autenticação
 
-Todas as requisições devem incluir o header `apikey`:
+**Nenhuma no momento.** As requisições não precisam de header algum:
 
 ```bash
-curl -H "apikey: YOUR_API_KEY" https://api.example.com/v1/hours
+curl https://api.quilez.cloud/b3datetime/v1/hours
 ```
 
-A autenticação é gerenciada externamente pelo **Kong Gateway**. **A aplicação não valida chaves** — não há nenhum código de autenticação nela.
+Quando o Kong Gateway passar a exigir o header `apikey` (plugin key-auth), a API é publicada com `API_KEY_REQUIRED=true`: o OpenAPI declara o esquema `ApiKeyAuth`, o Swagger UI exibe **Authorize** e `GET /` informa `authentication.required: true`. **A aplicação não valida chaves** — não há nenhum código de autenticação nela; quem valida é o Kong.
 
 ## ⚙️ Variáveis de Ambiente
 
