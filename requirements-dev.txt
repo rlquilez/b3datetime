@@ -11,7 +11,7 @@ httpx==0.28.1
 asgi-lifespan==2.1.0
 fakeredis==2.37.1
 freezegun==1.5.5
-pytest-randomly==4.1.0
+pytest-randomly==5.0.0
 
 # --- qualidade ---
 ruff==0.16.5
