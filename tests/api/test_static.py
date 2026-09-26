@@ -7,8 +7,8 @@ import pytest
 
 from src.static import FAVICON, REDOC_JS, SWAGGER_CSS, SWAGGER_JS
 
-# Python 3.11 reporta application/javascript; 3.12, text/javascript.
-JS_TYPES = {"application/javascript", "text/javascript"}
+# O mimetypes do Python >= 3.12 (o projeto só roda 3.14) usa text/javascript.
+JS_TYPES = {"text/javascript"}
 CONTENT_TYPES = {
     SWAGGER_JS: JS_TYPES,
     SWAGGER_CSS: {"text/css"},

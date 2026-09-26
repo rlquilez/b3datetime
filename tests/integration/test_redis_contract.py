@@ -28,7 +28,7 @@ async def real_redis() -> AsyncIterator[aioredis.Redis]:
     )
     try:
         await client.ping()
-    except (RedisError, OSError):
+    except RedisError, OSError:
         await client.aclose()
         pytest.skip("Redis não disponível em localhost:6379")
     await client.flushdb()

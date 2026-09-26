@@ -33,8 +33,8 @@ ENDPOINTS = ["/", "/openapi.json", "/v1/hours", "/v1/hours/open", "/v1/calendar-
 ASSET_REF = re.compile(r"""(?:href|src|spec-url)="([^"]+)"|url:\s*'([^']+)'""")
 CONTENT_TYPES = {
     ".css": {"text/css"},
-    # Python 3.11 reporta application/javascript; 3.12, text/javascript.
-    ".js": {"application/javascript", "text/javascript"},
+    # O mimetypes do Python >= 3.12 (o projeto só roda 3.14) usa text/javascript.
+    ".js": {"text/javascript"},
     ".png": {"image/png"},
     ".json": {"application/json"},
 }

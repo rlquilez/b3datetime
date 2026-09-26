@@ -7,6 +7,10 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ## [Não publicado]
 
+### Alterado
+
+- **Python 3.14 passa a ser a única versão suportada e testada** (`requires-python = ">=3.14"`, alvo do ruff e do mypy): é o runtime da imagem, e nenhum ambiente usa outra. O CI deixa de rodar a suíte também em 3.11. (#45)
+
 ## [2.0.3] - 2026-09-26
 
 ### Alterado

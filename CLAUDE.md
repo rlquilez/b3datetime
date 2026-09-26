@@ -36,17 +36,17 @@ FastAPI service exposing B3 (Brazilian stock exchange) trading hours and trading
 
 ## Commands
 
-Local `python3` on this machine is 3.9.6 and the project needs **3.11+** (the image runs **3.14**). There is no 3.11+ interpreter installed, so the practical way to run tests and lint locally is Docker, on the same base as the production image (Python 3.14 on Alpine — no `bash`, hence `sh -c`):
+Local `python3` on this machine is 3.9.6 and the project needs **3.14** (the image's runtime and the only version in `requires-python`). There is no 3.14 interpreter installed, so the practical way to run tests and lint locally is Docker, on the same base as the production image (Python 3.14 on Alpine — no `bash`, hence `sh -c`):
 
 ```bash
 docker run --rm -v "$PWD":/app -w /app python:3.14-alpine sh -c \
   'pip install -q -r requirements-dev.txt && python -m pytest'
 ```
 
-With a 3.11+ interpreter available:
+With a 3.14 interpreter available:
 
 ```bash
-python3.14 -m venv .venv && source .venv/bin/activate   # any 3.11+ works; the image runs 3.14
+python3.14 -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
 cp .env.example .env
 
@@ -125,7 +125,7 @@ Integration tests against real Redis auto-skip when none is reachable, and use *
 
 ## CI/CD
 
-`.github/workflows/ci.yml` — lint, mypy, tests (3.11 = minimum supported, 3.14 = runtime, both with a Redis service), bandit, pip-audit, dependency-review, gitleaks, CodeQL, Trivy (fs + image), SonarQube with a **blocking** quality gate, multi-arch publish, SBOM, automatic release, and a `ci-ok` aggregator meant to be the single required status check.
+`.github/workflows/ci.yml` — lint, mypy, tests (Python 3.14 only — the image's runtime; the 3.11 matrix entry was dropped in #45 — with a Redis service), bandit, pip-audit, dependency-review, gitleaks, CodeQL, Trivy (fs + image), SonarQube with a **blocking** quality gate, multi-arch publish, SBOM, automatic release, and a `ci-ok` aggregator meant to be the single required status check.
 
 - **The only workflow, with no `tags:` trigger.** Version tags are *created* by the `release` job after publishing; nothing reacts to a tag push, so double-publishing stays structurally impossible. (`release.yml` used to be triggered by tags and was folded in here in #41.)
 - `latest` is `enable={{is_default_branch}}`. It used to be unconditional, so a push to any branch overwrote production `latest`.

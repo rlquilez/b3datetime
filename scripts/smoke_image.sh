@@ -116,8 +116,8 @@ expect GET /docs 200 text/html './static/swagger-ui-bundle.js'
 expect GET /docs 200 text/html "url: './openapi.json'"
 expect GET /redoc 200 text/html 'spec-url="./openapi.json"'
 expect GET /static/swagger-ui.css 200 text/css
-expect GET /static/swagger-ui-bundle.js 200 'application/javascript|text/javascript'
-expect GET /static/redoc.standalone.js 200 'application/javascript|text/javascript'
+expect GET /static/swagger-ui-bundle.js 200 'text/javascript'
+expect GET /static/redoc.standalone.js 200 'text/javascript'
 expect GET /static/favicon.png 200 image/png
 expect HEAD /static/swagger-ui.css 200 text/css
 

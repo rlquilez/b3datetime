@@ -199,7 +199,7 @@ class RedisService:
             return None
         try:
             values = await client.mget(keys)
-        except (RedisError, OSError):
+        except RedisError, OSError:
             logger.exception("Erro ao ler %s no Redis", keys)
             # O cliente é preservado: o pool do redis-py reconecta sozinho na próxima
             # chamada. Anulá-lo era o que travava a API em 503 permanente.

@@ -18,7 +18,7 @@
     <a href="https://github.com/rlquilez/b3datetime/actions/workflows/ci.yml"><img src="https://github.com/rlquilez/b3datetime/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
     <a href="https://github.com/rlquilez/b3datetime/releases"><img src="https://img.shields.io/github/v/release/rlquilez/b3datetime?sort=semver&label=vers%C3%A3o" alt="Versão"></a>
     <a href="LICENSE"><img src="https://img.shields.io/github/license/rlquilez/b3datetime" alt="Licença MIT"></a>
-    <img src="https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white" alt="Python 3.11+">
+    <img src="https://img.shields.io/badge/python-3.14-3776AB?logo=python&logoColor=white" alt="Python 3.14">
     <img src="https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white" alt="FastAPI">
     <img src="https://img.shields.io/badge/docker-amd64%20%7C%20arm64-2496ED?logo=docker&logoColor=white" alt="Docker multi-arch">
     <a href="https://www.conventionalcommits.org/pt-br/"><img src="https://img.shields.io/badge/Conventional%20Commits-1.0.0-FE5196?logo=conventionalcommits&logoColor=white" alt="Conventional Commits"></a>
@@ -751,14 +751,14 @@ services:
 
 ### Pré-requisitos
 
-- **Python 3.11 ou superior** (a imagem de produção roda **3.14**; a suíte é executada em 3.11 e 3.14)
+- **Python 3.14** — a versão da imagem de produção e a única em que a suíte é executada
 - Redis (opcional — a suíte de testes usa `fakeredis`)
 
 ```bash
 git clone https://github.com/rlquilez/b3datetime.git
 cd b3datetime
 
-python3.14 -m venv .venv           # qualquer 3.11+ serve
+python3.14 -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 
 pip install -r requirements-dev.txt
@@ -770,7 +770,7 @@ uvicorn src.main:app --reload --port 8000
 
 Documentação local: http://localhost:8000/docs · http://localhost:8000/redoc · http://localhost:8000/openapi.json
 
-Sem um Python 3.11+ instalado, tudo roda em Docker, sobre a mesma base da imagem de produção (Python 3.14 em Alpine):
+Sem um Python 3.14 instalado, tudo roda em Docker, sobre a mesma base da imagem de produção (Python 3.14 em Alpine):
 
 ```bash
 docker run --rm -v "$PWD":/app -w /app python:3.14-alpine sh -c \
@@ -828,7 +828,7 @@ flowchart LR
     subgraph paralelo["Sem dependências"]
         lint["lint (ruff)"]
         typecheck["tipagem (mypy)"]
-        test["testes (3.11 e 3.14 + Redis)"]
+        test["testes (3.14 + Redis)"]
         bandit["bandit"]
         pipaudit["pip-audit"]
         gitleaks["gitleaks"]
@@ -847,7 +847,7 @@ flowchart LR
 |-------|-----------|------------|
 | Lint e formatação | ruff | |
 | Tipagem | mypy | |
-| Testes e coverage | pytest em Python 3.11 (mínimo suportado) e 3.14 (runtime), com Redis real | tripwires: caminhos relativos no `coverage.xml` (senão o Sonar reporta 0%) e nenhum teste pulado |
+| Testes e coverage | pytest em Python 3.14 (o runtime da imagem), com Redis real | tripwires: caminhos relativos no `coverage.xml` (senão o Sonar reporta 0%) e nenhum teste pulado |
 | SAST | bandit, CodeQL | |
 | CVEs em dependências | pip-audit, dependency-review | |
 | Segredos | gitleaks | histórico inteiro |

@@ -1,6 +1,6 @@
 # Imagem multi-stage da B3 DateTime API.
-# Python 3.14: a suíte também roda em 3.11 (mínimo suportado) na matriz do CI; a
-# versão do runtime é a única que precisa constar aqui e em sonar.python.version.
+# Python 3.14 é a única versão do projeto: runtime da imagem, requires-python, alvo do
+# ruff e do mypy, sonar.python.version e o job de testes do CI.
 #
 # Base Alpine oficial, fixada por digest; o Dependabot propõe o digest novo a cada
 # semana e o PR passa pelo CI antes de ser adotado. A python:3.14-slim trazia o

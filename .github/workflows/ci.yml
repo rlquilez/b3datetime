@@ -49,13 +49,11 @@ jobs:
       - run: mypy src
 
   test:
-    name: Testes (Python ${{ matrix.python-version }})
+    # Só o 3.14: é o runtime da imagem e a única versão declarada em requires-python.
+    # A matriz com o 3.11 foi removida em #45 — testar uma versão que nenhum ambiente
+    # usa custava um job inteiro por push sem proteger nada que é entregue.
+    name: Testes (Python 3.14)
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      # 3.11 = mínimo suportado (requires-python); 3.14 = runtime da imagem.
-      matrix:
-        python-version: ["3.11", "3.14"]
     services:
       # Cobre os testes de contrato contra Redis real, que são a única defesa
       # contra drift do fakeredis exatamente na semântica que corrigimos
@@ -72,7 +70,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
       - run: pip install -r requirements-dev.txt
 
@@ -104,7 +102,6 @@ jobs:
           echo "OK: nenhum teste pulado ($(grep -oE 'tests="[0-9]+"' junit.xml | head -1))"
 
       - name: Publicar relatórios
-        if: matrix.python-version == '3.14'
         uses: actions/upload-artifact@v7
         with:
           name: coverage-report
