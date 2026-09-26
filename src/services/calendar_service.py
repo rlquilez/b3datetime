@@ -84,11 +84,6 @@ class TradingCalendar:
         """Intervalo de datas sobre o qual o calendário sabe responder."""
         return self._coverage_start, self._coverage_end
 
-    @property
-    def bounds(self) -> tuple[date | None, date | None]:
-        """Alias de `coverage`, mantido para leitura nos endpoints."""
-        return self.coverage
-
     def __len__(self) -> int:
         return len(self._session_dates)
 

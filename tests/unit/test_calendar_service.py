@@ -115,7 +115,8 @@ def test_cobertura_sem_janela_explicita_usa_as_sessoes() -> None:
 
 def test_calendario_vazio_nao_estoura() -> None:
     vazio = make_empty_calendar()
-    assert vazio.bounds == (None, None)
+    assert vazio.coverage == (None, None)
+    assert (vazio.first_session, vazio.last_session) == (None, None)
     assert not vazio.covers(date(2024, 1, 1), date(2024, 1, 2))
     assert len(vazio) == 0
 
@@ -201,6 +202,6 @@ def test_calendario_real_da_bvmf() -> None:
     assert not calendario.is_session(date(2024, 1, 1))  # Confraternização
     assert not calendario.is_session(date(2024, 2, 12))  # Carnaval
     assert calendario.is_session(date(2024, 1, 2))
-    first, _ = calendario.bounds
-    assert first is not None
-    assert first >= date(2024, 1, 1)
+    inicio, _ = calendario.coverage
+    assert inicio == date(2024, 1, 1)  # a cobertura começa no feriado
+    assert calendario.first_session == date(2024, 1, 2)  # a primeira sessão, não

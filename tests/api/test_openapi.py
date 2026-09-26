@@ -140,6 +140,25 @@ async def test_esquema_apikey_quando_exigido(
     }
 
 
+async def test_503_do_health_documenta_o_schema(client: httpx.AsyncClient) -> None:
+    """O corpo do 503 é o mesmo HealthResponse do 200; sem `model`, o schema não era
+    documentado e o cliente só tinha um exemplo (#46)."""
+    content = (await _schema(client))["paths"]["/v1/health"]["get"]["responses"]["503"]["content"]
+    assert content["application/json"]["schema"] == {"$ref": "#/components/schemas/HealthResponse"}
+
+
+async def test_exemplos_do_health_sao_combinacoes_possiveis(client: httpx.AsyncClient) -> None:
+    """Com o calendário disponível os limites sempre vêm; sem ele, só `available`. O
+    exemplo `unhealthy` antigo mostrava `{"available": true}` sem limites (#46)."""
+    responses = (await _schema(client))["paths"]["/v1/health"]["get"]["responses"]
+    completo = {"available", "first_session", "last_session", "sessions_count"}
+    for code in ("200", "503"):
+        for nome, exemplo in responses[code]["content"]["application/json"]["examples"].items():
+            calendario = exemplo["value"]["calendar"]
+            esperado = completo if calendario["available"] else {"available"}
+            assert set(calendario) == esperado, f"{code}/{nome}"
+
+
 async def test_schemas_tipados(client: httpx.AsyncClient) -> None:
     """`cache` e `calendar` do health e o corpo de `GET /` eram dicts opacos."""
     components = (await _schema(client))["components"]["schemas"]

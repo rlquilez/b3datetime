@@ -11,6 +11,11 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 - **Python 3.14 passa a ser a única versão suportada e testada** (`requires-python = ">=3.14"`, alvo do ruff e do mypy): é o runtime da imagem, e nenhum ambiente usa outra. O CI deixa de rodar a suíte também em 3.11. (#45)
 
+### Corrigido
+
+- `GET /v1/health` informava em `calendar.first_session` o **início da janela** do calendário, e não a primeira sessão. Quando a janela começa num fim de semana ou feriado — em produção, a partir de 01/10/2026 —, o health anunciava como primeiro pregão um dia sem pregão e discordava de `GET /v1/calendar-info`. Agora os dois concordam sempre. (#46)
+- O `503` de `GET /v1/health` passa a documentar o schema da resposta (o mesmo `HealthResponse` do `200`). O exemplo `unhealthy` foi trocado por dois exemplos que a API de fato produz: Redis fora sem cache, e calendário indisponível. (#46)
+
 ## [2.0.3] - 2026-09-26
 
 ### Alterado

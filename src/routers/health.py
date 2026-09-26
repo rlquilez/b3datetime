@@ -79,6 +79,45 @@ class HealthResponse(BaseModel):
     calendar: CalendarStatus = Field(..., description="Estado do calendário de negociação")
 
 
+# Limites de exemplo coerentes com o exemplo de /v1/calendar-info: a janela começa num
+# domingo (2016-09-04) e a primeira *sessão* é a segunda-feira seguinte.
+_CALENDAR_EXAMPLE: dict[str, Any] = {
+    "available": True,
+    "first_session": "2016-09-05",
+    "last_session": "2027-09-03",
+    "sessions_count": 2730,
+}
+
+
+def _example(
+    summary: str,
+    status_value: str,
+    *,
+    redis_connected: bool,
+    cache_age: int | None,
+    calendar: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Exemplo nomeado de resposta do health, sempre numa combinação que a API produz."""
+    expired = cache_age is None
+    return {
+        "summary": summary,
+        "value": {
+            "status": status_value,
+            "timestamp": "2026-09-04T10:30:00-03:00",
+            "redis_status": "connected" if redis_connected else "disconnected",
+            "cache": {
+                "redis_connected": redis_connected,
+                "open_cache_age_seconds": cache_age,
+                "close_cache_age_seconds": cache_age,
+                "open_cache_expired": expired,
+                "close_cache_expired": expired,
+                "cache_ttl_seconds": 3600,
+            },
+            "calendar": calendar if calendar is not None else _CALENDAR_EXAMPLE,
+        },
+    }
+
+
 def _evaluate(cache: dict[str, Any], calendar_available: bool) -> str:
     """Deriva o estado geral a partir do Redis, do cache e do calendário."""
     if not calendar_available:
@@ -120,74 +159,41 @@ detectarem a falha.""",
         200: examples_response(
             "API saudável ou degradada",
             {
-                "healthy": {
-                    "summary": "Sistema saudável",
-                    "value": {
-                        "status": STATUS_HEALTHY,
-                        "timestamp": "2026-09-04T10:30:00-03:00",
-                        "redis_status": "connected",
-                        "cache": {
-                            "redis_connected": True,
-                            "open_cache_age_seconds": 120,
-                            "close_cache_age_seconds": 120,
-                            "open_cache_expired": False,
-                            "close_cache_expired": False,
-                            "cache_ttl_seconds": 3600,
-                        },
-                        "calendar": {
-                            "available": True,
-                            "first_session": "2016-09-04",
-                            "last_session": "2027-09-03",
-                            "sessions_count": 2730,
-                        },
-                    },
-                },
-                "degraded": {
-                    "summary": "Redis offline, cache local ainda válido",
-                    "value": {
-                        "status": STATUS_DEGRADED,
-                        "timestamp": "2026-09-04T10:30:00-03:00",
-                        "redis_status": "disconnected",
-                        "cache": {
-                            "redis_connected": False,
-                            "open_cache_age_seconds": 1800,
-                            "close_cache_age_seconds": 1800,
-                            "open_cache_expired": False,
-                            "close_cache_expired": False,
-                            "cache_ttl_seconds": 3600,
-                        },
-                        "calendar": {
-                            "available": True,
-                            "first_session": "2016-09-04",
-                            "last_session": "2027-09-03",
-                            "sessions_count": 2730,
-                        },
-                    },
-                },
+                "healthy": _example(
+                    "Sistema saudável", STATUS_HEALTHY, redis_connected=True, cache_age=120
+                ),
+                "degraded": _example(
+                    "Redis offline, cache local ainda válido",
+                    STATUS_DEGRADED,
+                    redis_connected=False,
+                    cache_age=1800,
+                ),
             },
         ),
-        503: examples_response(
-            "API não saudável",
-            {
-                "unhealthy": {
-                    "summary": "Redis offline e sem cache utilizável",
-                    "value": {
-                        "status": STATUS_UNHEALTHY,
-                        "timestamp": "2026-09-04T10:30:00-03:00",
-                        "redis_status": "disconnected",
-                        "cache": {
-                            "redis_connected": False,
-                            "open_cache_age_seconds": None,
-                            "close_cache_age_seconds": None,
-                            "open_cache_expired": True,
-                            "close_cache_expired": True,
-                            "cache_ttl_seconds": 3600,
-                        },
-                        "calendar": {"available": True},
-                    },
-                }
-            },
-        ),
+        # O corpo do 503 é o mesmo HealthResponse do 200. Sem `model`, o schema não era
+        # documentado e o único exemplo mostrava `calendar: {"available": true}` sem os
+        # limites — combinação que a API nunca produz (#46).
+        503: {
+            "model": HealthResponse,
+            **examples_response(
+                "API não saudável",
+                {
+                    "redis_unavailable": _example(
+                        "Redis offline e sem cache utilizável",
+                        STATUS_UNHEALTHY,
+                        redis_connected=False,
+                        cache_age=None,
+                    ),
+                    "calendar_unavailable": _example(
+                        "Calendário indisponível",
+                        STATUS_UNHEALTHY,
+                        redis_connected=True,
+                        cache_age=5,
+                        calendar={"available": False},
+                    ),
+                },
+            ),
+        },
     },
 )
 async def health_check(
@@ -199,7 +205,10 @@ async def health_check(
     calendar = getattr(request.app.state, "calendar", None)
     calendar_status = CalendarStatus(available=False)
     if calendar is not None:
-        first, last = calendar.bounds
+        # Sessões, e não a janela. O health lia o antigo alias `bounds`, que era a
+        # cobertura: quando a janela começa num feriado ou fim de semana, anunciava como
+        # "primeira sessão" um dia sem pregão, contradizendo /v1/calendar-info (#46).
+        first, last = calendar.first_session, calendar.last_session
         calendar_status = CalendarStatus(
             available=True,
             first_session=first.isoformat() if first else None,

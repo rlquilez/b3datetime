@@ -152,9 +152,25 @@ async def test_corpo_traz_ttl_e_limites(client: httpx.AsyncClient) -> None:
         "close_cache_expired",
         "cache_ttl_seconds",
     }
-    assert body["calendar"]["first_session"] == "2024-01-01"
+    # 2024-01-01 é feriado: a primeira *sessão* do calendário sintético é 2024-01-02.
+    assert body["calendar"]["first_session"] == "2024-01-02"
     assert body["calendar"]["sessions_count"] > 240
     assert set(body["calendar"]) == {"available", "first_session", "last_session", "sessions_count"}
+
+
+async def test_calendario_do_health_reporta_sessoes_e_nao_a_janela(
+    client: httpx.AsyncClient,
+) -> None:
+    """Regressão de #46: o health lia `calendar.bounds`, alias da *cobertura*. Com a
+    janela começando num feriado (2024-01-01), anunciava como primeira sessão um dia
+    sem pregão, e /v1/health e /v1/calendar-info discordavam."""
+    health = (await client.get("/v1/health")).json()["calendar"]
+    info = (await client.get("/v1/calendar-info")).json()
+
+    assert info["coverage_start"] == "2024-01-01"
+    assert health["first_session"] == info["first_session"] == "2024-01-02"
+    assert health["last_session"] == info["last_session"]
+    assert health["sessions_count"] == info["sessions_count"]
 
 
 async def test_timestamp_com_fuso_de_sao_paulo(client: httpx.AsyncClient) -> None:

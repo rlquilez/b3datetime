@@ -433,12 +433,14 @@ curl https://api.quilez.cloud/b3datetime/v1/health
   },
   "calendar": {
     "available": true,
-    "first_session": "2016-09-04",
+    "first_session": "2016-09-05",
     "last_session": "2027-09-03",
     "sessions_count": 2730
   }
 }
 ```
+
+`calendar.first_session` e `calendar.last_session` são o primeiro e o último **pregão** carregados — os mesmos de `GET /v1/calendar-info`. A janela (`coverage_start`) pode começar num fim de semana ou feriado; a primeira sessão, não.
 
 ```python
 import requests
