@@ -1,6 +1,6 @@
 ---
 name: release
-description: Publica uma nova versão do b3datetime — escolhe o número SemVer, atualiza o CHANGELOG.md no formato Keep a Changelog, sincroniza a versão nos arquivos que a duplicam, cria a tag e publica a página de Releases do GitHub. Use quando for lançar uma versão, atualizar o CHANGELOG, criar uma tag, ou quando o usuário pedir "release", "nova versão", "publicar versão" ou "atualizar o changelog".
+description: Publica uma nova versão do b3datetime — escolhe o número SemVer, atualiza o CHANGELOG.md no formato Keep a Changelog, sincroniza a versão nos arquivos que a duplicam e confere a tag, as tags da imagem e a página de Releases que o CI publica sozinho a partir do commit de release. Use quando for lançar uma versão, atualizar o CHANGELOG, criar uma tag, ou quando o usuário pedir "release", "nova versão", "publicar versão" ou "atualizar o changelog".
 ---
 
 # Release do b3datetime
@@ -32,11 +32,17 @@ Regras que evitam erro:
 |---|---|
 | `src/config.py` | `api_version: str = "X.Y.Z"` |
 | `pyproject.toml` | `version = "X.Y.Z"` em `[project]` |
-| `README.md` | a linha `<strong>Versão atual: X.Y.Z</strong>` do cabeçalho (é o que o `release.yml` verifica com `grep`); o exemplo de `GET /` na seção de endpoints também cita a versão |
+| `README.md` | a linha `<strong>Versão atual: X.Y.Z</strong>` do cabeçalho (é o que o teste de sincronia procura); o exemplo de `GET /` na seção de endpoints também cita a versão |
 | `CHANGELOG.md` | nova seção `## [X.Y.Z] - AAAA-MM-DD` e os links de comparação no rodapé |
-| tag git | `vX.Y.Z` (com o `v`; a tag é a única forma que leva prefixo) |
+| tag git | **não se cria à mão**: o job `release` do CI cria `vX.Y.Z` (com o `v`, a única forma que leva prefixo) no commit de release |
 
-`.github/workflows/release.yml` **impõe** essa sincronia: o job `verify` reprova a tag se `${GITHUB_REF_NAME#v}` divergir de `api_version`, da versão do README ou da seção do CHANGELOG. O `pyproject.toml` não é verificado pelo workflow — é `tests/unit/test_config.py::test_versao_sincronizada_com_pyproject` (e `::test_versao_sincronizada_com_readme_e_changelog`) que o cobre, então a suíte quebra antes do push se algum lugar ficar para trás. Se o job reprovar, o erro é real — corrija a fonte, não o workflow.
+Os testes de `tests/unit/test_config.py` **impõem** essa sincronia no job `test` do CI, antes de qualquer publicação:
+
+- `test_versao_sincronizada_com_pyproject`: `pyproject.toml` igual a `api_version`;
+- `test_versao_sincronizada_com_readme_e_changelog`: README com `Versão atual: X.Y.Z` e CHANGELOG com `## [X.Y.Z] - AAAA-MM-DD`;
+- `test_secao_do_changelog_da_versao_atual_nao_vazia`: a seção tem conteúdo. É ela que vira as notas da Release, e o job `release` reprovaria só depois de o `latest` já ter sido publicado.
+
+Se algum deles reprovar, o erro é real — corrija a fonte, não o teste.
 
 ## 3. Formato do CHANGELOG
 
@@ -85,28 +91,40 @@ Regras de escrita:
 # 1. Versão nova em src/config.py, pyproject.toml e README.md sincronizados
 # 2. Seção do CHANGELOG escrita, com a data de hoje, e links de comparação atualizados
 
-# 3. Commit e push da main
+# 3. Commit e push da main — e só. Nenhuma tag à mão.
 git add -A
 git commit -m "chore(release): v2.0.0
 
 Refs #11"
 git push origin main
 
-# 4. Aguarde o CI do commit de release publicar a imagem sha-<7 caracteres>
-gh run watch "$(gh run list --workflow CI --branch main --limit 1 --json databaseId --jq '.[0].databaseId')" --exit-status
+# 4. Acompanhe o CI do commit de release (o job `release` roda depois do docker-publish)
+gh run watch "$(gh run list --workflow CI --branch main --limit 5 --json databaseId,headSha \
+  --jq "[.[] | select(.headSha==\"$(git rev-parse HEAD)\")][0].databaseId")" --exit-status
 
-# 5. Só então a tag
-git tag -a v2.0.0 -m "v2.0.0"
-git push origin v2.0.0
+# 5. Confira o que o CI publicou
+gh release view v2.0.0                       # notas = seção [2.0.0] do CHANGELOG
+git ls-remote origin 'refs/tags/v2.0.0'      # tag no commit de release
 ```
 
-O push da tag dispara `release.yml`, que valida a sincronia, extrai a seção do CHANGELOG, retagueia a imagem Docker (`2`, `2.0`, `2.0.0`) e cria a página de Release. O `retag` **não rebuilda**: ele adiciona tags ao manifest `sha-<7>` que o `ci.yml` publicou para aquele commit — por isso a tag só pode ir depois que o CI da `main` terminou (passo 4); enviada antes, o job falha com "não existe no registry".
+O job `release` do `ci.yml` roda depois do `docker-publish` em todo push na `main`. Quando a `api_version` do commit ainda não tem Release, ele:
 
-Se o workflow não estiver disponível, o equivalente manual:
+1. cria a tag `vX.Y.Z` naquele commit (pela API; tag leve);
+2. adiciona `X.Y.Z`, `X.Y` e `X` (só `X.Y.Z` em pré-release) ao manifest multi-arch que o `docker-publish` **acabou** de enviar, pelo digest e com `crane tag`, **sem rebuild**;
+3. publica a Release com a seção do CHANGELOG como notas (`--prerelease` quando a versão tem `-`).
+
+Em qualquer outro push, a versão já tem Release e o job não faz nada. Não existe mais ordem a respeitar entre CI e tag: tudo acontece no mesmo run, e o digest é o daquele commit.
+
+Se o job `release` falhar no meio, use **"Re-run failed jobs"** no run do commit de release: todos os passos são idempotentes e o digest do `docker-publish` é preservado. Ele reprova de propósito em dois casos, e aí o erro é real:
+
+- a consulta à Release falhou por outro motivo que não `release not found` — uma falha passageira da API não pode mover tags;
+- já existe uma tag `vX.Y.Z` apontando para **outro** commit.
+
+Em último caso, sem CI, só a página de Release pode ser feita à mão. As tags da imagem exigem as credenciais do registry, que só o CI tem.
 
 ```bash
 awk -v v="2.0.0" '$0 ~ "^## \\["v"\\]" {f=1; next} f && /^## \[/ {exit} f' CHANGELOG.md > /tmp/release-notes.md
-gh release create v2.0.0 --title "v2.0.0" --notes-file /tmp/release-notes.md
+gh release create v2.0.0 --target "$(git rev-parse HEAD)" --title "v2.0.0" --notes-file /tmp/release-notes.md
 ```
 
 ## 5. Antes de publicar, confirme
@@ -115,5 +133,5 @@ gh release create v2.0.0 --title "v2.0.0" --notes-file /tmp/release-notes.md
 - [ ] `api_version`, README e CHANGELOG dizem o mesmo número.
 - [ ] A data da seção é a data real da publicação.
 - [ ] Toda entrada `**BREAKING**` tem guia de migração no README.
-- [ ] O CI da `main` está verde e o quality gate passou — não se marca release sobre commit vermelho, e o `retag` do `release.yml` exige que a imagem `sha-<curto>` daquele commit exista no registry.
+- [ ] O CI do commit de release ficou verde, com o quality gate aprovado, e o job `release` publicou a tag, as tags da imagem e a Release (`gh release view vX.Y.Z`). Um commit vermelho não publica nada, e portanto não gera release.
 - [ ] Toda Issue incluída na release foi fechada com o comentário detalhado que o fluxo exige.

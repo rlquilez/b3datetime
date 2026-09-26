@@ -1,7 +1,9 @@
 name: CI
 
-# Sem trigger de tags: quem trata tags é o release.yml. É assim que a publicação
-# dupla da imagem é evitada estruturalmente, e não por convenção.
+# Workflow único do projeto. Sem trigger de tags: as tags de versão são criadas
+# pelo job `release`, depois da publicação, a partir da api_version do commit.
+# Como nada reage a push de tag, a publicação dupla da imagem continua impossível
+# por estrutura, e não por convenção.
 on:
   push:
     branches: [main]
@@ -368,6 +370,19 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # A produção puxa `latest` sozinha. Re-executar um run antigo republicaria o
+      # código daquele commit por cima do atual; num re-run, só segue se a main
+      # ainda estiver neste commit.
+      - name: Re-run só publica o commit atual da main
+        run: |
+          if [ "$GITHUB_RUN_ATTEMPT" -gt 1 ]; then
+            HEAD_MAIN="$(git ls-remote origin refs/heads/main | cut -f1)"
+            if [ "$HEAD_MAIN" != "$GITHUB_SHA" ]; then
+              echo "::error::a main já está em $HEAD_MAIN; este run é de $GITHUB_SHA e não republica a imagem"
+              exit 1
+            fi
+          fi
+
       - name: Gerar metadados da imagem
         id: meta
         uses: docker/metadata-action@v6
@@ -407,6 +422,126 @@ jobs:
             type=gha,scope=verify
             type=gha,scope=publish
           cache-to: type=gha,mode=max,scope=publish
+
+  release:
+    name: Release
+    # Release automática: quando a api_version do commit publicado ainda não tem
+    # Release, cria a tag vX.Y.Z neste commit, retagueia a imagem recém-publicada
+    # e publica a Release com a seção do CHANGELOG. Numa versão já publicada, não
+    # faz nada. Substitui o antigo release.yml disparado por tag, que exigia enviar
+    # a tag só depois de o CI publicar sha-<7> e repetia checagens que os testes de
+    # tests/unit/test_config.py já fazem antes de qualquer publicação (#41).
+    # Fica fora do ci-ok: roda depois da publicação.
+    needs: [docker-publish]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Versão e estado da Release
+        id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V="$(grep -oE 'api_version: str = "[^"]+"' src/config.py | cut -d'"' -f2)"
+          if ! [[ "$V" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::api_version '$V' não é SemVer"
+            exit 1
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          # Só a mensagem exata "release not found" significa que não existe. Uma
+          # falha passageira da API não pode ser lida como "criar" e mover tags.
+          if gh release view "v$V" --repo "$GITHUB_REPOSITORY" --json tagName >/dev/null 2>gh-err.txt; then
+            echo "Release v$V já publicada; nada a fazer."
+            echo "create=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! grep -qx 'release not found' gh-err.txt; then
+            echo "::error::falha ao consultar a Release v$V: $(cat gh-err.txt)"
+            exit 1
+          fi
+          # Tag sem Release (execução interrompida no meio): só segue se a tag
+          # apontar para este commit. Tag anotada precisa do ^{} para chegar ao
+          # commit; tag leve (criada pela API) aponta direto.
+          TAG_SHA="$(git ls-remote origin "refs/tags/v$V^{}" | cut -f1)"
+          [ -n "$TAG_SHA" ] || TAG_SHA="$(git ls-remote origin "refs/tags/v$V" | cut -f1)"
+          if [ -n "$TAG_SHA" ] && [ "$TAG_SHA" != "$GITHUB_SHA" ]; then
+            echo "::error::a tag v$V já existe e aponta para $TAG_SHA, não para $GITHUB_SHA"
+            exit 1
+          fi
+          echo "create=true" >> "$GITHUB_OUTPUT"
+
+      - name: Notas do CHANGELOG
+        if: steps.v.outputs.create == 'true'
+        env:
+          V: ${{ steps.v.outputs.version }}
+        run: |
+          awk -v v="$V" '
+            $0 ~ "^## \\["v"\\]" {f=1; next}
+            f && /^## \[/ {exit}
+            f
+          ' CHANGELOG.md > release-notes.md
+          if ! grep -q '[^[:space:]]' release-notes.md; then
+            echo "::error::a seção do CHANGELOG para $V está vazia"
+            exit 1
+          fi
+          echo "--- notas extraídas ---"; head -40 release-notes.md
+
+      - name: Login no Container Registry
+        if: steps.v.outputs.create == 'true'
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ secrets.GIT_REGISTRY }}
+          username: ${{ secrets.GIT_REGISTRY_USER }}
+          password: ${{ secrets.GIT_REGISTRY_PASSWORD }}
+
+      - name: Instalar crane
+        if: steps.v.outputs.create == 'true'
+        uses: imjasonh/setup-crane@v0.7
+
+      # `crane tag` adiciona uma tag ao manifest existente dentro do mesmo
+      # repositório: preserva a lista multi-arch, não copia blob nenhum e leva
+      # segundos. Foi escolhido em vez de `buildx imagetools create` porque este
+      # consulta a API de referrers da OCI, que este registry não implementa
+      # (responde 502 em /v2/.../referrers/...). A origem é o digest que o
+      # docker-publish acabou de enviar neste mesmo run, e não uma tag: não há
+      # ordem a respeitar nem imagem de outro commit possível. O nome da imagem é
+      # montado aqui porque outputs de job que contêm secret são descartados.
+      - name: Retaguear a imagem com o semver
+        if: steps.v.outputs.create == 'true'
+        env:
+          IMAGE: ${{ secrets.GIT_REGISTRY }}/${{ secrets.GIT_OWNER }}/b3datetime
+          DIGEST: ${{ needs.docker-publish.outputs.digest }}
+          V: ${{ steps.v.outputs.version }}
+        run: |
+          if ! [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::digest inválido vindo do docker-publish: '$DIGEST'"
+            exit 1
+          fi
+          # X.Y e X só para versões finais; pré-release recebe apenas a própria tag.
+          TAGS="$V"
+          if [[ "$V" != *-* ]]; then
+            TAGS="$TAGS ${V%.*} ${V%%.*}"
+          fi
+          for t in $TAGS; do
+            echo "-> $t"
+            crane tag "$IMAGE@$DIGEST" "$t"
+          done
+
+      # Cria a tag vX.Y.Z neste commit (pela API) e a Release. Tags criadas com o
+      # GITHUB_TOKEN não disparam workflows, e nenhum workflow reage a tags.
+      - name: Publicar a Release
+        if: steps.v.outputs.create == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          V: ${{ steps.v.outputs.version }}
+        run: |
+          PRE=()
+          if [[ "$V" == *-* ]]; then PRE=(--prerelease); fi
+          gh release create "v$V" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "v$V" --notes-file release-notes.md "${PRE[@]}"
 
   sbom:
     name: SBOM

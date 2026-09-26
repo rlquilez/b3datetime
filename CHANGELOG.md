@@ -12,6 +12,12 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 - Imagem base trocada de `python:3.14-slim` (Debian) para a **`python:3.14-alpine` oficial**, fixada por digest nos dois estágios. O Dependabot propõe os digests novos da mesma tag, e a troca de minor ou major do Python fica de fora de propósito. O container continua rodando como `app` (uid 1001), com a mesma porta, o mesmo `HEALTHCHECK` e o mesmo comando; o runtime cai para 30 pacotes do sistema. (#39)
 - CI: a imagem publicada reaproveita exatamente a camada amd64 que foi escaneada, e o cache do build ganha escopos separados para verificação e publicação. Com isso o arm64 deixa de ser reconstruído do zero a cada publicação. (#39)
 - Dependências atualizadas: `pydantic` 2.13.4 → 2.13.5, `starlette` 1.6.0 → 1.7.0, `uvicorn` 0.52.4 → 0.54.0 e `pandas` 3.0.5 → 3.0.6. Nas de desenvolvimento: `coverage` 7.15.4 → 7.16.1, `pytest-randomly` 4.1.0 → 5.0.0, `fakeredis` 2.37.1 → 2.38.0 e `ruff` 0.16.5 → 0.16.9. Com o `starlette` 1.7, as respostas CORS passam a incluir `Vary: Origin`. (#40)
+- **Release automática.** O commit de release na `main` basta: depois da publicação, o job `release` do CI cria a tag `vX.Y.Z` nesse commit, adiciona `X`, `X.Y` e `X.Y.Z` à imagem que acabou de ser publicada (pelo digest, sem rebuild) e publica a Release com a seção do CHANGELOG. Acabam a tag manual e a regra de só enviá-la depois de o CI publicar a imagem. (#41)
+- Re-executar um run antigo do CI não republica mais a imagem por cima da `main` atual; como a produção puxa `latest` sozinha, isso reverteria a produção. (#41)
+
+### Removido
+
+- `.github/workflows/release.yml`, absorvido pelo job `release` do `ci.yml`. As checagens de versão que ele fazia na tag já rodavam nos testes, antes de qualquer publicação. (#41)
 
 ### Segurança
 

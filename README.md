@@ -16,7 +16,6 @@
 
   <p>
     <a href="https://github.com/rlquilez/b3datetime/actions/workflows/ci.yml"><img src="https://github.com/rlquilez/b3datetime/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-    <a href="https://github.com/rlquilez/b3datetime/actions/workflows/release.yml"><img src="https://github.com/rlquilez/b3datetime/actions/workflows/release.yml/badge.svg" alt="Release"></a>
     <a href="https://github.com/rlquilez/b3datetime/releases"><img src="https://img.shields.io/github/v/release/rlquilez/b3datetime?sort=semver&label=vers%C3%A3o" alt="Versão"></a>
     <a href="LICENSE"><img src="https://img.shields.io/github/license/rlquilez/b3datetime" alt="Licença MIT"></a>
     <img src="https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white" alt="Python 3.11+">
@@ -730,7 +729,7 @@ docker run -d \
 - A imagem é **multi-arch** (linux/amd64 e linux/arm64), roda como usuário sem privilégios (`app`, uid 1001) e não contém `pip`, `setuptools` nem `wheel`.
 - A base é a **`python:3.14-alpine` oficial, fixada por digest**: o Dependabot propõe o digest novo toda semana e o PR passa pelo CI antes de ser adotado. O build ainda aplica `apk upgrade` com o cache dessa camada invalidado a cada execução do CI, para que correções publicadas depois do digest entrem na imagem. A troca da `python:3.14-slim` eliminou o userland Debian e, com ele, os 173 alertas do Trivy que ocupavam o code scanning ([#39](https://github.com/rlquilez/b3datetime/issues/39)).
 - O `HEALTHCHECK` consulta `/v1/health` a cada 30 s; como `unhealthy` responde `503`, o Docker marca o container como `unhealthy` de verdade.
-- Tags publicadas pelo CI: `latest` (a `main`) e `sha-<7 caracteres>` por commit; a release adiciona `X`, `X.Y` e `X.Y.Z` ao mesmo manifest, sem rebuild.
+- Tags publicadas pelo CI: `latest` (a `main`) e `sha-<7 caracteres>` por commit. Quando a versão muda, o job `release` adiciona `X`, `X.Y` e `X.Y.Z` ao mesmo manifest, pelo digest que acabou de ser publicado, sem rebuild.
 
 ### Docker Compose
 
@@ -840,6 +839,7 @@ flowchart LR
     test --> sonar["SonarQube<br/>quality gate bloqueante"]
     lint & typecheck & test --> dv["docker-verify<br/>build amd64 · smoke test · Trivy"]
     dv & sonar --> pub["docker-publish (push na main)<br/>latest · sha-abc1234"] --> sbom["SBOM"]
+    pub --> rel["release (versão nova)<br/>tag vX.Y.Z · X · X.Y · X.Y.Z · GitHub Release"]
     lint & typecheck & test & sonar & bandit & pipaudit & gitleaks & codeql & trivyfs & dv & depreview --> ok["ci-ok"]
 ```
 
@@ -855,8 +855,10 @@ flowchart LR
 | Smoke test | `scripts/smoke_image.sh` | container real, com e sem prefixo, Redis real e `HEALTHCHECK` |
 | Qualidade | SonarQube | quality gate **bloqueante**: coverage, duplicação e issues em código novo |
 | Publicação | imagem multi-arch + SBOM | só em push na `main`, só com tudo verde |
+| Release | tag, retag da imagem e GitHub Release | automática quando a `api_version` do commit publicado ainda não tem Release |
 
 - `ci-ok` é o único check agregador. Nenhuma imagem é publicada sem lint, tipagem, testes, smoke, scan da imagem e quality gate aprovados.
+- É o **único workflow** do repositório: não há gatilho de tag. A release é um job do próprio `ci.yml` que roda depois da publicação (ver [Versionamento e Release](#️-versionamento-e-release)).
 - Em PRs do Dependabot o job do SonarQube é pulado (o PR não recebe os secrets); o restante roda normalmente.
 - **Secrets necessários:** `GIT_REGISTRY`, `GIT_OWNER`, `GIT_REGISTRY_USER`, `GIT_REGISTRY_PASSWORD`, `SONAR_TOKEN`, `SONAR_HOST_URL`.
 
@@ -864,15 +866,17 @@ flowchart LR
 
 O projeto segue [SemVer](https://semver.org/lang/pt-BR/) e [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). A regra que decide o incremento é **"um cliente existente precisa mudar alguma coisa?"** — mudança de código HTTP é MAJOR mesmo quando o código antigo estava errado; endpoint ou campo novo é MINOR; correção sem mudança de contrato é PATCH.
 
-A versão vive em `src/config.py` (`api_version`) e é copiada em três lugares que precisam concordar: `pyproject.toml`, o cabeçalho deste README e a seção do `CHANGELOG.md`. Um teste (`tests/unit/test_config.py`) e o job `verify` de [`release.yml`](.github/workflows/release.yml) impõem a sincronia.
+A versão vive em `src/config.py` (`api_version`) e é copiada em três lugares que precisam concordar: `pyproject.toml`, o cabeçalho deste README e a seção do `CHANGELOG.md`. Os testes de `tests/unit/test_config.py` impõem a sincronia e exigem que a seção do CHANGELOG da versão não esteja vazia — no job `test`, antes de qualquer publicação.
 
 ```mermaid
 flowchart LR
-    v["1. Sincronizar a versão<br/>config.py · pyproject.toml · README · CHANGELOG"] --> c["2. chore(release): vX.Y.Z"] --> p["3. push na main<br/>ci.yml publica sha-abc1234"] --> t["4. tag vX.Y.Z<br/>dispara release.yml"]
-    t --> ver["verify: tag na main · versões iguais · notas do CHANGELOG"] --> rt["retag com crane: X · X.Y · X.Y.Z"] --> rel["GitHub Release"]
+    v["1. Sincronizar a versão<br/>config.py · pyproject.toml · README · CHANGELOG"] --> c["2. chore(release): vX.Y.Z"] --> p["3. push na main"]
+    p --> pub["ci.yml: testes · scan · docker-publish"] --> rel["job release: versão sem Release?"]
+    rel -->|sim| cria["tag vX.Y.Z no commit · retag X · X.Y · X.Y.Z pelo digest · GitHub Release com as notas"]
+    rel -->|não| nada["nada a fazer"]
 ```
 
-A release **não rebuilda** a imagem: retagueia o manifest `sha-<7>` publicado pelo CI, por isso a tag só pode ser enviada depois que o CI do commit de release terminou. O passo a passo completo está na skill [`release`](.claude/skills/release/SKILL.md).
+**Não existe tag manual.** O commit de release na `main` basta: o job `release` do CI lê a `api_version`, e se ela ainda não tem Release cria a tag `vX.Y.Z` naquele commit, adiciona `X.Y.Z`, `X.Y` e `X` ao manifest que o `docker-publish` acabou de enviar (pelo digest, sem rebuild) e publica a Release com a seção do CHANGELOG. Em qualquer outro push, a versão já tem Release e o job não faz nada. Se ele falhar no meio, "Re-run failed jobs" retoma do ponto em que parou: todos os passos são idempotentes. O passo a passo completo está na skill [`release`](.claude/skills/release/SKILL.md).
 
 ## 🛡️ Segurança
 

@@ -14,20 +14,36 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_versao_sincronizada_com_pyproject() -> None:
-    """release.yml confere config.py, README e CHANGELOG, mas não o pyproject.toml —
-    este teste é a única guarda da quarta cópia da versão."""
+    """O job `release` do CI deriva a tag de `api_version` (src/config.py); este
+    teste impede que a cópia do pyproject.toml fique para trás."""
     pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     assert pyproject["project"]["version"] == Settings(_env_file=None).api_version
 
 
 def test_versao_sincronizada_com_readme_e_changelog() -> None:
-    """Mesma verificação que o job `verify` do release.yml faz na tag, antecipada."""
+    """README e CHANGELOG declaram a `api_version`. Roda no job `test`, antes de
+    qualquer publicação — o job `release` só existe depois do `docker-publish`."""
     version = Settings(_env_file=None).api_version
     readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
     changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     assert f"Versão atual: {version}" in readme
     secao = rf"^## \[{re.escape(version)}\] - \d{{4}}-\d{{2}}-\d{{2}}$"
     assert re.search(secao, changelog, re.MULTILINE), f"CHANGELOG sem a seção [{version}]"
+
+
+def test_secao_do_changelog_da_versao_atual_nao_vazia() -> None:
+    """O job `release` publica a seção do CHANGELOG da versão como notas da Release
+    e reprova se ela vier vazia — mas só depois do `docker-publish`, com o `latest`
+    já movido. Mesmo recorte do `awk` do job (até o próximo `## [`), antecipado."""
+    version = Settings(_env_file=None).api_version
+    changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    secao = re.search(
+        rf"^## \[{re.escape(version)}\][^\n]*\n(.*?)(?=^## \[|\Z)",
+        changelog,
+        re.MULTILINE | re.DOTALL,
+    )
+    assert secao, f"CHANGELOG sem a seção [{version}]"
+    assert secao.group(1).strip(), f"a seção [{version}] do CHANGELOG está vazia"
 
 
 def test_defaults_sem_ambiente() -> None:
