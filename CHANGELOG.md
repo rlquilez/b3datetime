@@ -7,6 +7,8 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ## [Não publicado]
 
+## [2.0.3] - 2026-09-26
+
 ### Alterado
 
 - Imagem base trocada de `python:3.14-slim` (Debian) para a **`python:3.14-alpine` oficial**, fixada por digest nos dois estágios. O Dependabot propõe os digests novos da mesma tag, e a troca de minor ou major do Python fica de fora de propósito. O container continua rodando como `app` (uid 1001), com a mesma porta, o mesmo `HEALTHCHECK` e o mesmo comando; o runtime cai para 30 pacotes do sistema. (#39)
@@ -129,7 +131,8 @@ Primeira versão da API, desenvolvida entre 2025-12-26 e 2026-03-12.
 - Imagem Docker multi-arquitetura (`linux/amd64`, `linux/arm64`) publicada por GitHub Actions.
 - Timezone `America/Sao_Paulo` em todas as operações de data e hora.
 
-[Não publicado]: https://github.com/rlquilez/b3datetime/compare/v2.0.2...HEAD
+[Não publicado]: https://github.com/rlquilez/b3datetime/compare/v2.0.3...HEAD
+[2.0.3]: https://github.com/rlquilez/b3datetime/compare/v2.0.2...v2.0.3
 [2.0.2]: https://github.com/rlquilez/b3datetime/compare/v2.0.1...v2.0.2
 [2.0.1]: https://github.com/rlquilez/b3datetime/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/rlquilez/b3datetime/compare/v1.0.0...v2.0.0

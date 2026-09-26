@@ -120,10 +120,16 @@ Se o job `release` falhar no meio, use **"Re-run failed jobs"** no run do commit
 - a consulta à Release falhou por outro motivo que não `release not found` — uma falha passageira da API não pode mover tags;
 - já existe uma tag `vX.Y.Z` apontando para **outro** commit.
 
-Em último caso, sem CI, só a página de Release pode ser feita à mão. As tags da imagem exigem as credenciais do registry, que só o CI tem.
+Em último caso, sem CI, só a página de Release pode ser feita à mão. As tags da imagem exigem as credenciais do registry, que só o CI tem. O recorte é o mesmo do `awk` do job e de `test_secao_do_changelog_da_versao_atual_nao_vazia`, mas escrito em Python, porque o carregador de skills substitui o `$0` do `awk` pelos argumentos da invocação e deixaria o comando errado na tela.
 
 ```bash
-awk -v v="2.0.0" '$0 ~ "^## \\["v"\\]" {f=1; next} f && /^## \[/ {exit} f' CHANGELOG.md > /tmp/release-notes.md
+python3 - 2.0.0 > /tmp/release-notes.md <<'PY'
+import re, sys
+versao = sys.argv[1]
+changelog = open("CHANGELOG.md", encoding="utf-8").read()
+secao = re.search(rf"^## \[{re.escape(versao)}\][^\n]*\n(.*?)(?=^## \[|\Z)", changelog, re.M | re.S)
+print(secao.group(1).strip())
+PY
 gh release create v2.0.0 --target "$(git rev-parse HEAD)" --title "v2.0.0" --notes-file /tmp/release-notes.md
 ```
 
