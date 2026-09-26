@@ -12,6 +12,8 @@ asgi-lifespan==2.1.0
 fakeredis==2.38.0
 freezegun==1.5.5
 pytest-randomly==5.0.0
+# Validação das respostas E2E contra o JSON Schema 2020-12 do OpenAPI 3.1 servido.
+jsonschema==4.26.0
 
 # --- qualidade ---
 ruff==0.16.9

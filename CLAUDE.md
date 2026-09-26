@@ -53,11 +53,16 @@ cp .env.example .env
 uvicorn src.main:app --reload --port 8000   # or: python -m src
 
 ruff check . && ruff format --check . && mypy src
-pytest                  # ~230 tests (`pytest --co -q | tail -1`), coverage gate at 90% (currently ~99.8%)
+pytest                  # ~240 tests (`pytest --co -q | tail -1`; the e2e ones are deselected), coverage gate at 90% (currently ~99.8%)
 pytest -m "not slow"    # skips the tests that build the real BVMF calendar
 
 docker build -t b3datetime:ci . && IMAGE=b3datetime:ci scripts/smoke_image.sh   # the CI smoke test, locally
+
+docker build -t b3datetime:e2e . && E2E_IMAGE=b3datetime:e2e python -m pytest -m e2e tests/e2e --no-cov   # the CI e2e job
+E2E_BASE_URL=https://api.quilez.cloud/b3datetime python -m pytest -m e2e tests/e2e --no-cov   # read-only e2e against production
 ```
+
+The e2e suite talks to the containers through ports published on `127.0.0.1`, so it needs a Python 3.14 **on the host** — a container can't reach them. `uv` already has a managed CPython 3.14 here: `uv venv --python 3.14 <dir> && uv pip install --python <dir>/bin/python -r requirements-dev.txt`.
 
 Docs at `/docs`, `/redoc`, `/openapi.json` — all assets served locally from `src/static/assets/`, no CDN. The assets live in a subdirectory on purpose: mounting the package directory itself served `__init__.py` (`tests/api/test_static.py::test_static_nao_serve_o_pacote`).
 
@@ -123,6 +128,16 @@ The API **authenticates nothing** — there is no apikey code here, and there mu
 
 Integration tests against real Redis auto-skip when none is reachable, and use **db 15** because teardown calls `flushdb`.
 
+### E2E (`tests/e2e/`)
+
+Black-box, against the **real image** with real Redis and the real BVMF calendar. The `e2e` marker is deselected by default (`-m "not e2e"` in `addopts`), so the regular run and its no-skip tripwire are unaffected; run it with `-m e2e --no-cov` (coverage is meaningless for code running in a container, and `fail_under` would fail it).
+
+- **Two modes.** `E2E_IMAGE=<image>` starts four containers — `principal` (seeded Redis + `ROOT_PATH`, Kong `strip_path: true` shape), `sem_redis` (closed port), `sem_calendario` (`EXCHANGE_NAME=INEXISTENTE`, so the calendar never builds), `redis_tardio` (its Redis is started mid-test) — on a per-run Docker network with unique names, and removes them at the end, dumping `docker logs` on failure. `E2E_BASE_URL=<url>` runs only what reads; cases needing other environments or Redis control skip with the reason.
+- **100% is enforced, not promised.** `test_contrato.py::CASOS` holds one or more cases per (operation, status) pair, and `test_cobertura_de_100_por_cento_do_contrato` requires that set to **equal** the pairs in the `/openapi.json` the container serves (8 operations, 23 pairs today). A new route or response code without an e2e case fails the pipeline; so does a case for an undocumented code.
+- **Contract validation** (`contrato.py`): responses with a documented `schema` (200, 422, health 503) go through `jsonschema` Draft 2020-12 — OpenAPI 3.1's dialect — with `$ref`s resolved against the whole served document; example-only responses (the 400/404/502/503 error envelopes) must match an example's shape: no undocumented field, compatible types, same `error` category, non-empty `message`.
+- **Domain checks never hardcode a year**: dates derive from today and from `/v1/calendar-info`, because the window moves. Holiday rules verified against the real calendar for 2017–2026: fixed national holidays, 24/12 and 31/12, Carnival Mon/Tue, Good Friday and Corpus Christi are always closed (Easter computed locally), Ash Wednesday trades, **20/11 only from 2024** (B3 traded on it in 2020 and 2023), and a year has 245–251 sessions.
+- `test_resiliencia.py` proves the "Redis client is never `None`" invariant on the real container: 503 while the Redis hostname doesn't exist, then healthy without a restart once that container starts (`REDIS_RECONNECT_INTERVAL_SECONDS=1`).
+
 ## CI/CD
 
 `.github/workflows/ci.yml` — lint, mypy, tests (Python 3.14 only — the image's runtime; the 3.11 matrix entry was dropped in #45 — with a Redis service), bandit, pip-audit, dependency-review, gitleaks, CodeQL, Trivy (fs + image), SonarQube with a **blocking** quality gate, multi-arch publish, SBOM, automatic release, and a `ci-ok` aggregator meant to be the single required status check.
@@ -136,6 +151,7 @@ Integration tests against real Redis auto-skip when none is reachable, and use *
 - **Separate GHA cache scopes** — `verify` (amd64) and `publish` (multi-arch; also reads `verify`). The cache index is last-writer-wins per scope; with a shared scope, the amd64-only export of `docker-verify` erased the arm64 entries and every publish redid the arm64 `pip install` under QEMU (~200 s).
 - `sonar` is skipped for Dependabot PRs (`github.actor == 'dependabot[bot]'`) as well as fork PRs: they get no secrets, and the job used to fail on an empty `SONAR_HOST_URL`, painting every Dependabot PR red. It also `ls`es `coverage.xml`/`junit.xml` after the artifact download so a broken download cannot turn into a silent 0%.
 - `dependency-review` is in `ci-ok` (it needs the repository's Dependency graph enabled — it is, via `PUT /repos/{owner}/{repo}/vulnerability-alerts`).
+- **`e2e` job** — runs `tests/e2e` against the image, in parallel with `docker-verify`, after lint/typecheck/test; it is in `ci-ok` and a prerequisite of `docker-publish`. It builds from the same Dockerfile with the same `APK_REFRESH` (`run_id-run_attempt`), **reads** the `verify` cache scope and writes none (writing would race `docker-verify` for the last-writer-wins index). A second tripwire fails it if `e2e-junit.xml` records any skip: in containers every environment exists, so a skip would be a documented response left unvalidated.
 - **`release` job — automatic release.** It runs after `docker-publish` on `main`. When the commit's `api_version` has no Release yet, it: validates strict SemVer; checks `gh release view` — only the exact stderr `release not found` means "absent", any other failure fails the job so a transient API error can never move tags; requires a pre-existing tag (a run interrupted midway) to point at `GITHUB_SHA`; extracts the CHANGELOG section with `awk` (fails if empty); runs `crane tag` from the digest `docker-publish` just pushed, to `X.Y.Z`, plus `X.Y` and `X` unless it is a pre-release; then `gh release create vX.Y.Z --target $GITHUB_SHA`. Otherwise it does nothing. Every step is idempotent — "Re-run failed jobs" resumes, and the digest output is preserved. `crane` rather than `buildx imagetools create`, because this registry does not implement the OCI referrers API (502). It does **not** touch `latest`, and it stays out of `ci-ok` because it runs after publishing. The version-sync checks the old tag workflow did now live in `tests/unit/test_config.py` and run before anything is published — including `test_secao_do_changelog_da_versao_atual_nao_vazia`, because an empty section would otherwise fail only *after* `latest` moved.
 - **A re-run only republishes the current `main`.** The first step of `docker-publish` fails when `run_attempt > 1` and `main` has moved past `GITHUB_SHA`: production pulls `latest` automatically, so re-running an old run would roll it back.
 

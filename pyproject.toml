@@ -25,11 +25,13 @@ addopts = """
     --cov-report=term-missing
     --cov-report=xml:coverage.xml
     --junitxml=junit.xml
+    -m "not e2e"
 """
 asyncio_mode = "auto"
 markers = [
     "integration: requer um Redis real em execução",
     "slow: constrói calendários reais do exchange_calendars",
+    "e2e: ponta a ponta contra a imagem (E2E_IMAGE) ou uma URL (E2E_BASE_URL); fora da execução padrão, rode com -m e2e",
 ]
 # Warnings viram erro: é o que impede deprecações do pydantic de voltarem.
 filterwarnings = [

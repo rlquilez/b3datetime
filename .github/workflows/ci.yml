@@ -353,11 +353,67 @@ jobs:
           ignore-unfixed: true
           exit-code: "1"
 
+  e2e:
+    name: E2E (100% dos endpoints)
+    # A suíte tests/e2e contra a imagem real, com Redis real e o calendário BVMF real,
+    # em quatro ambientes (principal, sem Redis, sem calendário, Redis que sobe depois).
+    # Toda resposta documentada de toda operação do /openapi.json servido tem caso, e
+    # um teste exige que os dois conjuntos sejam iguais (#47).
+    # Roda em paralelo ao docker-verify, a partir do mesmo Dockerfile e da mesma chave
+    # APK_REFRESH. Lê o cache do escopo verify e não grava nenhum, para não disputar o
+    # índice com ele.
+    needs: [lint, typecheck, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build local (amd64)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: b3datetime:e2e
+          build-args: APK_REFRESH=${{ github.run_id }}-${{ github.run_attempt }}
+          cache-from: type=gha,scope=verify
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+
+      - name: E2E contra a imagem
+        env:
+          E2E_IMAGE: b3datetime:e2e
+        run: python -m pytest -m e2e tests/e2e --no-cov --junitxml=e2e-junit.xml
+
+      # Tripwire: em containers, todos os ambientes existem e o Redis é controlável —
+      # um caso pulado seria uma resposta documentada sem validação.
+      - name: Nenhum teste E2E pulado
+        run: |
+          if grep -qE 'skipped="[1-9][0-9]*"' e2e-junit.xml; then
+            echo "::error::e2e-junit.xml registra testes pulados; a cobertura E2E não está completa"
+            grep -oE 'skipped="[0-9]+"' e2e-junit.xml | sort | uniq -c
+            exit 1
+          fi
+          echo "OK: nenhum teste E2E pulado ($(grep -oE 'tests="[0-9]+"' e2e-junit.xml | head -1))"
+
+      - name: Publicar relatório E2E
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-report
+          path: e2e-junit.xml
+          if-no-files-found: ignore
+
   docker-publish:
     name: Publicar imagem
-    # Nenhuma imagem é publicada sem lint, tipagem, testes, scan da imagem e
+    # Nenhuma imagem é publicada sem lint, tipagem, testes, E2E, scan da imagem e
     # quality gate aprovado.
-    needs: [docker-verify, sonar]
+    needs: [docker-verify, e2e, sonar]
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     env:
@@ -569,6 +625,7 @@ jobs:
       - codeql
       - trivy-fs
       - docker-verify
+      - e2e
     runs-on: ubuntu-latest
     steps:
       - name: Verificar resultado dos jobs

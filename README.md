@@ -800,13 +800,14 @@ pytest -m "not slow"    # pula os testes que constroem o calendário real
 
 ## 🧪 Testes
 
-A suíte tem cerca de 230 casos e cobre 100% das linhas de `src/`. Ela está organizada em três camadas:
+A suíte tem cerca de 240 casos e cobre 100% das linhas de `src/`. Ela está organizada em quatro camadas:
 
 | Diretório | O que cobre | Como |
 |-----------|-------------|------|
 | `tests/unit/` | `Settings`, `RedisService`/`RedisCache`, `TradingCalendar`, `RootPathPrefixMiddleware`, sincronia da versão | `fakeredis`, relógio injetado (`now_fn`), calendário sintético |
 | `tests/api/` | Todos os endpoints e páginas, com cada código de resposta documentado, contrato do OpenAPI, CORS | `httpx.ASGITransport` sobre a app real, sem I/O |
 | `tests/integration/` | Semântica do Redis real (string vazia, `decode_responses`, `MGET` parcial) | Redis em `localhost:6379`, **db 15**; pula automaticamente se não houver |
+| `tests/e2e/` | **100% dos endpoints publicados**, contra a imagem real: toda resposta documentada de toda operação, as consultas e a documentação | containers com Redis real e o calendário BVMF real; fora da execução padrão (`-m e2e`) |
 
 Pontos de desenho que valem conhecer:
 
@@ -819,6 +820,44 @@ Pontos de desenho que valem conhecer:
 
 ```bash
 docker build -t b3datetime:ci . && IMAGE=b3datetime:ci scripts/smoke_image.sh
+```
+
+### E2E: 100% dos endpoints publicados
+
+`tests/e2e/` roda contra a **imagem Docker real**, com Redis real e o calendário BVMF real, e cobre tudo o que a aplicação publica. O job `e2e` do CI a executa a cada push, e nenhuma imagem é publicada sem ela.
+
+Os ambientes são quatro, em containers que sobem juntos e são removidos no fim:
+
+| Ambiente | Configuração | Para quê |
+|---|---|---|
+| `principal` | Redis semeado e `ROOT_PATH`, como em produção atrás do Kong | consultas de sucesso, `400`, `422`, e `404`/`502` trocando chaves do Redis |
+| `sem_redis` | Redis inalcançável | `503` dos horários e health `unhealthy` |
+| `sem_calendario` | bolsa inexistente, então o calendário não é construído | `503` dos endpoints de datas e health com `{"available": false}` |
+| `redis_tardio` | o Redis só sobe no meio do teste | recuperação **sem restart** |
+
+- **Cobertura de 100% garantida por teste.** Cada caso é um par (operação, código). Um teste compara o conjunto de pares documentados no `/openapi.json` **servido pelo container** com o conjunto coberto e exige que sejam iguais. Hoje são **8 operações e 23 pares**. Uma rota ou um código novo sem caso E2E reprova o pipeline.
+- **Toda resposta é validada contra o contrato.** Com `schema` documentado, por JSON Schema 2020-12, o dialeto do OpenAPI 3.1. Só com exemplo (os envelopes de erro), pela forma do exemplo: nenhum campo fora do documentado, os mesmos tipos e a mesma categoria de `error`.
+- **As consultas respondem o que é verdade:**
+  - num ano completo, nenhum pregão em fim de semana, nos feriados nacionais, em 24 e 31/12, no Carnaval, na Sexta-feira Santa ou em Corpus Christi;
+  - `exclude=true` é o complemento exato;
+  - `sessions_count` bate com a soma de `/v1/trading-days` sobre toda a janela;
+  - o health concorda com `/v1/calendar-info`;
+  - `/v1/is-trading-day` concorda com `/v1/trading-days`;
+  - `GET /` anuncia exatamente o que o OpenAPI publica;
+  - `/v1/hours` reflete o Redis ao vivo.
+- **Documentação:** `/docs`, `/redoc` e `/openapi.json` respondem, e todo asset que o navegador buscaria também, sem nenhuma dependência de CDN.
+
+A suíte usa o Docker local e fala com os containers por portas publicadas em `127.0.0.1`, então precisa de um Python 3.14 no host:
+
+```bash
+docker build -t b3datetime:e2e .
+E2E_IMAGE=b3datetime:e2e python -m pytest -m e2e tests/e2e --no-cov
+```
+
+Com `E2E_BASE_URL`, a mesma suíte roda contra uma API já no ar, só com o que lê. O que exige controlar o Redis ou outros ambientes é pulado:
+
+```bash
+E2E_BASE_URL=https://api.quilez.cloud/b3datetime python -m pytest -m e2e tests/e2e --no-cov
 ```
 
 ## 🔁 Qualidade e CI/CD
@@ -840,9 +879,10 @@ flowchart LR
     end
     test --> sonar["SonarQube<br/>quality gate bloqueante"]
     lint & typecheck & test --> dv["docker-verify<br/>build amd64 · smoke test · Trivy"]
-    dv & sonar --> pub["docker-publish (push na main)<br/>latest · sha-abc1234"] --> sbom["SBOM"]
+    lint & typecheck & test --> e2e["e2e<br/>100% dos endpoints · 4 ambientes"]
+    dv & e2e & sonar --> pub["docker-publish (push na main)<br/>latest · sha-abc1234"] --> sbom["SBOM"]
     pub --> rel["release (versão nova)<br/>tag vX.Y.Z · X · X.Y · X.Y.Z · GitHub Release"]
-    lint & typecheck & test & sonar & bandit & pipaudit & gitleaks & codeql & trivyfs & dv & depreview --> ok["ci-ok"]
+    lint & typecheck & test & sonar & bandit & pipaudit & gitleaks & codeql & trivyfs & dv & e2e & depreview --> ok["ci-ok"]
 ```
 
 | Etapa | Ferramenta | Observação |
@@ -855,11 +895,12 @@ flowchart LR
 | Segredos | gitleaks | histórico inteiro |
 | Filesystem e imagem | Trivy | `CRITICAL`/`HIGH` reprovam |
 | Smoke test | `scripts/smoke_image.sh` | container real, com e sem prefixo, Redis real e `HEALTHCHECK` |
+| E2E | `pytest -m e2e tests/e2e` contra a imagem | 100% das respostas documentadas das 8 operações, consultas e documentação; nenhum teste pode ser pulado |
 | Qualidade | SonarQube | quality gate **bloqueante**: coverage, duplicação e issues em código novo |
 | Publicação | imagem multi-arch + SBOM | só em push na `main`, só com tudo verde |
 | Release | tag, retag da imagem e GitHub Release | automática quando a `api_version` do commit publicado ainda não tem Release |
 
-- `ci-ok` é o único check agregador. Nenhuma imagem é publicada sem lint, tipagem, testes, smoke, scan da imagem e quality gate aprovados.
+- `ci-ok` é o único check agregador. Nenhuma imagem é publicada sem lint, tipagem, testes, smoke, E2E, scan da imagem e quality gate aprovados.
 - É o **único workflow** do repositório: não há gatilho de tag. A release é um job do próprio `ci.yml` que roda depois da publicação (ver [Versionamento e Release](#️-versionamento-e-release)).
 - Em PRs do Dependabot o job do SonarQube é pulado (o PR não recebe os secrets); o restante roda normalmente.
 - **Secrets necessários:** `GIT_REGISTRY`, `GIT_OWNER`, `GIT_REGISTRY_USER`, `GIT_REGISTRY_PASSWORD`, `SONAR_TOKEN`, `SONAR_HOST_URL`.

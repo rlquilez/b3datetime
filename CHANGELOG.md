@@ -7,6 +7,10 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ## [Não publicado]
 
+### Adicionado
+
+- **Teste E2E no pipeline, cobrindo 100% dos endpoints publicados** contra a imagem real, com Redis real e o calendário BVMF real, em quatro ambientes: principal, sem Redis, sem calendário e Redis que sobe depois. Toda resposta documentada de toda operação é exercitada e validada contra o `/openapi.json` servido, e um teste exige cobertura igual ao contrato (hoje, 8 operações e 23 respostas). Também são validadas as consultas (feriados da B3, complemento do `exclude`, contagens e concordância entre endpoints), a documentação e a recuperação sem restart quando o Redis volta. A mesma suíte roda contra a produção só com o que lê (`E2E_BASE_URL`). Nenhuma imagem é publicada sem ela. (#47)
+
 ### Alterado
 
 - **Python 3.14 passa a ser a única versão suportada e testada** (`requires-python = ">=3.14"`, alvo do ruff e do mypy): é o runtime da imagem, e nenhum ambiente usa outra. O CI deixa de rodar a suíte também em 3.11. (#45)
