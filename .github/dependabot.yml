@@ -9,6 +9,14 @@ updates:
     commit-message:
       prefix: "chore"
       include: "scope"
+    # Minor e patch vêm num único PR semanal. Com um PR por pacote, os cinco slots
+    # de open-pull-requests-limit se esgotaram e o Dependabot parou de propor
+    # atualizações: starlette, uvicorn e pandas ficaram represados (#40). Majors
+    # continuam em PRs próprios, porque pedem leitura do changelog.
+    groups:
+      python:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
@@ -17,6 +25,9 @@ updates:
     labels: ["dependencies", "ci"]
     commit-message:
       prefix: "ci"
+    groups:
+      actions:
+        patterns: ["*"]
 
   # A base é python:3.14-alpine fixada por digest: o que chega aqui são os digests
   # novos da mesma tag (patches do Python e do Alpine), testados pelo CI no PR antes

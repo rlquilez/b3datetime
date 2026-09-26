@@ -6,15 +6,15 @@
 pytest==9.1.1
 pytest-asyncio==1.4.0
 pytest-cov==7.1.0
-coverage[toml]==7.15.4
+coverage[toml]==7.16.1
 httpx==0.28.1
 asgi-lifespan==2.1.0
-fakeredis==2.37.1
+fakeredis==2.38.0
 freezegun==1.5.5
-pytest-randomly==4.1.0
+pytest-randomly==5.0.0
 
 # --- qualidade ---
-ruff==0.16.5
+ruff==0.16.9
 mypy==2.3.1
 
 # --- segurança ---
