@@ -7,6 +7,8 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ## [Não publicado]
 
+## [2.0.4] - 2026-09-26
+
 ### Adicionado
 
 - **Teste E2E no pipeline, cobrindo 100% dos endpoints publicados** contra a imagem real, com Redis real e o calendário BVMF real, em quatro ambientes: principal, sem Redis, sem calendário e Redis que sobe depois. Toda resposta documentada de toda operação é exercitada e validada contra o `/openapi.json` servido, e um teste exige cobertura igual ao contrato (hoje, 8 operações e 23 respostas). Também são validadas as consultas (feriados da B3, complemento do `exclude`, contagens e concordância entre endpoints), a documentação e a recuperação sem restart quando o Redis volta. A mesma suíte roda contra a produção só com o que lê (`E2E_BASE_URL`). Nenhuma imagem é publicada sem ela. (#47)
@@ -144,7 +146,8 @@ Primeira versão da API, desenvolvida entre 2025-12-26 e 2026-03-12.
 - Imagem Docker multi-arquitetura (`linux/amd64`, `linux/arm64`) publicada por GitHub Actions.
 - Timezone `America/Sao_Paulo` em todas as operações de data e hora.
 
-[Não publicado]: https://github.com/rlquilez/b3datetime/compare/v2.0.3...HEAD
+[Não publicado]: https://github.com/rlquilez/b3datetime/compare/v2.0.4...HEAD
+[2.0.4]: https://github.com/rlquilez/b3datetime/compare/v2.0.3...v2.0.4
 [2.0.3]: https://github.com/rlquilez/b3datetime/compare/v2.0.2...v2.0.3
 [2.0.2]: https://github.com/rlquilez/b3datetime/compare/v2.0.1...v2.0.2
 [2.0.1]: https://github.com/rlquilez/b3datetime/compare/v2.0.0...v2.0.1
