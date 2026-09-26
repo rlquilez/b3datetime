@@ -728,6 +728,7 @@ docker run -d \
 ```
 
 - A imagem é **multi-arch** (linux/amd64 e linux/arm64), roda como usuário sem privilégios (`app`, uid 1001) e não contém `pip`, `setuptools` nem `wheel`.
+- A base é a **`python:3.14-alpine` oficial, fixada por digest**: o Dependabot propõe o digest novo toda semana e o PR passa pelo CI antes de ser adotado. O build ainda aplica `apk upgrade` com o cache dessa camada invalidado a cada execução do CI, para que correções publicadas depois do digest entrem na imagem. A troca da `python:3.14-slim` eliminou o userland Debian e, com ele, os 173 alertas do Trivy que ocupavam o code scanning ([#39](https://github.com/rlquilez/b3datetime/issues/39)).
 - O `HEALTHCHECK` consulta `/v1/health` a cada 30 s; como `unhealthy` responde `503`, o Docker marca o container como `unhealthy` de verdade.
 - Tags publicadas pelo CI: `latest` (a `main`) e `sha-<7 caracteres>` por commit; a release adiciona `X`, `X.Y` e `X.Y.Z` ao mesmo manifest, sem rebuild.
 
@@ -770,10 +771,10 @@ uvicorn src.main:app --reload --port 8000
 
 Documentação local: http://localhost:8000/docs · http://localhost:8000/redoc · http://localhost:8000/openapi.json
 
-Sem um Python 3.11+ instalado, tudo roda em Docker, que também é exatamente o runtime da imagem:
+Sem um Python 3.11+ instalado, tudo roda em Docker, sobre a mesma base da imagem de produção (Python 3.14 em Alpine):
 
 ```bash
-docker run --rm -v "$PWD":/app -w /app python:3.14-slim bash -c \
+docker run --rm -v "$PWD":/app -w /app python:3.14-alpine sh -c \
   'pip install -q -r requirements-dev.txt && ruff check . && ruff format --check . && mypy src && python -m pytest'
 ```
 
@@ -876,7 +877,7 @@ A release **não rebuilda** a imagem: retagueia o manifest `sha-<7>` publicado p
 ## 🛡️ Segurança
 
 - **Sem autenticação na aplicação** por desenho: quem valida chaves é o gateway. `API_KEY_REQUIRED` só documenta.
-- Imagem com usuário sem privilégios, sem `pip`/`setuptools`/`wheel`, patches do sistema aplicados no build, varrida pelo Trivy a cada CI.
+- Imagem mínima sobre `python:3.14-alpine` fixada por digest, com usuário sem privilégios, sem `pip`/`setuptools`/`wheel`, patches do sistema (`apk upgrade`) aplicados a cada build e varrida pelo Trivy a cada CI.
 - Assets da documentação versionados e servidos localmente (sem CDN, sem SRI para gerenciar); o diretório servido contém só os assets, nunca código Python.
 - CORS sem credenciais e só para métodos de leitura; redirecionamentos que expunham o host interno do upstream foram eliminados.
 - A URL do Redis é redigida nos logs (senha nunca aparece); dependências pinadas e auditadas por pip-audit, dependency-review e Dependabot; código analisado por bandit, CodeQL e SonarQube; segredos varridos por gitleaks.

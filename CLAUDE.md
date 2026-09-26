@@ -36,10 +36,10 @@ FastAPI service exposing B3 (Brazilian stock exchange) trading hours and trading
 
 ## Commands
 
-Local `python3` on this machine is 3.9.6 and the project needs **3.11+** (the image runs **3.14**). There is no 3.11+ interpreter installed, so the practical way to run tests and lint locally is Docker, which also matches the deployed runtime exactly:
+Local `python3` on this machine is 3.9.6 and the project needs **3.11+** (the image runs **3.14**). There is no 3.11+ interpreter installed, so the practical way to run tests and lint locally is Docker, on the same base as the production image (Python 3.14 on Alpine — no `bash`, hence `sh -c`):
 
 ```bash
-docker run --rm -v "$PWD":/app -w /app python:3.14-slim bash -c \
+docker run --rm -v "$PWD":/app -w /app python:3.14-alpine sh -c \
   'pip install -q -r requirements-dev.txt && python -m pytest'
 ```
 
@@ -53,7 +53,7 @@ cp .env.example .env
 uvicorn src.main:app --reload --port 8000   # or: python -m src
 
 ruff check . && ruff format --check . && mypy src
-pytest                  # ~200 tests (`pytest --co -q | tail -1`), coverage gate at 90% (currently ~99.8%)
+pytest                  # ~230 tests (`pytest --co -q | tail -1`), coverage gate at 90% (currently ~99.8%)
 pytest -m "not slow"    # skips the tests that build the real BVMF calendar
 
 docker build -t b3datetime:ci . && IMAGE=b3datetime:ci scripts/smoke_image.sh   # the CI smoke test, locally
@@ -131,6 +131,9 @@ Integration tests against real Redis auto-skip when none is reachable, and use *
 - `latest` is `enable={{is_default_branch}}`. It used to be unconditional, so a push to any branch overwrote production `latest`.
 - The `test` job greps `coverage.xml` for `filename="src/`. Coverage is configured with `include` (not `source`) precisely so paths are root-relative; otherwise SonarQube silently reports **0%**. A second tripwire fails the job if `junit.xml` records any skipped test — with the Redis service up, `slow` and `integration` must actually run.
 - `docker-verify` builds amd64 with `load: true` so Trivy has something to scan, and needs no secrets (works on fork PRs). Its smoke step runs `scripts/smoke_image.sh` against the built image: no Redis (health 503), then real Redis + `ROOT_PATH` in both Kong path shapes, every page/asset/endpoint, trailing slash, negatives and the Docker `HEALTHCHECK`.
+- **The base is `python:3.14-alpine` pinned by digest** (both stages). Dependabot proposes the new digest weekly and the PR's CI scans it before adoption; Python minor/major bumps are ignored in `dependabot.yml` on purpose. The Debian `slim` base carried 173 Trivy alerts in code scanning, 150 of them with no Debian fix, for packages the app never runs (#39). Every compiled dependency ships musllinux cp314 wheels, so the builder has no compiler — a dependency without one fails the build visibly.
+- **`APK_REFRESH` changes on every run.** `docker-verify` exports `run_id-run_attempt` and `docker-publish` reuses that same value, so the published amd64 layer is the scanned one. Without it, the GHA cache served the old `apt-get upgrade` layer for as long as the base digest stayed the same: Debian's patches never landed, and from 2026-09-14 the blocking Trivy failed every build (#39). The heavy dependency layer sits *before* the `ARG` and stays cached.
+- **Separate GHA cache scopes** — `verify` (amd64) and `publish` (multi-arch; also reads `verify`). The cache index is last-writer-wins per scope; with a shared scope, the amd64-only export of `docker-verify` erased the arm64 entries and every publish redid the arm64 `pip install` under QEMU (~200 s).
 - `sonar` is skipped for Dependabot PRs (`github.actor == 'dependabot[bot]'`) as well as fork PRs: they get no secrets, and the job used to fail on an empty `SONAR_HOST_URL`, painting every Dependabot PR red. It also `ls`es `coverage.xml`/`junit.xml` after the artifact download so a broken download cannot turn into a silent 0%.
 - `dependency-review` is in `ci-ok` (it needs the repository's Dependency graph enabled — it is, via `PUT /repos/{owner}/{repo}/vulnerability-alerts`).
 

@@ -7,6 +7,16 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ## [Não publicado]
 
+### Alterado
+
+- Imagem base trocada de `python:3.14-slim` (Debian) para a **`python:3.14-alpine` oficial**, fixada por digest nos dois estágios. O Dependabot propõe os digests novos da mesma tag, e a troca de minor ou major do Python fica de fora de propósito. O container continua rodando como `app` (uid 1001), com a mesma porta, o mesmo `HEALTHCHECK` e o mesmo comando; o runtime cai para 30 pacotes do sistema. (#39)
+- CI: a imagem publicada reaproveita exatamente a camada amd64 que foi escaneada, e o cache do build ganha escopos separados para verificação e publicação. Com isso o arm64 deixa de ser reconstruído do zero a cada publicação. (#39)
+
+### Segurança
+
+- Os 173 alertas do Trivy no code scanning deixam de existir, e o Trivy passa a reportar 0 vulnerabilidades na imagem. Todos estavam em pacotes do Debian herdados da imagem base (perl, util-linux, glibc, systemd, pam, ncurses, tar...), 150 deles sem correção disponível, e a imagem Alpine não tem esses pacotes. (#39)
+- A camada de patches do sistema (`apk upgrade`) é refeita a cada execução do CI. Com a base Debian, o `apt-get upgrade` equivalente vinha do cache do build enquanto o digest da base não mudava. As correções publicadas depois de 04/09 (perl-base CRITICAL, gzip, pcre2, sqlite) nunca entraram na imagem, e a `latest` em produção as carregava. (#39)
+
 ## [2.0.2] - 2026-09-04
 
 ### Alterado

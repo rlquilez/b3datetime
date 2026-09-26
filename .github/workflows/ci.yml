@@ -281,13 +281,30 @@ jobs:
     permissions:
       contents: read
       security-events: write
+    outputs:
+      apk-refresh: ${{ steps.refresh.outputs.value }}
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4
 
+      # Chave que invalida a camada `apk upgrade` do Dockerfile a cada execução.
+      # Sem ela, o cache do GHA reaproveitava a camada de upgrade enquanto o digest
+      # da base não mudava: com a base Debian, os patches publicados depois nunca
+      # entraram e o Trivy bloqueante passou a reprovar todo build (#39). O
+      # docker-publish recebe esta mesma chave, então a camada amd64 publicada é
+      # exatamente a escaneada aqui — inclusive em "re-run failed jobs", que
+      # preserva os outputs deste job.
+      - name: Chave de atualização do apk
+        id: refresh
+        run: echo "value=${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+
       # Build só de amd64 com load: true. Um build multi-arch com --push não
       # deixa nada localmente para o Trivy escanear. Sem secrets, este job
       # também funciona em PR de fork.
+      # Escopo de cache próprio: o índice do cache do GHA é "último que escreve
+      # vence" por escopo, e o export só de amd64 deste job apagava as entradas
+      # arm64 do docker-publish, que refazia o pip install arm64 sob QEMU (~200 s)
+      # em todo publish.
       - name: Build local (amd64)
         uses: docker/build-push-action@v7
         with:
@@ -296,8 +313,9 @@ jobs:
           load: true
           push: false
           tags: b3datetime:ci
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          build-args: APK_REFRESH=${{ steps.refresh.outputs.value }}
+          cache-from: type=gha,scope=verify
+          cache-to: type=gha,mode=max,scope=verify
 
       # O container real, como roda em produção: sem Redis (health 503), depois com
       # Redis real e ROOT_PATH nas duas formas em que o Kong entrega o caminho, todas
@@ -373,6 +391,8 @@ jobs:
       - name: Configurar Docker Buildx
         uses: docker/setup-buildx-action@v4
 
+      # Mesma APK_REFRESH do docker-verify: o amd64 reaproveita a camada escaneada
+      # (escopo verify) e o arm64 reaproveita as próprias camadas (escopo publish).
       - name: Construir e enviar imagem multi-arch
         id: build
         uses: docker/build-push-action@v7
@@ -382,8 +402,11 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          build-args: APK_REFRESH=${{ needs.docker-verify.outputs.apk-refresh }}
+          cache-from: |
+            type=gha,scope=verify
+            type=gha,scope=publish
+          cache-to: type=gha,mode=max,scope=publish
 
   sbom:
     name: SBOM

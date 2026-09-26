@@ -1,34 +1,34 @@
 # Imagem multi-stage da B3 DateTime API.
 # Python 3.14: a suíte também roda em 3.11 (mínimo suportado) na matriz do CI; a
 # versão do runtime é a única que precisa constar aqui e em sonar.python.version.
+#
+# Base Alpine oficial, fixada por digest; o Dependabot propõe o digest novo a cada
+# semana e o PR passa pelo CI antes de ser adotado. A python:3.14-slim trazia o
+# userland Debian inteiro (perl, util-linux, apt, pam, login, tar, ncurses) que a
+# aplicação nunca executa: eram 173 alertas do Trivy no code scanning, 150 deles
+# sem correção no Debian (#39). Todas as dependências compiladas (numpy, pandas,
+# pydantic-core, uvloop, httptools, watchfiles, websockets, PyYAML) publicam wheels
+# musllinux para cp314, então o build não precisa de compilador.
+# A tag é 3.14-alpine, e não 3.14-alpineX.Y: quando a imagem oficial muda de
+# release do Alpine, a troca chega como PR de digest em vez de a tag fixada parar
+# de receber atualizações em silêncio.
+
 # Stage 1: build das dependências
-FROM python:3.14-slim AS builder
+FROM python:3.14-alpine@sha256:9e9fde4d32eedce0b661d9ab91e826b62dddf28e928c230ec55f1866cac66b01 AS builder
 
 WORKDIR /app
-
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends gcc && \
-    rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir --user -r requirements.txt
 
 # Stage 2: runtime
-FROM python:3.14-slim
-
-# Patches de segurança do sistema disponíveis no momento do build. A imagem base
-# costuma ficar atrás dos repositórios Debian (ex.: CVE-2026-53615 na família
-# util-linux), e sem este passo o Trivy reprova o build por vulnerabilidade
-# herdada e já corrigida upstream.
-RUN apt-get update && \
-    apt-get upgrade -y --no-install-recommends && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+FROM python:3.14-alpine@sha256:9e9fde4d32eedce0b661d9ab91e826b62dddf28e928c230ec55f1866cac66b01 AS runtime
 
 # Usuário sem privilégios. O container rodava como root, o que o Trivy sinaliza
 # como misconfiguração e amplia o impacto de qualquer execução indevida de código.
-RUN groupadd --system --gid 1001 app && \
-    useradd --system --uid 1001 --gid app --create-home --home-dir /home/app app
+# uid/gid 1001, os mesmos da época da base Debian.
+RUN addgroup -S -g 1001 app && \
+    adduser -S -D -u 1001 -G app -h /home/app app
 
 WORKDIR /app
 
@@ -48,6 +48,18 @@ RUN python -m pip uninstall -y pip setuptools wheel 2>/dev/null || true; \
            /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.*
 
 COPY --from=builder --chown=app:app /root/.local /home/app/.local
+
+# Patches de segurança publicados depois do digest fixado. O CI passa um
+# APK_REFRESH novo a cada run (run_id-run_attempt), o que invalida o cache só a
+# partir daqui. Com a base Debian, o `apt-get upgrade` equivalente vinha do cache do
+# GitHub Actions enquanto o digest da base não mudava: os patches nunca entravam e
+# o Trivy bloqueante passou a reprovar todo build (#39). As dependências ficam na
+# camada anterior e continuam em cache. Qualquer RUN adicionado depois deste ARG
+# também é refeito a cada run.
+ARG APK_REFRESH=local
+RUN echo "apk upgrade (APK_REFRESH=${APK_REFRESH})" && \
+    apk upgrade --no-cache
+
 COPY --chown=app:app src/ ./src/
 
 ENV PATH=/home/app/.local/bin:$PATH \
