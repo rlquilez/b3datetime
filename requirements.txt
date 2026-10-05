@@ -1,4 +1,4 @@
-fastapi==0.141.1
+fastapi==0.142.2
 # starlette pinado explicitamente: o fastapi declara apenas starlette>=0.46.0, sem
 # limite superior. As versões <1.0.1 têm sete advisories, incluindo SSRF em
 # StaticFiles (PYSEC-2026-2281), que este projeto usa para servir a documentação.
