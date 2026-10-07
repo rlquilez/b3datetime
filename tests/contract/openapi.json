@@ -11,7 +11,7 @@
       "name": "MIT",
       "url": "https://opensource.org/licenses/MIT"
     },
-    "version": "2.0.4"
+    "version": "2.1.0"
   },
   "paths": {
     "/v1/hours": {
@@ -579,7 +579,7 @@
                 },
                 "example": {
                   "name": "B3 DateTime API",
-                  "version": "2.0.4",
+                  "version": "2.1.0",
                   "build": "4277699f1c2e9b3d5a7c6e8f0a1b2c3d4e5f6a7b",
                   "description": "API para consultar horários e dias de operação da B3",
                   "docs": {

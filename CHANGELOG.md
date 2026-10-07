@@ -7,6 +7,8 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ## [Não publicado]
 
+## [2.1.0] - 2026-10-07
+
 ### Adicionado
 
 - `GET /` informa em `build` o commit (SHA) da imagem em execução. A versão só muda nas releases; o `build` muda a cada deploy, e é por ele que o pipeline confirma que a produção já serve a imagem recém-publicada. Fora da imagem publicada, o valor é `local`. (#66)
@@ -180,7 +182,8 @@ Primeira versão da API, desenvolvida entre 2025-12-26 e 2026-03-12.
 - Imagem Docker multi-arquitetura (`linux/amd64`, `linux/arm64`) publicada por GitHub Actions.
 - Timezone `America/Sao_Paulo` em todas as operações de data e hora.
 
-[Não publicado]: https://github.com/rlquilez/b3datetime/compare/v2.0.4...HEAD
+[Não publicado]: https://github.com/rlquilez/b3datetime/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/rlquilez/b3datetime/compare/v2.0.4...v2.1.0
 [2.0.4]: https://github.com/rlquilez/b3datetime/compare/v2.0.3...v2.0.4
 [2.0.3]: https://github.com/rlquilez/b3datetime/compare/v2.0.2...v2.0.3
 [2.0.2]: https://github.com/rlquilez/b3datetime/compare/v2.0.1...v2.0.2
