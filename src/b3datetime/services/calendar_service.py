@@ -148,9 +148,9 @@ def build_bvmf_calendar(
     # A cobertura é o intervalo pedido, não o das sessões: o primeiro dia da janela
     # pode ser feriado ou fim de semana, e ainda assim é respondível.
     coverage_start = pd.Timestamp(start).date()
+    # Sem `end`, a cobertura termina na última sessão — o default do próprio
+    # TradingCalendar.
     coverage_end = pd.Timestamp(end).date() if end is not None else None
-    if coverage_end is None and len(sessions):
-        coverage_end = sessions[-1].date()
 
     trading_calendar = TradingCalendar(
         sessions, coverage_start=coverage_start, coverage_end=coverage_end

@@ -139,9 +139,14 @@ class RootResponse(BaseModel):
 )
 async def root(request: Request) -> RootResponse:
     """Metadados, com os links resolvidos contra ``scope["root_path"]``."""
-    settings: Settings = request.app.state.settings
-    prefix: str = request.scope.get("root_path", "")
+    return _metadados(request.app.state.settings, request.scope.get("root_path", ""))
 
+
+def _metadados(settings: Settings, prefix: str) -> RootResponse:
+    """Corpo de ``GET /``: links absolutos com o prefixo do proxy, e a autenticação vigente.
+
+    Fora do handler para o teste de mutação alcançá-lo (o mutmut não muta funções decoradas).
+    """
     if settings.api_key_required:
         auth = AuthInfo(required=True, type="API Key", header=API_KEY_HEADER, managed_by=MANAGED_BY)
     else:

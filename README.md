@@ -893,6 +893,7 @@ flowchart LR
 |-------|-----------|------------|
 | Lint e formatação | ruff | famílias do pyflakes/pycodestyle ao pylint, mccabe (complexidade ≤ 10), FastAPI, código comentado e `banned-api`: todo "agora" passa por `get_current_datetime()` |
 | Arquitetura | import-linter + `tests/architecture` | camadas, routers independentes, domínio sem framework web, dependências confinadas, sem ciclos; import sem I/O provado por audit hook; convenções do projeto sobre a AST |
+| Mutação | mutmut | score ≥ 99% (hoje 99,73%, 729 de 731 mutantes mortos); bloqueante |
 | Código morto | vulture, deptry, pytest-deadfixtures | funções/atributos sem uso, dependências sem uso ou não declaradas, fixtures órfãs |
 | Lint de infraestrutura | actionlint, hadolint, shellcheck | workflows (inclusive o shell de cada `run:`), Dockerfiles e scripts |
 | Tipagem | mypy **strict** + plugin do pydantic | em `src/`, `scripts/` e `tests/` |

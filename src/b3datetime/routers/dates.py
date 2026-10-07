@@ -13,11 +13,12 @@ from __future__ import annotations
 
 from datetime import date
 from typing import Annotated
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
-from b3datetime.config import get_current_datetime
+from b3datetime.config import Settings, get_current_datetime
 from b3datetime.dependencies import CalendarDep, SettingsDep
 from b3datetime.routers.openapi_examples import (
     CALENDAR_INFO_EXAMPLE,
@@ -131,19 +132,31 @@ de semana.""",
 )
 async def get_calendar_info(calendar: CalendarDep, settings: SettingsDep) -> CalendarInfoResponse:
     """Limites vigentes do calendário."""
-    coverage_start, coverage_end = calendar.coverage
-    first, last = calendar.first_session, calendar.last_session
-    if coverage_start is None or coverage_end is None or first is None or last is None:
+    return _info_do_calendario(calendar, settings)
+
+
+# A lógica dos endpoints mora em funções comuns, e não nos handlers: o mutmut não muta
+# funções decoradas (`@router.get`), e o teste de mutação precisa alcançá-la.
+
+
+def _info_do_calendario(calendar: TradingCalendar, settings: Settings) -> CalendarInfoResponse:
+    """Limites do calendário; 503 se ele estiver vazio."""
+    inicio, fim = calendar.coverage
+    primeira, ultima = calendar.first_session, calendar.last_session
+    # `primeira` e `ultima` só são None juntas (sem sessões); com sessões, a cobertura nunca
+    # é None (o default são as próprias sessões). As combinações parciais que distinguiriam
+    # um `or` de um `and` nesta condição não existem: o teste de mutação não as enxerga.
+    if inicio is None or fim is None or primeira is None or ultima is None:  # pragma: no mutate
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={"error": "Service Unavailable", "message": "Calendário vazio"},
         )
     return CalendarInfoResponse(
         exchange=settings.exchange_name,
-        coverage_start=coverage_start.isoformat(),
-        coverage_end=coverage_end.isoformat(),
-        first_session=first.isoformat(),
-        last_session=last.isoformat(),
+        coverage_start=inicio.isoformat(),
+        coverage_end=fim.isoformat(),
+        first_session=primeira.isoformat(),
+        last_session=ultima.isoformat(),
         sessions_count=len(calendar),
         max_range_days=settings.max_range_days,
     )
@@ -177,7 +190,12 @@ feriado legítimo.""",
 )
 async def is_trading_day(calendar: CalendarDep, settings: SettingsDep) -> TradingDayResponse:
     """Verifica se hoje é dia de negociação na B3."""
-    today = get_current_datetime(settings.tz).date()
+    return _dia_de_hoje(calendar, settings.tz)
+
+
+def _dia_de_hoje(calendar: TradingCalendar, tz: ZoneInfo) -> TradingDayResponse:
+    """Se "hoje" (no fuso dado) é sessão; 503 se hoje estiver fora da janela."""
+    today = get_current_datetime(tz).date()
     # Sem esta checagem, um "hoje" fora da janela responderia `false` — indistinguível
     # de um feriado legítimo.
     try:
@@ -240,7 +258,16 @@ async def get_trading_days(
     ] = False,
 ) -> list[str]:
     """Lista dias de negociação (ou de não-negociação) num período."""
-    _validate_range(calendar, start, end, settings.max_range_days)
+    return _dias_do_periodo(
+        calendar, start, end, exclude=exclude, max_range_days=settings.max_range_days
+    )
+
+
+def _dias_do_periodo(
+    calendar: TradingCalendar, start: date, end: date, *, exclude: bool, max_range_days: int
+) -> list[str]:
+    """Sessões (ou, com ``exclude``, não-sessões) do período validado, em ISO 8601."""
+    _validate_range(calendar, start, end, max_range_days)
 
     days = (
         calendar.non_sessions_in_range(start, end)

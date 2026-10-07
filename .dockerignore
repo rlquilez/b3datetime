@@ -46,3 +46,4 @@ LICENSE
 scripts/
 coverage-*.dat
 junit-*.xml
+mutants/

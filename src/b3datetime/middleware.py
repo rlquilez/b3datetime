@@ -40,11 +40,13 @@ class RootPathPrefixMiddleware:
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] in _PREFIXABLE_TYPES:
-            root_path: str = scope.get("root_path", "")
+            # Sem `root_path` no scope (None ou ""), não há prefixo a repor.
+            root_path: str = scope.get("root_path", "")  # pragma: no mutate - None é equivalente
             path: str = scope["path"]
             if root_path and path != root_path and not path.startswith(root_path + "/"):
                 scope["path"] = root_path + path
                 raw_path: bytes | None = scope.get("raw_path")
                 if raw_path is not None:
-                    scope["raw_path"] = root_path.encode("utf-8") + raw_path
+                    prefixo = root_path.encode("utf-8")  # pragma: no mutate - "UTF-8" é equivalente
+                    scope["raw_path"] = prefixo + raw_path
         await self.app(scope, receive, send)

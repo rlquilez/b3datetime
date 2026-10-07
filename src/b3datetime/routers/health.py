@@ -14,6 +14,7 @@ afirmavam coisas contraditórias.
 from __future__ import annotations
 
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Request, Response, status
 from pydantic import BaseModel, Field
@@ -21,6 +22,7 @@ from pydantic import BaseModel, Field
 from b3datetime.config import get_current_datetime
 from b3datetime.dependencies import RedisDep, SettingsDep
 from b3datetime.routers.openapi_examples import TAG_HEALTH, examples_response
+from b3datetime.services.calendar_service import TradingCalendar
 
 router = APIRouter(prefix="/v1", tags=[TAG_HEALTH])
 
@@ -96,8 +98,13 @@ def _example(
     redis_connected: bool,
     cache_age: int | None,
     calendar: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Exemplo nomeado de resposta do health, sempre numa combinação que a API produz."""
+) -> dict[str, Any]:  # pragma: no mutate block
+    """Exemplo nomeado de resposta do health, sempre numa combinação que a API produz.
+
+    Fora da mutação: só roda no import, para montar a documentação, e o mutmut ativa o
+    mutante depois do import — nenhum mutante daqui seria exercitado. Quem verifica o que
+    esta função produz é o snapshot do contrato (tests/contract/openapi.json).
+    """
     expired = cache_age is None
     return {
         "summary": summary,
@@ -201,8 +208,18 @@ async def health_check(
 ) -> HealthResponse:
     """Estado da API e de suas dependências."""
     cache_status = await redis.get_cache_status()
-
     calendar = getattr(request.app.state, "calendar", None)
+    corpo = _montar_health(cache_status, calendar, settings.tz)
+    if corpo.status == STATUS_UNHEALTHY:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    return corpo
+
+
+# A lógica mora fora do handler: o mutmut não muta funções decoradas (`@router.get`).
+
+
+def _status_do_calendario(calendar: TradingCalendar | None) -> CalendarStatus:
+    """O bloco ``calendar`` do health: sessões reais, nunca a janela de cobertura."""
     calendar_status = CalendarStatus(available=False)
     if calendar is not None:
         # Sessões, e não a janela. O health lia o antigo alias `bounds`, que era a
@@ -216,14 +233,17 @@ async def health_check(
             sessions_count=len(calendar),
         )
 
-    overall = _evaluate(cache_status, calendar is not None)
-    if overall == STATUS_UNHEALTHY:
-        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    return calendar_status
 
+
+def _montar_health(
+    cache_status: dict[str, Any], calendar: TradingCalendar | None, tz: ZoneInfo
+) -> HealthResponse:
+    """Corpo do health a partir do estado do cache e do calendário."""
     return HealthResponse(
-        status=overall,
-        timestamp=get_current_datetime(settings.tz).isoformat(),
+        status=_evaluate(cache_status, calendar is not None),
+        timestamp=get_current_datetime(tz).isoformat(),
         redis_status="connected" if cache_status["redis_connected"] else "disconnected",
         cache=CacheStatus.model_validate(cache_status),
-        calendar=calendar_status,
+        calendar=_status_do_calendario(calendar),
     )

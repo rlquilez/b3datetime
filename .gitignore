@@ -227,3 +227,8 @@ junit-*.xml
 
 # import-linter
 .import_linter_cache/
+
+# mutmut
+mutants/
+mutmut-*.txt
+mutmut-run.log

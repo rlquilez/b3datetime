@@ -9,7 +9,7 @@ substituir a dependência inteira.
 
 from __future__ import annotations
 
-from typing import Annotated, cast
+from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, status
 
@@ -25,7 +25,8 @@ def get_app_settings(request: Request) -> Settings:
     ainda aplicava o valor do ambiente nos endpoints de data, e o ``.env`` local
     vazava para os testes.
     """
-    return cast("Settings", request.app.state.settings)
+    settings: Settings = request.app.state.settings
+    return settings
 
 
 def get_redis_service(request: Request) -> RedisService:

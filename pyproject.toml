@@ -72,7 +72,7 @@ output = "coverage.xml"
 [tool.ruff]
 target-version = "py314"
 line-length = 100
-extend-exclude = [".history", "htmlcov", ".venv", "venv"]
+extend-exclude = [".history", "htmlcov", ".venv", "venv", "mutants"]
 
 [tool.ruff.lint]
 select = [
@@ -309,3 +309,39 @@ min_confidence = 60
 ignore_decorators = ["@router.get", "@app.get", "@app.exception_handler"]
 sort_by_size = true
 # deptry: configuração em tests/dead_code/deptry.toml (ver o comentário de lá).
+
+# --------------------------------------------------------------------------- #
+# mutmut — teste de mutação (job "Mutação · mutmut")
+# --------------------------------------------------------------------------- #
+[tool.mutmut]
+# Layout src: o mutmut tira o prefixo "src." do nome do módulo — com o pacote em
+# src/b3datetime, os mutantes se chamam b3datetime.*, igual ao __module__ (#52).
+source_paths = ["src/"]
+# Além de tests/ e pyproject.toml (copiados por padrão): o que os testes leem do disco.
+also_copy = ["scripts/", "README.md", "CHANGELOG.md", ".env.example"]
+do_not_mutate = [
+    "src/b3datetime/__main__.py",                 # entrypoint de desenvolvimento
+    "src/b3datetime/routers/openapi_examples.py", # só dados de documentação
+    "src/b3datetime/static/*",                    # constantes e assets
+]
+# Mensagens de log: mutá-las gera mutantes que nenhum teste razoável mata.
+do_not_mutate_patterns = ['logger\.(debug|info|warning|error|exception)\(']
+# --no-cov: sem ele, cada execução parcial reprova no fail_under da cobertura e TODO
+# mutante conta como "morto" — um score falso de 100%. -p no:randomly: a mesma ordem
+# em toda execução, para o veredito de um mutante não depender de sorteio.
+pytest_add_cli_args = ["--no-cov", "-p", "no:randomly", "-p", "no:cacheprovider"]
+# Fora: E2E (imagem), o fuzzing da API inteira (exercita todas as rotas a cada exemplo) e
+# a arquitetura (lê o código-fonte, e o código mutado tem os trampolins do mutmut).
+pytest_add_cli_args_test_selection = [
+    "-m", "not e2e and not api_fuzz",
+    "tests/unit", "tests/api", "tests/integration", "tests/property",
+]
+
+# --------------------------------------------------------------------------- #
+# Limiares de qualidade do projeto (lidos pelos scripts de gate do CI)
+# --------------------------------------------------------------------------- #
+[tool.b3datetime.quality]
+# Score mínimo do teste de mutação (scripts/mutation_gate.py). Ratchet: só sobe.
+# Medido em #65: 99,73% (729 de 731); os 2 sobreviventes são equivalentes documentados
+# (allow_credentials=False explícito no CORS, que é o default do Starlette).
+mutation_min_score = 99.0

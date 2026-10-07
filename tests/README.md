@@ -64,6 +64,7 @@ flowchart LR
         direction TB
         cov["Cobertura · combinada<br/>≥ 90% + tripwires"]:::consolida
         sonar["Qualidade · SonarQube<br/>quality gate"]:::consolida
+        mut["Mutação · mutmut<br/>score ≥ 99%"]:::consolida
     end
 
     subgraph E4["④ Imagem"]
@@ -78,6 +79,7 @@ flowchart LR
     sbom["Entrega · SBOM"]:::entrega
 
     unit & comp & integ & prop & arq --> cov --> sonar
+    unit & comp & integ & prop --> mut
     lint & mypy & cov --> dv
     lint & mypy & cov --> e2e
     E1 & E2 & E3 & E4 --> ok --> pub --> rel & sbom
@@ -219,6 +221,29 @@ O Schemathesis roda em processo sobre a app real, com só o lifespan trocado por
 
 `test_horarios.py` trava o padrão `HH:MM`: aceito **se e somente se** está entre os 1440 horários ASCII — gerando quase-horários com dígitos arábico-índicos, devanágari e de largura total, que o `\d` Unicode do pydantic-core deixava passar (#59). Também prova que `_as_str` é a identidade sobre `str`, o inverso de `encode` sobre UTF-8, e que qualquer byte inválido vira o 502 documentado, nunca um 500.
 
+### Mutação — `[tool.mutmut]` + `scripts/mutation_gate.py`
+
+Cobertura diz que uma linha **rodou**; mutação diz se algum teste **perceberia** se ela estivesse errada. O [mutmut](https://github.com/boxed/mutmut) gera centenas de variações do código — `>` vira `>=`, `or` vira `and`, uma string vira `"XX…XX"`, um argumento some — e roda a suíte contra cada uma. Mutante que sobrevive é um defeito que a suíte deixaria passar.
+
+| | Antes (#65) | Depois |
+|---|---|---|
+| Mutantes | 644 | 731 |
+| Mortos | 525 | 729 |
+| Sobreviventes | 119 | 2 (equivalentes documentados) |
+| **Score** | **81,5%** | **99,73%** |
+
+O job **Mutação · mutmut** é bloqueante: o score (`detectados / avaliados`) não pode ficar abaixo de `[tool.b3datetime.quality] mutation_min_score` (99%, e só sobe). O gate também reprova um run que não avaliou ou não detectou mutante nenhum — o sintoma de uma configuração quebrada.
+
+O que tornou o resultado confiável:
+
+- **o pacote precisou mudar de nome.** O mutmut 3 recusa um pacote chamado `src` (`assert not name.startswith("src.")`); daí o layout `src/b3datetime/` (#52);
+- **`--no-cov` na execução da mutação.** Com a cobertura ligada, cada execução parcial reprovaria no `fail_under` e *todo* mutante contaria como morto — um 100% falso;
+- **o mutmut não muta funções decoradas.** A lógica dos handlers (`@router.get`) foi extraída para funções comuns (`_dias_do_periodo`, `_montar_health`, `_metadados`…), que a mutação alcança;
+- **perfil `mutation` do Hypothesis**, determinístico: o mesmo mutante é julgado sempre do mesmo jeito;
+- **fora da seleção:** o E2E (imagem), o fuzzing da API inteira (`api_fuzz`, exercita todas as rotas a cada exemplo) e a arquitetura (lê o código-fonte, que no diretório da mutação tem os trampolins do mutmut).
+
+**Como os 117 sobreviventes foram tratados.** Cada um foi lido. A maioria revelou testes que só conferiam *trechos* de mensagem — `tests/api/test_respostas_exatas.py` passou a conferir o envelope de erro inteiro — e fronteiras sem teste (idade do cache **igual** ao TTL, reconexão **exatamente** no intervalo). Outros mostraram lógica presa em handlers ou código redundante (um fallback de cobertura que o `TradingCalendar` já fazia, um `setdefault` defensivo), que foi removido. Os **equivalentes** — mudanças que não alteram comportamento observável, como `"utf-8"` → `"UTF-8"` — recebem `# pragma: no mutate` **com a justificativa na mesma linha** (o pragma do mutmut só vale em linha de *statement*, por isso algumas expressões foram reescritas numa linha só). `_example`, que monta os exemplos do health **no import**, fica inteira fora (`no mutate block`): o mutmut ativa o mutante depois do import, e quem verifica o que ela produz é o snapshot do contrato.
+
 ### E2E — `tests/e2e/`
 
 Contra a **imagem real**, em quatro ambientes (`principal`, `sem_redis`, `sem_calendario`, `redis_tardio`). Cada par (operação, código) do `/openapi.json` servido tem um caso, e um teste exige que o conjunto coberto seja **igual** ao documentado. As regras do calendário da B3 que servem de oráculo vivem em `tests/e2e/calendario_b3.py` — importáveis sem arrastar o marcador `e2e`, e testadas por si só no bloco unitário.
@@ -254,6 +279,8 @@ python -m pytest                      # unitários + componente + integração, 
 python -m pytest tests/unit           # um bloco só (a cobertura parcial reprova o gate: use --cov-fail-under=0)
 python -m pytest tests/integration    # precisa de Redis em localhost:6379 (db 15) para não pular
 HYPOTHESIS_PROFILE=ci python -m pytest tests/property --cov-fail-under=0   # como no CI (500 exemplos)
+HYPOTHESIS_PROFILE=mutation mutmut run && mutmut results   # mutação (precisa do Redis para tests/integration)
+mutmut export-cicd-stats && mutmut results > s.txt && python scripts/mutation_gate.py mutants/mutmut-cicd-stats.json s.txt
 docker run -d --rm -p 6379:6379 redis:7.4-alpine   # um Redis descartável para a integração
 
 docker build -t b3datetime:e2e . && E2E_IMAGE=b3datetime:e2e python -m pytest -m e2e tests/e2e --no-cov

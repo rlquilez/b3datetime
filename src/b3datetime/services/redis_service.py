@@ -21,7 +21,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 import redis.asyncio as aioredis
@@ -43,9 +43,10 @@ def _segundos_entre(inicio: datetime, fim: datetime) -> float:
 
     Subtrair dois ``datetime`` com a mesma ``ZoneInfo`` dá a diferença de relógio de
     parede: na volta do horário de verão, 2 h reais viram 1 h (e o contrário na ida).
-    Convertendo os dois para UTC a conta é feita sobre instantes, não sobre relógios.
+    ``timestamp()`` é o instante em segundos desde a época (UTC): a conta é feita sobre
+    instantes, não sobre relógios.
     """
-    return (fim.astimezone(UTC) - inicio.astimezone(UTC)).total_seconds()
+    return fim.timestamp() - inicio.timestamp()
 
 
 def _as_str(value: bytes | str | None, key: str) -> str | None:
@@ -59,7 +60,7 @@ def _as_str(value: bytes | str | None, key: str) -> str | None:
     """
     if isinstance(value, bytes):
         try:
-            return value.decode("utf-8")
+            return value.decode("utf-8")  # pragma: no mutate - "UTF-8" é equivalente
         except UnicodeDecodeError as exc:
             raise InvalidUpstreamValueError("valor não é UTF-8", key=key) from exc
     return value
@@ -106,6 +107,13 @@ class RedisCache:
 
     def set(self, key: str, value: str) -> None:
         self._entries[key] = (value, self._now())
+
+    def get_with_age(self, key: str) -> tuple[str, float] | None:
+        """Valor e idade (em segundos) da entrada, numa leitura só; ``None`` se ausente."""
+        entry = self._entries.get(key)
+        if entry is None:
+            return None
+        return entry[0], _segundos_entre(entry[1], self._now())
 
     def get_value(self, key: str) -> str | None:
         entry = self._entries.get(key)
@@ -243,10 +251,11 @@ class RedisService:
 
     def _fallback(self, key: str) -> str:
         """Valor de cache local, ou exceção explicando por que não há resposta."""
-        cached = self.local_cache.get_value(key)
-        age = self.local_cache.get_age_seconds(key)
-        if cached is None or age is None:
+        entry = self.local_cache.get_with_age(key)
+        if entry is None:
             raise RedisUnavailableError("Redis indisponível e nenhum valor em cache local", key=key)
+        cached, age = entry
+        # Estrito: com a idade exatamente igual ao TTL o cache ainda serve.
         if age > self._settings.cache_ttl_seconds:
             raise RedisUnavailableError(
                 f"Redis indisponível há mais de {self._settings.cache_ttl_seconds}s",
@@ -267,7 +276,9 @@ class RedisService:
             return [self._fallback(key) for key in keys]
 
         out: list[str] = []
-        for key, value in zip(keys, values, strict=True):
+        # strict=True é defesa: `values` sempre tem uma posição por chave (o _fetch já
+        # reprova um MGET de tamanho errado), então trocar o strict não muda nada.
+        for key, value in zip(keys, values, strict=True):  # pragma: no mutate
             # `is not None`, e não truthiness: uma chave contendo string vazia é um
             # valor legítimo. Tratá-la como ausente fazia um Redis saudável virar 503.
             if value is None:

@@ -230,6 +230,63 @@ jobs:
             junit-${{ matrix.bloco }}.xml
           if-no-files-found: error
 
+  mutation:
+    name: Mutação · mutmut (score ≥ limiar)
+    timeout-minutes: 30
+    # Só depois dos blocos em processo: mutar o código de uma suíte que já falha não diz
+    # nada. Bloqueante — entra no ci-ok, e o publish depende do ci-ok.
+    needs: [tests]
+    runs-on: ubuntu-latest
+    services:
+      # A seleção inclui tests/integration (Redis real, db 15).
+      redis:
+        image: redis:7.4-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+
+      # Configuração em [tool.mutmut] (pyproject): fontes, exclusões, a seleção de testes e
+      # o --no-cov sem o qual todo mutante "morreria" no fail_under da cobertura. O perfil
+      # `mutation` do Hypothesis é determinístico: o mesmo mutante é julgado sempre igual.
+      # A saída do mutmut é um spinner por mutante; vai para um arquivo, publicado abaixo.
+      - name: mutmut run
+        env:
+          HYPOTHESIS_PROFILE: mutation
+        run: mutmut run --max-children 4 > mutmut-run.log 2>&1
+
+      - name: Exportar o resultado
+        run: |
+          mutmut export-cicd-stats
+          mutmut results > mutmut-sobreviventes.txt
+
+      # Score = detectados / avaliados, contra [tool.b3datetime.quality] mutation_min_score.
+      # Reprova também com zero mutantes avaliados ou detectados (run quebrado).
+      - name: Gate do score de mutação
+        run: python scripts/mutation_gate.py mutants/mutmut-cicd-stats.json mutmut-sobreviventes.txt
+
+      - name: Publicar relatórios da mutação
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mutacao
+          path: |
+            mutants/mutmut-cicd-stats.json
+            mutmut-sobreviventes.txt
+            mutmut-run.log
+          if-no-files-found: ignore
+
   coverage:
     name: Cobertura · combinada (≥ 90%)
     timeout-minutes: 10
@@ -961,6 +1018,7 @@ jobs:
       - dead-code
       - tests
       - coverage
+      - mutation
       - sonar
       - bandit
       - zizmor
@@ -1010,6 +1068,7 @@ jobs:
               "dependency-review": "SCA · dependency-review",
               "tests": "Testes · unitários, componente, integração e property-based",
               "coverage": "Cobertura · combinada (≥ 90%)",
+              "mutation": "Mutação · mutmut (score ≥ limiar)",
               "sonar": "Qualidade · SonarQube",
               "docker-verify": "Imagem · build, smoke e Trivy",
               "e2e": "E2E · contrato 100%",

@@ -32,9 +32,11 @@ def test_calendario_real_da_bvmf() -> None:
     assert not calendario.is_session(date(2024, 1, 1))  # Confraternização
     assert not calendario.is_session(date(2024, 2, 12))  # Carnaval
     assert calendario.is_session(date(2024, 1, 2))
-    inicio, _ = calendario.coverage
-    assert inicio == date(2024, 1, 1)  # a cobertura começa no feriado
-    assert calendario.first_session == date(2024, 1, 2)  # a primeira sessão, não
+    # A cobertura é a janela pedida — começa e termina em dias sem pregão (Confraternização
+    # e o último dia do ano) —, e não o intervalo entre a primeira e a última sessão.
+    assert calendario.coverage == (date(2024, 1, 1), date(2024, 12, 31))
+    assert calendario.first_session == date(2024, 1, 2)
+    assert calendario.last_session == date(2024, 12, 30)
 
 
 @pytest.mark.parametrize("ano", ANOS)

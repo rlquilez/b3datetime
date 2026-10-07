@@ -68,7 +68,9 @@ class B3DateTimeAPI(FastAPI):
         schema["externalDocs"] = EXTERNAL_DOCS
         settings: Settings = self.state.settings
         if settings.api_key_required:
-            schema.setdefault("components", {})["securitySchemes"] = SECURITY_SCHEMES
+            # O schema sempre tem `components` (os modelos de resposta): sem setdefault
+            # defensivo, cujo default nenhum teste conseguiria distinguir.
+            schema["components"]["securitySchemes"] = SECURITY_SCHEMES
             schema["security"] = [{API_KEY_SCHEME: []}]
         return schema
 
@@ -165,7 +167,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         redirect_slashes=False,
         docs_url=None,  # servido abaixo, com assets locais
         redoc_url=None,
-        openapi_url="/openapi.json",
         openapi_tags=OPENAPI_TAGS,
         lifespan=lifespan,
         contact={"name": "Rodrigo Quilez", "url": "https://github.com/rlquilez/b3datetime"},
@@ -185,14 +186,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
-        allow_credentials=False,
+        allow_credentials=False,  # pragma: no mutate - default do Starlette, explícito pela decisão de segurança acima
         allow_methods=["GET", "OPTIONS"],
         allow_headers=["*"],
     )
 
     _register_exception_handlers(app)
 
-    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+    app.mount("/static", StaticFiles(directory=STATIC_DIR))
     app.include_router(hours.router)
     app.include_router(dates.router)
     app.include_router(health.router)

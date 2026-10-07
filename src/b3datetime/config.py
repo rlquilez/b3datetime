@@ -74,10 +74,9 @@ def redact_url(url: str) -> str:
     if query:
         pares = parse_qsl(query, keep_blank_values=True)
         if any(chave.lower() in _QUERY_SENSIVEL for chave, _ in pares):
-            query = urlencode(
-                [(k, _REDIGIDO if k.lower() in _QUERY_SENSIVEL else v) for k, v in pares],
-                safe="*",
-            )
+            redigidos = [(k, _REDIGIDO if k.lower() in _QUERY_SENSIVEL else v) for k, v in pares]
+            # safe="*": "***" sai literal. Acrescentar caracteres seguros não muda nada.
+            query = urlencode(redigidos, safe="*")  # pragma: no mutate
     return urlunsplit((parts.scheme, netloc, parts.path, query, parts.fragment))
 
 
