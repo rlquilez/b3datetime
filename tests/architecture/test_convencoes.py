@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import ast
 import importlib
+import re
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -19,7 +21,8 @@ from b3datetime.config import Settings
 from b3datetime.main import create_app
 from tests.api.test_openapi import _api_routes
 
-PACOTE = Path(__file__).resolve().parents[2] / "src" / "b3datetime"
+RAIZ = Path(__file__).resolve().parents[2]
+PACOTE = RAIZ / "src" / "b3datetime"
 MODULOS = sorted(p for p in PACOTE.rglob("*.py") if "__pycache__" not in p.parts)
 ROUTERS = ("hours", "dates", "health", "root")
 
@@ -125,3 +128,22 @@ def test_routers_conhecidos_sao_todos_os_que_existem() -> None:
         if p.stem not in {"__init__", "openapi_examples"}
     }
     assert existentes == set(ROUTERS)
+
+
+def test_sandbox_da_mutacao_tem_todo_arquivo_que_os_testes_leem() -> None:
+    """O mutmut roda a suíte dentro de ``mutants/``, que só recebe ``src/``, ``tests/``, o
+    ``pyproject.toml`` e o ``also_copy``. Um teste que lê um arquivo do repositório fora
+    disso reprova a execução limpa e derruba o job inteiro antes de avaliar mutante algum
+    — foi o que aconteceu no push de #67, com ``.github/workflows/ci.yml``."""
+    config = tomllib.loads((RAIZ / "pyproject.toml").read_text(encoding="utf-8"))
+    copiados = {"src", "tests", "pyproject.toml"} | {
+        caminho.rstrip("/") for caminho in config["tool"]["mutmut"]["also_copy"]
+    }
+    leitura = re.compile(r'\b(?:RAIZ|REPO_ROOT)\s*/\s*"([^"/]+)"')
+    lidos = {
+        nome
+        for arquivo in [*(RAIZ / "tests").rglob("*.py"), *(RAIZ / "scripts").glob("*.py")]
+        for nome in leitura.findall(arquivo.read_text(encoding="utf-8"))
+    }
+    assert ".github" in lidos, "o padrão de busca deixou de achar as leituras"
+    assert lidos <= copiados, f"lidos pelos testes e fora do sandbox: {lidos - copiados}"
