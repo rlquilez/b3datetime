@@ -11,7 +11,7 @@ name: b3stack
 
 services:
   redis:
-    image: redis:7.4-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
+    image: redis:8.10-alpine@sha256:3811787313eba226a2ef38658c6ccb91cd5e110edc89c37767de373120a0e5a0
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 2s
@@ -20,7 +20,7 @@ services:
 
   # Grava os horários e sai: a API responde 200 em /v1/hours desde a primeira requisição.
   seed:
-    image: redis:7.4-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
+    image: redis:8.10-alpine@sha256:3811787313eba226a2ef38658c6ccb91cd5e110edc89c37767de373120a0e5a0
     depends_on:
       redis:
         condition: service_healthy
