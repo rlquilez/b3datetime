@@ -5,7 +5,15 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from b3datetime.static import FAVICON, REDOC_JS, SWAGGER_CSS, SWAGGER_JS
+from b3datetime.static import (
+    FAVICON,
+    REDOC_JS,
+    REDOC_VERSION,
+    STATIC_DIR,
+    SWAGGER_CSS,
+    SWAGGER_JS,
+    SWAGGER_UI_VERSION,
+)
 
 # O mimetypes do Python >= 3.12 (o projeto só roda 3.14) usa text/javascript.
 JS_TYPES = {"text/javascript"}
@@ -58,3 +66,11 @@ async def test_traversal_nao_escapa_do_diretorio(client: httpx.AsyncClient, path
     r = await client.get(path)
     assert r.status_code == 404
     assert "api_version" not in r.text
+
+
+def test_versoes_declaradas_batem_com_os_assets_vendorizados() -> None:
+    """``SWAGGER_UI_VERSION``/``REDOC_VERSION`` documentam o que está em ``assets/``; atualizar
+    um arquivo sem a constante (ou o contrário) deixa a versão anunciada mentindo — e é por
+    ela que se acompanha CVE de biblioteca JS vendorizada, que nem Dependabot nem Trivy veem."""
+    assert SWAGGER_UI_VERSION in (STATIC_DIR / SWAGGER_JS).read_text(encoding="utf-8")
+    assert f'"{REDOC_VERSION}"' in (STATIC_DIR / REDOC_JS).read_text(encoding="utf-8")

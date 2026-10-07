@@ -30,7 +30,7 @@ from redis.exceptions import RedisError
 from b3datetime.config import Settings, get_current_datetime
 
 if TYPE_CHECKING:  # pragma: no cover
-    from zoneinfo import ZoneInfo
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -107,9 +107,6 @@ class RedisCache:
     def set(self, key: str, value: str) -> None:
         self._entries[key] = (value, self._now())
 
-    def get(self, key: str) -> tuple[str, datetime] | None:
-        return self._entries.get(key)
-
     def get_value(self, key: str) -> str | None:
         entry = self._entries.get(key)
         return entry[0] if entry is not None else None
@@ -131,9 +128,6 @@ class RedisCache:
         if age is None:
             return True
         return age > ttl_seconds
-
-    def clear(self) -> None:
-        self._entries.clear()
 
 
 class RedisService:
@@ -331,7 +325,3 @@ class RedisService:
             "close_cache_expired": self.local_cache.is_expired(close_key, ttl),
             "cache_ttl_seconds": ttl,
         }
-
-    @property
-    def timezone(self) -> ZoneInfo:
-        return self._settings.tz

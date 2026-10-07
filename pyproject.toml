@@ -296,3 +296,16 @@ id = "acyclic"
 name = "Nenhum ciclo entre módulos irmãos"
 type = "acyclic_siblings"
 ancestors = ["b3datetime", "b3datetime.routers", "b3datetime.services"]
+
+# --------------------------------------------------------------------------- #
+# código morto — job "Código morto"
+# --------------------------------------------------------------------------- #
+[tool.vulture]
+paths = ["src", "tests/dead_code/vulture_whitelist.py"]
+# 60 é o mínimo do vulture: inclui funções, classes e atributos sem uso, que é onde
+# está o valor (imports e argumentos mortos o ruff já pega com F401 e ARG).
+min_confidence = 60
+# Registrados no framework por decorador; o vulture não enxerga essa chamada.
+ignore_decorators = ["@router.get", "@app.get", "@app.exception_handler"]
+sort_by_size = true
+# deptry: configuração em tests/dead_code/deptry.toml (ver o comentário de lá).

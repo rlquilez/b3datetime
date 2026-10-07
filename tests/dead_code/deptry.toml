@@ -1,0 +1,15 @@
+# Configuração do deptry (dependências não usadas, faltando ou só transitivas).
+#
+# Fica fora do pyproject.toml de propósito: com uma seção [project] presente, o deptry
+# ignora os requirements*.txt e lê as dependências do PEP 621 — que este projeto não usa
+# (nunca é instalado como pacote; ver o comentário no topo do pyproject.toml). Rodado com
+#   deptry . --config tests/dead_code/deptry.toml
+[tool.deptry]
+# Layout src: o pacote de primeira parte é `b3datetime`; `tests` e `scripts` também são
+# do projeto. O requirements-dev.txt inclui o requirements.txt por `-r`.
+known_first_party = ["b3datetime", "tests", "scripts"]
+requirements_files = ["requirements.txt"]
+requirements_files_dev = ["requirements-dev.txt"]
+# Só o código de produção: scripts/ é ferramenta de CI e usa dependências de dev de
+# propósito (tests/ já é excluído por padrão).
+extend_exclude = ["scripts"]

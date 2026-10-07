@@ -308,11 +308,6 @@ async def test_aclose_tolera_erro_do_cliente(settings: Settings, clock: FakeCloc
     await service.aclose()  # não deve levantar
 
 
-def test_timezone_property(settings: Settings, clock: FakeClock) -> None:
-    service = RedisService(settings, now_fn=clock)
-    assert str(service.timezone) == "America/Sao_Paulo"
-
-
 async def test_get_values_com_lista_vazia(redis_service: RedisService) -> None:
     assert await redis_service.get_values([]) == []
 

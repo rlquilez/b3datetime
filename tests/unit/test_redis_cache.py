@@ -77,21 +77,13 @@ def test_string_vazia_e_um_valor_legitimo(clock: FakeClock) -> None:
     assert cache.get_age_seconds("k") == 0.0
 
 
-def test_clear(clock: FakeClock) -> None:
+def test_gravar_de_novo_substitui_o_valor_e_zera_a_idade(clock: FakeClock) -> None:
     cache = make_cache(clock)
-    cache.set("k", "v")
-    cache.clear()
-    assert cache.get_value("k") is None
-    assert cache.get_age_seconds("k") is None
-
-
-def test_get_devolve_valor_e_timestamp(clock: FakeClock) -> None:
-    cache = make_cache(clock)
-    cache.set("k", "v")
-    entry = cache.get("k")
-    assert entry is not None
-    assert entry[0] == "v"
-    assert entry[1] == clock.now()
+    cache.set("k", "v1")
+    clock.advance(30)
+    cache.set("k", "v2")
+    assert cache.get_value("k") == "v2"
+    assert cache.get_age_seconds("k") == 0.0
 
 
 # Fim do horário de verão em Nova York, 03/11/2024: às 02:00 EDT o relógio volta para 01:00

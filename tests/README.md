@@ -41,6 +41,7 @@ flowchart LR
         infra["Lint · infra<br/><i>actionlint · hadolint · shellcheck</i>"]:::estatica
         mypy["Tipagem · mypy strict"]:::estatica
         arq["Arquitetura<br/><i>import-linter + regras</i>"]:::estatica
+        morto["Código morto<br/><i>vulture · deptry · fixtures</i>"]:::estatica
         bandit["SAST · bandit"]:::estatica
         codeql["SAST · CodeQL<br/><i>python · actions</i>"]:::estatica
         zizmor["SAST · zizmor<br/><i>workflows</i>"]:::estatica
@@ -146,6 +147,20 @@ flowchart TB
 - `test_convencoes.py` — sobre a AST: nada instancia `Settings`/`create_app` em nível de módulo; nenhum `Depends(get_settings)`; `RedisService` e `build_bvmf_calendar` só são construídos no `lifespan`; modelos de resposta só no router que os declara; todo router está publicado.
 
 Sabotagens de referência: um `import fastapi` em `services` quebra o contrato "domínio sem web"; um `get_settings()` em nível de módulo faz o audit hook apontar a leitura do `.env`.
+
+### Código morto — `tests/dead_code/`
+
+Código que ninguém chama ainda é lido, revisado, mantido e — no caso deste projeto — mutado e coberto. O bloco procura três tipos:
+
+| Ferramenta | O que acha | Configuração |
+|---|---|---|
+| vulture | funções, classes e atributos sem uso em `src/` (confiança ≥ 60) | `[tool.vulture]`; handlers registrados por decorador são ignorados; `tests/dead_code/vulture_whitelist.py` lista, com o motivo, o que o framework usa e a análise estática não vê (campos Pydantic preenchidos por keyword, a factory chamada pelo nome no `--factory`) |
+| deptry | dependência declarada e não usada, usada e não declarada, ou só transitiva | `tests/dead_code/deptry.toml` (fora do `pyproject.toml`: com `[project]` presente, o deptry ignoraria os `requirements*.txt`) |
+| pytest-deadfixtures | fixtures que nenhum teste pede | coleta inclusive o E2E (`-m "e2e or not e2e"`), senão as fixtures dele pareceriam órfãs |
+
+O código comentado (o código morto que sobrevive como comentário) é pego pelo ruff (`ERA`).
+
+**O que o bloco removeu ao nascer** (#64): `TradingCalendar._sessions`, um atributo nunca lido que segurava o `DatetimeIndex` inteiro da janela de 10 anos em memória; `RedisCache.get`, `RedisCache.clear` e `RedisService.timezone`, API que só os testes chamavam; a fixture `today_session`; e o literal `favicon.png` duplicado em `main.py` (agora a constante `FAVICON`). As constantes de versão dos assets vendorizados ganharam um teste que as confere contra os próprios arquivos — eram o único registro de versão de bibliotecas JS que nem o Dependabot nem o Trivy enxergam.
 
 ### Unitários — `tests/unit/`
 

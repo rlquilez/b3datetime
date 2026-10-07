@@ -110,6 +110,35 @@ jobs:
             junit-architecture.xml
           if-no-files-found: error
 
+  dead-code:
+    name: Código morto · vulture, deptry e fixtures
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+
+      # Funções, classes e atributos sem uso em src/ ([tool.vulture]: confiança 60,
+      # handlers por decorador ignorados, whitelist revisada em tests/dead_code/).
+      # Precisa do 3.14: o código usa a sintaxe `except A, B:` (PEP 758).
+      - name: vulture (código sem uso)
+        run: vulture
+
+      # Dependências declaradas e não usadas, usadas e não declaradas, ou só transitivas.
+      - name: deptry (dependências)
+        run: deptry . --config tests/dead_code/deptry.toml
+
+      # Fixtures do pytest que nenhum teste pede. A coleta inclui o E2E (-m "e2e or not
+      # e2e"), senão as fixtures dele pareceriam órfãs; nada é executado.
+      - name: pytest-deadfixtures (fixtures órfãs)
+        run: python -m pytest --dead-fixtures -m "e2e or not e2e" --no-cov -p no:cacheprovider
+
   typecheck:
     name: Tipagem · mypy
     timeout-minutes: 10
@@ -929,6 +958,7 @@ jobs:
       - lint-infra
       - typecheck
       - architecture
+      - dead-code
       - tests
       - coverage
       - sonar
@@ -969,6 +999,7 @@ jobs:
               "lint-infra": "Lint · infra (actionlint, hadolint, shellcheck)",
               "typecheck": "Tipagem · mypy",
               "architecture": "Arquitetura · import-linter + regras",
+              "dead-code": "Código morto · vulture, deptry e fixtures",
               "bandit": "SAST · bandit",
               "codeql": "SAST · CodeQL (python e actions)",
               "zizmor": "SAST · zizmor (workflows)",

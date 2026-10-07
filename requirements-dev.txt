@@ -25,6 +25,10 @@ python-dateutil==2.9.0.post0
 ruff==0.16.10
 # Contratos de arquitetura (dependências entre módulos) — [tool.importlinter] no pyproject.
 import-linter==2.15
+# Código morto: funções/atributos sem uso, dependências sem uso e fixtures órfãs.
+vulture==2.16
+deptry==0.25.1
+pytest-deadfixtures==3.1.0
 mypy==2.4.0
 # Stubs do typeshed: os testes também passam no mypy strict.
 types-jsonschema==4.26.0.20261006

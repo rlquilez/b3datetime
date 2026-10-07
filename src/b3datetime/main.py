@@ -39,7 +39,7 @@ from b3datetime.services.redis_service import (
     RedisService,
     RedisUnavailableError,
 )
-from b3datetime.static import REDOC_JS, STATIC_DIR, SWAGGER_CSS, SWAGGER_JS
+from b3datetime.static import FAVICON, REDOC_JS, STATIC_DIR, SWAGGER_CSS, SWAGGER_JS
 
 logger = logging.getLogger(__name__)
 
@@ -205,7 +205,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             title=f"{settings.api_title} - Swagger UI",
             swagger_js_url=f"./static/{SWAGGER_JS}",
             swagger_css_url=f"./static/{SWAGGER_CSS}",
-            swagger_favicon_url="./static/favicon.png",
+            swagger_favicon_url=f"./static/{FAVICON}",
         )
 
     @app.get("/redoc", include_in_schema=False)
@@ -214,7 +214,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             openapi_url=OPENAPI_RELATIVE_URL,
             title=f"{settings.api_title} - ReDoc",
             redoc_js_url=f"./static/{REDOC_JS}",
-            redoc_favicon_url="./static/favicon.png",
+            redoc_favicon_url=f"./static/{FAVICON}",
             with_google_fonts=False,
         )
 

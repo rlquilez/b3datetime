@@ -58,7 +58,6 @@ class TradingCalendar:
         coverage_start: date | None = None,
         coverage_end: date | None = None,
     ) -> None:
-        self._sessions = sessions
         # frozenset em vez de list: a checagem de pertinência do caminho `exclude=true`
         # era O(dias x sessoes), o que levava ~77 s para o range máximo.
         self._session_dates: frozenset[date] = frozenset(ts.date() for ts in sessions)
