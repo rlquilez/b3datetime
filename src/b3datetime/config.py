@@ -149,17 +149,15 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    """Instância de configurações, memoizada por processo."""
+    """Settings do processo, lidas do ambiente (e do ``.env``) na primeira chamada.
+
+    Só o ``create_app()`` sem argumento as usa. Nada no pacote as instancia no import:
+    um global de módulo lia o ``.env`` no ``import`` (e um ``TIMEZONE`` inválido
+    derrubava o import), e os routers liam essas settings globais em vez das da app.
+    """
     return Settings()
 
 
-# Instância de conveniência para os metadados estáticos consumidos por `create_app()`.
-# Em código novo prefira `get_settings()` ou a dependência `SettingsDep`.
-settings = get_settings()
-
-TZ = settings.tz
-
-
-def get_current_datetime(tz: ZoneInfo | None = None) -> datetime:
-    """Data e hora atual no timezone configurado."""
-    return datetime.now(tz or TZ)
+def get_current_datetime(tz: ZoneInfo) -> datetime:
+    """Data e hora atual no timezone dado — o das settings da app, sempre explícito."""
+    return datetime.now(tz)

@@ -10,7 +10,9 @@ from freezegun import freeze_time
 
 from b3datetime.config import Settings
 from b3datetime.main import create_app
+from b3datetime.services.calendar_service import TradingCalendar
 from b3datetime.services.redis_service import RedisService
+from tests.conftest import build_app
 
 
 async def test_calendar_info(client: httpx.AsyncClient) -> None:
@@ -204,3 +206,23 @@ async def test_calendar_info_com_calendario_vazio(
         r = await c.get("/v1/calendar-info")
     assert r.status_code == 503
     assert "vazio" in r.json()["detail"]["message"]
+
+
+async def test_settings_da_app_valem_nos_endpoints_de_data(
+    redis_service: RedisService, test_calendar: TradingCalendar, make_client: object
+) -> None:
+    """Regressão: ``SettingsDep`` lia o ``get_settings()`` global (que lê o ``.env``), e não
+    as settings passadas a ``create_app``. Uma app criada com ``max_range_days=10`` ainda
+    aceitava 3660 dias em ``/v1/trading-days`` e anunciava 3660 em ``/v1/calendar-info``.
+    """
+    app = build_app(
+        Settings(_env_file=None, max_range_days=10, exchange_name="BVMF"),
+        redis_service,
+        test_calendar,
+    )
+    async with make_client(app) as c:  # type: ignore[operator]
+        info = (await c.get("/v1/calendar-info")).json()
+        r = await c.get("/v1/trading-days", params={"start": "2024-01-02", "end": "2024-01-31"})
+    assert info["max_range_days"] == 10
+    assert r.status_code == 400
+    assert "máximo de 10 dias" in r.json()["detail"]["message"]

@@ -766,7 +766,7 @@ source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements-dev.txt
 cp .env.example .env
 
-uvicorn --app-dir src b3datetime.main:app --reload --port 8000
+uvicorn --app-dir src --factory b3datetime.main:create_app --reload --port 8000
 # ou: PYTHONPATH=src python -m b3datetime
 ```
 

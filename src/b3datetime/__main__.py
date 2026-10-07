@@ -14,8 +14,11 @@ from b3datetime.main import configure_logging
 
 def run() -> None:
     configure_logging()
+    # Modo factory: não existe `app` de módulo (criá-lo no import lia o ambiente e o
+    # `.env` no `import`); o uvicorn chama `create_app()` depois de iniciar.
     uvicorn.run(
-        "b3datetime.main:app",
+        "b3datetime.main:create_app",
+        factory=True,
         host="127.0.0.1",
         port=8000,
         reload=True,

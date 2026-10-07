@@ -73,7 +73,7 @@ def test_import_nao_faz_io() -> None:
         import time
         t = time.time()
         import b3datetime.main
-        assert b3datetime.main.app is not None
+        assert callable(b3datetime.main.create_app)
         elapsed = time.time() - t
         assert elapsed < 3, f"import levou {elapsed:.2f}s; parece haver I/O"
     """)

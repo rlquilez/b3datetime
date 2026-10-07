@@ -9,7 +9,8 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ### Alterado
 
-- O código passa a seguir o layout `src/` padrão do Python: o pacote se chama `b3datetime` (`src/b3datetime/`) e a aplicação ASGI é `b3datetime.main:app`. Só afeta quem sobrescreve o comando do container — o `CMD` da imagem já usa o caminho novo. (#52)
+- O código passa a seguir o layout `src/` padrão do Python: o pacote se chama `b3datetime` (`src/b3datetime/`). (#52)
+- A aplicação é iniciada em modo *factory* — `uvicorn b3datetime.main:create_app --factory` — e não existe mais um `app` de módulo: criá-lo no `import` lia o ambiente e o `.env` (e um `TIMEZONE` inválido derrubava o import antes de qualquer log). Só afeta quem sobrescreve o comando do container; o `CMD` da imagem já usa o comando novo. (#60)
 
 ### Corrigido
 

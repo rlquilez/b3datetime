@@ -90,9 +90,9 @@ class RedisUnavailableError(RuntimeError):
 class RedisCache:
     """Cache em memória com timestamp por chave."""
 
-    def __init__(self, now_fn: NowFn | None = None) -> None:
+    def __init__(self, now_fn: NowFn) -> None:
         self._entries: dict[str, tuple[str, datetime]] = {}
-        self._now: NowFn = now_fn or get_current_datetime
+        self._now: NowFn = now_fn
 
     def set(self, key: str, value: str) -> None:
         self._entries[key] = (value, self._now())

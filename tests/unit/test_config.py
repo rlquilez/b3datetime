@@ -108,12 +108,24 @@ def test_chave_desconhecida_no_env_nao_impede_o_boot(tmp_path: Path) -> None:
     assert Settings(_env_file=str(env_file)).redis_url == "redis://x:6379"
 
 
-def test_get_current_datetime_tem_fuso() -> None:
+def test_get_current_datetime_usa_o_fuso_pedido() -> None:
+    """O fuso é sempre explícito (o das settings da app); não há mais um ``TZ`` global."""
     from b3datetime.config import get_current_datetime
 
-    now = get_current_datetime()
-    assert now.tzinfo is not None
+    tz = Settings(_env_file=None).tz
+    now = get_current_datetime(tz)
+    assert now.tzinfo is tz
     assert now.utcoffset() is not None
+
+
+def test_importar_o_pacote_nao_instancia_settings() -> None:
+    """Regressão: ``config.settings``/``config.TZ`` e ``main.app`` liam o ambiente e o ``.env``
+    no ``import`` — e um ``TIMEZONE`` inválido derrubava o import antes de qualquer log."""
+    from b3datetime import config, main
+
+    assert not hasattr(config, "settings")
+    assert not hasattr(config, "TZ")
+    assert not hasattr(main, "app")
 
 
 def test_get_settings_e_memoizado() -> None:

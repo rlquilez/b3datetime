@@ -13,7 +13,6 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
 from b3datetime.config import Settings
-from b3datetime.config import settings as default_settings
 from b3datetime.routers.openapi_examples import API_KEY_HEADER, TAG_ROOT, success_response
 
 router = APIRouter(tags=[TAG_ROOT])
@@ -21,9 +20,12 @@ router = APIRouter(tags=[TAG_ROOT])
 DESCRIPTION = "API para consultar horários e dias de operação da B3"
 MANAGED_BY = "Kong Gateway"
 
+# Exemplo de documentação montado dos DEFAULTS dos campos, e não de uma instância de
+# Settings: instanciar no import lia o ambiente e o `.env`, e o exemplo do OpenAPI (e o
+# snapshot do contrato) mudava conforme a máquina que o gerava.
 ROOT_EXAMPLE = {
-    "name": default_settings.api_title,
-    "version": default_settings.api_version,
+    "name": Settings.model_fields["api_title"].default,
+    "version": Settings.model_fields["api_version"].default,
     "description": DESCRIPTION,
     "docs": {"swagger": "/docs", "redoc": "/redoc", "openapi": "/openapi.json"},
     "endpoints": {

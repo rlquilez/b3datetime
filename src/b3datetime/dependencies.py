@@ -9,13 +9,23 @@ substituir a dependência inteira.
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import Depends, HTTPException, Request, status
 
-from b3datetime.config import Settings, get_settings
+from b3datetime.config import Settings
 from b3datetime.services.calendar_service import TradingCalendar
 from b3datetime.services.redis_service import RedisService
+
+
+def get_app_settings(request: Request) -> Settings:
+    """Settings da aplicação que atende o request — as passadas a ``create_app``.
+
+    Antes era o ``get_settings()`` global: uma app criada com ``max_range_days=10``
+    ainda aplicava o valor do ambiente nos endpoints de data, e o ``.env`` local
+    vazava para os testes.
+    """
+    return cast("Settings", request.app.state.settings)
 
 
 def get_redis_service(request: Request) -> RedisService:
@@ -51,6 +61,6 @@ def get_calendar(request: Request) -> TradingCalendar:
     return calendar
 
 
-SettingsDep = Annotated[Settings, Depends(get_settings)]
+SettingsDep = Annotated[Settings, Depends(get_app_settings)]
 RedisDep = Annotated[RedisService, Depends(get_redis_service)]
 CalendarDep = Annotated[TradingCalendar, Depends(get_calendar)]

@@ -50,7 +50,7 @@ python3.14 -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
 cp .env.example .env
 
-uvicorn --app-dir src b3datetime.main:app --reload --port 8000   # or: PYTHONPATH=src python -m b3datetime
+uvicorn --app-dir src --factory b3datetime.main:create_app --reload --port 8000   # or: PYTHONPATH=src python -m b3datetime
 
 ruff check . && ruff format --check . && mypy   # mypy is strict over src, scripts and tests (targets come from pyproject)
 pytest                  # ~330 tests (`pytest --co -q | tail -1`; the e2e ones are deselected), coverage gate at 90% (currently ~99.8%)
@@ -76,11 +76,11 @@ redis-cli SET b3:trading:hours:close "18:00"
 
 ## Architecture
 
-**src layout: the package is `b3datetime`, at `src/b3datetime/`** (imports are `b3datetime.*`; pytest has `pythonpath = ["src", "."]`; the image copies it to `/app/b3datetime`; uvicorn runs `b3datetime.main:app`). It used to be a package literally named `src`, which mutmut 3 refuses outright (`assert not name.startswith("src.")` in `stats.record_trampoline_hit`) and which other tools treat as a layout directory rather than a package (#52). Coverage paths still start with `src/`, so the `filename="src/` tripwire and `sonar.sources=src` are unchanged.
+**src layout: the package is `b3datetime`, at `src/b3datetime/`** (imports are `b3datetime.*`; pytest has `pythonpath = ["src", "."]`; the image copies it to `/app/b3datetime`; uvicorn runs `b3datetime.main:create_app --factory`). It used to be a package literally named `src`, which mutmut 3 refuses outright (`assert not name.startswith("src.")` in `stats.record_trampoline_hit`) and which other tools treat as a layout directory rather than a package (#52). Coverage paths still start with `src/`, so the `filename="src/` tripwire and `sonar.sources=src` are unchanged.
 
 The module map lives in the README (`Arquitetura → Mapa de módulos`, a Mermaid diagram) — keep it in sync when adding a module. Routers: `root.py` (`GET /`), `hours.py`, `dates.py`, `health.py`; shared OpenAPI metadata (tags, security scheme, examples) in `routers/openapi_examples.py`; `middleware.py` holds the proxy-prefix middleware.
 
-**Nothing does I/O at import time.** Services are built in `lifespan` (`main.py`) and stored on `app.state`; routers receive them via `Depends` (`src/b3datetime/dependencies.py`). This is load-bearing — see below.
+**Nothing does I/O at import time.** Services are built in `lifespan` (`main.py`) and stored on `app.state`; routers receive them via `Depends` (`src/b3datetime/dependencies.py`). This is load-bearing — see below. That includes **settings**: there is no module-level `settings`, `TZ` or `app` (uvicorn runs in factory mode). `SettingsDep` resolves `request.app.state.settings` (the ones passed to `create_app`), never the process-global `get_settings()` — which only `create_app()` without arguments uses. `get_current_datetime(tz)` takes the timezone explicitly. `ROOT_EXAMPLE` is built from the fields' *defaults*, so the OpenAPI example (and the contract snapshot) do not depend on the machine's environment (#60).
 
 ### Invariants that exist because of specific bugs
 

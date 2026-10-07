@@ -88,7 +88,9 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 # (127.0.0.1) faz o uvicorn descartar X-Forwarded-Proto/For. O efeito é url_for e
 # os 307 de redirect_slashes emitirem http:// num site HTTPS, e todo log de acesso
 # registrar o IP do proxy em vez do cliente.
-CMD ["uvicorn", "b3datetime.main:app", \
+# --factory: não há `app` de módulo; o uvicorn chama `create_app()` (ler o ambiente e o
+# `.env` no `import` violava a invariante "nenhum I/O no import").
+CMD ["uvicorn", "b3datetime.main:create_app", "--factory", \
      "--host", "0.0.0.0", \
      "--port", "8000", \
      "--proxy-headers", \
