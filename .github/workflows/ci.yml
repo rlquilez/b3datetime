@@ -850,6 +850,69 @@ jobs:
           path: zap/
           if-no-files-found: ignore
 
+  performance:
+    name: Performance · k6
+    timeout-minutes: 15
+    # Teste de carga de fumaça (tests/load/smoke.js) contra a imagem verificada, atrás de
+    # tests/stack/compose.yaml: todas as operações do contrato a taxa constante, o pior
+    # caso de /v1/trading-days (span máximo, exclude=true) em paralelo, e o health medido
+    # durante os dois. Reprova com qualquer falha, check, iteração descartada, p95 acima
+    # do limiar por endpoint ou health sob carga mais de 5× mais lento que o ocioso do
+    # mesmo run (limiar relativo: tolera um runner lento, não um event loop bloqueado).
+    # O scripts/k6_resumo.py exige amostras em todo endpoint do contrato.
+    # Mesmo artefato `imagem` do e2e e do DAST: exatamente os bits do smoke e do Trivy.
+    needs: [docker-verify]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: imagem
+      - name: Carregar a imagem verificada
+        run: gunzip -c imagem.tar.gz | docker load
+
+      - name: Subir a stack (app + Redis semeado)
+        env:
+          IMAGE: b3datetime:ci
+        run: docker compose -f tests/stack/compose.yaml up -d --wait
+
+      # A versão do k6 fica fixada por digest em tests/load/Dockerfile, onde o
+      # Dependabot (docker, /tests/load) propõe as novas.
+      - name: Construir a imagem do k6
+        run: docker build -t b3datetime-k6 tests/load
+
+      # O usuário `k6` da imagem (uid 12345) escreve o resultado no diretório montado.
+      - name: Carga (k6)
+        run: |
+          mkdir -p k6 && chmod 777 k6
+          docker run --rm --network b3stack_default \
+            -v "$PWD/tests/load:/scripts:ro" -v "$PWD/k6:/out:rw" \
+            b3datetime-k6 run --quiet --summary-export=/out/k6.json /scripts/smoke.js
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        if: ${{ !cancelled() && hashFiles('k6/k6.json') != '' }}
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      # Só biblioteca padrão: nada a instalar.
+      - name: Tripwire de cobertura e resumo
+        if: ${{ !cancelled() && hashFiles('k6/k6.json') != '' }}
+        run: python scripts/k6_resumo.py k6/k6.json tests/load/smoke.js tests/contract/openapi.json
+
+      - name: Logs da stack
+        if: failure()
+        run: docker compose -f tests/stack/compose.yaml logs --no-color
+
+      - name: Publicar resultado do k6
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: k6-report
+          path: k6/
+          if-no-files-found: ignore
+
   docker-publish:
     name: Entrega · publicar imagem
     timeout-minutes: 45
@@ -1101,6 +1164,7 @@ jobs:
       - docker-verify
       - e2e
       - dast
+      - performance
     runs-on: ubuntu-latest
     steps:
       # O JSON chega por variável de ambiente, nunca interpolado no script: `${{ }}`
@@ -1144,6 +1208,7 @@ jobs:
               "docker-verify": "Imagem · build, smoke e Trivy",
               "e2e": "E2E · contrato 100%",
               "dast": "DAST · OWASP ZAP",
+              "performance": "Performance · k6",
           }
           icone = {"success": "✅", "skipped": "⏭️", "failure": "❌", "cancelled": "🚫"}
 

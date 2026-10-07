@@ -235,3 +235,5 @@ mutmut-run.log
 
 # DAST (OWASP ZAP): relatórios e árvore de sites
 zap/
+# Performance (k6): resultado exportado
+k6/

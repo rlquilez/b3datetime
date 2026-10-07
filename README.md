@@ -811,6 +811,7 @@ A suíte cobre 100% das linhas de `src/b3datetime/` e é organizada em **blocos*
 | `tests/property/` | Testes · property-based | Propriedades sobre entradas geradas: a redação da URL do Redis nunca levanta, nunca vaza credencial, é idempotente | Hypothesis, 500 exemplos por propriedade no CI |
 | `tests/e2e/` | E2E · contrato 100% | **100% dos endpoints publicados**, contra a imagem real: toda resposta documentada de toda operação, as consultas e a documentação | containers com Redis real e o calendário BVMF real; fora da execução padrão (`-m e2e`) |
 | `tests/dast/` | DAST · OWASP ZAP | **Varredura ativa** da imagem real: toda operação do contrato, `/docs`, `/redoc` e os assets JavaScript vendorizados | ZAP (Automation Framework) na rede de `tests/stack/compose.yaml`, com Redis semeado e `ROOT_PATH` |
+| `tests/load/` | Performance · k6 | **Carga concorrente** na imagem real: todas as operações a taxa constante, o pior caso de `/v1/trading-days` em paralelo e o health medido durante os dois | k6 na mesma stack; o health sob carga não pode ficar mais de 5× mais lento que o ocioso |
 
 A cobertura de cada bloco é parcial; o job **Cobertura · combinada** soma os blocos, aplica o gate de 90% e reprova se qualquer teste tiver sido pulado.
 
@@ -887,8 +888,9 @@ flowchart LR
     lint & typecheck & cov --> dv["docker-verify<br/>build amd64 · smoke test · Trivy"]
     dv --> e2e["e2e<br/>100% dos endpoints · 4 ambientes"]
     dv --> dast["DAST (OWASP ZAP)<br/>varredura ativa da imagem"]
+    dv --> perf["performance (k6)<br/>carga concorrente"]
     pub --> rel["release (versão nova)<br/>tag vX.Y.Z · X · X.Y · X.Y.Z · GitHub Release"]
-    lint & typecheck & test & cov & sonar & bandit & pipaudit & gitleaks & codeql & trivyfs & contract & dv & e2e & dast & depreview --> ok["ci-ok<br/>agrega todos os blocos"]
+    lint & typecheck & test & cov & sonar & bandit & pipaudit & gitleaks & codeql & trivyfs & contract & dv & e2e & dast & perf & depreview --> ok["ci-ok<br/>agrega todos os blocos"]
     ok --> pub["docker-publish (push na main)<br/>latest · sha-abc1234"] --> sbom["SBOM"]
 ```
 
@@ -910,11 +912,12 @@ flowchart LR
 | Smoke test | `scripts/smoke_image.sh` | container real, com e sem prefixo, Redis real e `HEALTHCHECK` |
 | E2E | `pytest -m e2e tests/e2e` contra a imagem | 100% das respostas documentadas das 8 operações, consultas e documentação; nenhum teste pode ser pulado |
 | DAST | OWASP ZAP (`tests/dast/plano-imagem.yaml`) | varredura ativa contra a imagem verificada; toda operação do contrato tem de ser alcançada com 2xx; alerta Low ou acima reprova, e cada filtro é justificado no plano |
+| Performance | k6 (`tests/load/smoke.js`) | carga a taxa constante contra a imagem verificada: nenhuma falha, nenhuma iteração descartada, p95 por endpoint abaixo do limiar e health sob carga até 5× o ocioso do mesmo run |
 | Qualidade | SonarQube | quality gate **bloqueante**: coverage, duplicação e issues em código novo |
 | Publicação | imagem multi-arch + SBOM | só em push na `main`, só com tudo verde |
 | Release | tag, retag da imagem e GitHub Release | automática quando a `api_version` do commit publicado ainda não tem Release |
 
-- `ci-ok` é o único check agregador, e o `docker-publish` depende dele: nenhuma imagem é publicada sem **todos** os blocos aprovados — lint, tipagem, testes, SAST, SCA, segredos, smoke, E2E, DAST, scan da imagem e quality gate. Em push, um bloco pulado também reprova; o resumo do run traz a tabela de blocos com o resultado de cada um.
+- `ci-ok` é o único check agregador, e o `docker-publish` depende dele: nenhuma imagem é publicada sem **todos** os blocos aprovados — lint, tipagem, testes, SAST, SCA, segredos, smoke, E2E, DAST, performance, scan da imagem e quality gate. Em push, um bloco pulado também reprova; o resumo do run traz a tabela de blocos com o resultado de cada um.
 - Actions fixadas por SHA de commit (com a versão em comentário, atualizada pelo Dependabot), `persist-credentials: false` em todo checkout e `timeout-minutes` em todo job.
 - É o **único workflow** do repositório: não há gatilho de tag. A release é um job do próprio `ci.yml` que roda depois da publicação (ver [Versionamento e Release](#️-versionamento-e-release)).
 - Em PRs do Dependabot o job do SonarQube é pulado (o PR não recebe os secrets); o restante roda normalmente.

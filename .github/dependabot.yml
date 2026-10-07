@@ -53,9 +53,10 @@ updates:
   # de serem adotados. Trocar de Python (3.15) é decisão deliberada — mexe na matriz
   # do CI, em sonar.python.version e na documentação —, por isso minor e major são
   # ignorados.
-  # /tests/dast: a imagem do OWASP ZAP do job DAST, também fixada por versão e digest.
+  # /tests/dast e /tests/load: as imagens do OWASP ZAP (DAST) e do k6 (performance),
+  # também fixadas por versão e digest.
   - package-ecosystem: "docker"
-    directories: ["/", "/tests/dast"]
+    directories: ["/", "/tests/dast", "/tests/load"]
     schedule:
       interval: "weekly"
     labels: ["dependencies"]

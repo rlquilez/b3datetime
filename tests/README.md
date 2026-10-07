@@ -24,6 +24,7 @@ Cada bloco de teste é **um diretório** em `tests/` e **um job** no [`ci.yml`](
 | `tests/architecture/` | **Arquitetura** | as regras de desenho: camadas e dependências entre módulos (import-linter), import sem I/O (audit hook) e as convenções do CLAUDE.md sobre a AST | nenhuma |
 | `tests/e2e/` | **E2E** | a **imagem Docker** publicável, caixa-preta: 100% das respostas documentadas, consultas de domínio, documentação, resiliência | Docker (4 ambientes de containers) |
 | `tests/dast/` | **DAST** | a mesma imagem **sob ataque**: varredura ativa do OWASP ZAP em toda operação do contrato, nas páginas de documentação e nos assets JavaScript vendorizados | Docker (`tests/stack/compose.yaml` + ZAP) |
+| `tests/load/` | **Performance** | a mesma imagem **sob carga concorrente**: todas as operações a taxa constante, o pior caso de `/v1/trading-days` em paralelo e o health medido durante os dois | Docker (`tests/stack/compose.yaml` + k6) |
 
 ## O pipeline, bloco a bloco
 
@@ -73,6 +74,7 @@ flowchart LR
         dv["Imagem · build, smoke e Trivy"]:::imagem
         e2e["E2E · contrato 100%"]:::imagem
         dast["DAST · OWASP ZAP<br/><i>varredura ativa</i>"]:::imagem
+        perf["Performance · k6<br/><i>carga concorrente</i>"]:::imagem
     end
 
     ok{{"CI OK"}}:::gate
@@ -82,7 +84,7 @@ flowchart LR
 
     unit & comp & integ & prop & arq --> cov --> sonar
     unit & comp & integ & prop --> mut
-    lint & mypy & cov --> dv --> e2e & dast
+    lint & mypy & cov --> dv --> e2e & dast & perf
     E1 & E2 & E3 & E4 --> ok --> pub --> rel & sbom
 ```
 
@@ -91,7 +93,7 @@ flowchart LR
 | ① Estática | Não executa nada da aplicação: é o mais barato e falha mais cedo. Roda em paralelo, sem dependências. |
 | ② Em processo | Testes rápidos, sem container. Cada bloco publica a sua cobertura parcial e o seu `junit`. |
 | ③ Consolidação | A cobertura só faz sentido somada: o gate de 90% é aplicado **uma vez**, sobre os blocos combinados. O Sonar consome o resultado. |
-| ④ Imagem | Só se constrói e se testa a imagem depois de o código passar em processo — testar a imagem de um código que já falhou é desperdício. E2E e DAST carregam o artefato do `docker-verify`: atacam exatamente os bits que passaram no smoke e no Trivy, em paralelo. |
+| ④ Imagem | Só se constrói e se testa a imagem depois de o código passar em processo — testar a imagem de um código que já falhou é desperdício. E2E, DAST e performance carregam o artefato do `docker-verify` e exercitam, em paralelo, exatamente os bits que passaram no smoke e no Trivy. |
 | Gate e entrega | `CI OK` decide; `docker-publish` só roda com ele verde. `release` e `SBOM` vêm depois da publicação. |
 
 ## Blocos
@@ -306,6 +308,55 @@ flowchart LR
 
 Sabotagem de referência: com os filtros movidos para depois da varredura, eles não se aplicam aos alertas já levantados, e o `exitStatus` reprova (`An alert has been raised with a risk of at least: Low`). Com os assets antigos, a 10003 reprova.
 
+### Performance — `tests/load/`
+
+O teste de escala em processo (`tests/api/test_performance.py`) prova que `/v1/trading-days` não voltou a ser quadrático, mas roda uma requisição por vez. Uma classe de regressão só aparece com **várias requisições simultâneas** contra o servidor real, de um único worker do uvicorn:
+
+- uma chamada **bloqueante** dentro de um handler `async` (I/O síncrono, `time.sleep`, CPU pesado) congela o event loop — e com ele o `/v1/health` que o orquestrador consulta;
+- 5xx ou conexão recusada sob concorrência;
+- vazão abaixo do mínimo.
+
+O [k6](https://grafana.com/docs/k6/) roda `tests/load/smoke.js` contra a imagem verificada, na rede de `tests/stack/compose.yaml`:
+
+```mermaid
+flowchart LR
+    classDef prep fill:#f6f8fa,stroke:#8c959f,color:#24292f
+    classDef carga fill:#f3e8fb,stroke:#5319e7,color:#2d0c80
+    classDef gate fill:#ffffff,stroke:#24292f,color:#24292f,stroke-width:2px
+
+    subgraph setup["setup()"]
+        direction TB
+        info["janela de<br/>/v1/calendar-info"]:::prep --> ocioso["health ocioso<br/><i>50× em série → p95</i>"]:::prep
+    end
+    subgraph carga["30 s de carga simultânea, taxa constante"]
+        direction TB
+        mix["mix · todas as operações<br/><i>10 it/s</i>"]:::carga
+        caro["caro · trading-days<br/><i>span máximo, exclude · 5/s</i>"]:::carga
+        health["health sob carga<br/><i>10/s</i>"]:::carga
+    end
+    ocioso --> carga --> lim{{"limiares do k6"}}:::gate
+    carga --> trip{{"scripts/k6_resumo.py<br/>amostras em todo endpoint"}}:::gate
+```
+
+| Limiar | Valor | O que pega |
+|---|---|---|
+| `http_req_failed` | `== 0` | qualquer erro HTTP ou de conexão |
+| `checks` | `== 100%` | status diferente de `200` ou corpo que não é JSON |
+| `dropped_iterations` | `== 0` | a taxa constante não foi sustentada |
+| p95 por endpoint | `< 250 ms` (caro: `< 750 ms`) | regressão grosseira de latência; localmente todos respondem em 1–14 ms |
+| health sob carga | p95 `< 5×` o ocioso do mesmo run, com piso de 10 ms | event loop bloqueado. Ser **relativo** tolera um runner lento, mas não um loop parado |
+
+**Visto reprovando.** Uma imagem sabotada com `time.sleep(0.1)` no cálculo do período cruza 10 limiares: health 217× o ocioso, p95 de 1,2 a 2,2 s e 155 iterações descartadas (exit 99). A imagem real sustenta ~97 req/s com p95 ≤ 14 ms e health sob carga a 1,4× o ocioso.
+
+**A suspeita que não se confirmou.** O plano previa que `get_trading_days` (`async def`, com CPU no event loop) degradaria o health e teria de virar `def`, rodando no threadpool. Medido, o pior caso (span máximo com `exclude=true`) custa 3–8 ms e o health sob carga fica em 1,4× o ocioso. Não houve mudança, e o próprio k6 é o alarme se isso mudar.
+
+**Tripwires.**
+- `scripts/k6_resumo.py` exige **amostras** em todo endpoint. Um limiar de p95 sobre um endpoint que nunca foi chamado passa em silêncio, porque o p95 de nada é zero.
+- O script também reprova qualquer limiar cruzado, de forma independente.
+- `tests/unit/test_scripts_k6_resumo.py` exige que o `ENDPOINTS` do script cubra exatamente as operações do contrato: um endpoint novo sem cenário de carga reprova antes do CI.
+
+O k6 (2.3.0) fica fixado por digest em `tests/load/Dockerfile`, no mesmo padrão do ZAP, com Dependabot em `/tests/load`. Os actions `grafana/setup-k6-action` e `run-k6-action` seriam dois actions a mais para pinar e auditar. O script fica fora do Sonar (`sonar.test.exclusions`): é JavaScript do runtime do k6, com globais como `__ENV`, e quem o valida é o próprio k6 a cada run.
+
 ## Tripwires: provar que o teste rodou
 
 Um teste que deixa de rodar sem ninguém perceber é pior do que um teste que falha. Por isso:
@@ -319,6 +370,7 @@ Um teste que deixa de rodar sem ninguém perceber é pior do que um teste que fa
 | Pares cobertos = pares documentados | `tests/e2e/test_contrato.py` | rota ou código novo sem caso E2E |
 | `ci-ok` só aceita pulo onde ele é o desenho | `CI OK` | um bloco pulado liberar a publicação |
 | Toda operação do contrato alcançada com **2xx** pela varredura | `DAST · OWASP ZAP` (`scripts/dast_resumo.py`) | o ZAP "passar" sem ter atacado a lógica — como no `422` de `/v1/trading-days` |
+| Todo endpoint do contrato com cenário **e** com amostras na carga | `Performance · k6` (`scripts/k6_resumo.py`) e `tests/unit/test_scripts_k6_resumo.py` | um limiar de p95 passar sobre um endpoint que nunca foi chamado |
 | Todo arquivo do repositório lido pelos testes está no sandbox da mutação | `tests/architecture/test_convencoes.py` | a execução limpa do mutmut reprovar e derrubar o job antes de avaliar mutante algum (o push de #67) |
 | Toda imagem base fixada por digest e acompanhada pelo Dependabot | `tests/unit/test_imagens_fixadas.py` | uma tag mutável trocar a imagem sem commit, ou um digest fixo congelar as correções de segurança |
 
@@ -345,7 +397,7 @@ docker run -d --rm -p 6379:6379 redis:8.10-alpine   # um Redis descartável para
 docker build -t b3datetime:e2e . && E2E_IMAGE=b3datetime:e2e python -m pytest -m e2e tests/e2e --no-cov
 ```
 
-DAST, como no CI (~3 min, dos quais ~2 de varredura ativa):
+DAST e performance, como no CI (o ZAP leva ~3 min, dos quais ~2 de varredura ativa; o k6, ~35 s):
 
 ```bash
 docker build -t b3datetime:ci . && IMAGE=b3datetime:ci docker compose -f tests/stack/compose.yaml up -d --wait
@@ -353,5 +405,9 @@ docker build -t b3datetime-zap tests/dast && mkdir -p zap && chmod 777 zap
 docker run --rm --network b3stack_default -v "$PWD/tests/dast:/zap/plano:ro" -v "$PWD/zap:/zap/wrk:rw" \
   b3datetime-zap zap.sh -cmd -autorun /zap/plano/plano-imagem.yaml
 python scripts/dast_resumo.py zap/zap.json zap/arvore.yaml tests/contract/openapi.json
+docker build -t b3datetime-k6 tests/load && mkdir -p k6 && chmod 777 k6
+docker run --rm --network b3stack_default -v "$PWD/tests/load:/scripts:ro" -v "$PWD/k6:/out:rw" \
+  b3datetime-k6 run --quiet --summary-export=/out/k6.json /scripts/smoke.js
+python scripts/k6_resumo.py k6/k6.json tests/load/smoke.js tests/contract/openapi.json
 IMAGE=b3datetime:ci docker compose -f tests/stack/compose.yaml down -v
 ```

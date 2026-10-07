@@ -48,3 +48,4 @@ coverage-*.dat
 junit-*.xml
 mutants/
 zap/
+k6/
