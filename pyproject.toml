@@ -321,7 +321,7 @@ source_paths = ["src/"]
 # Além de tests/ e pyproject.toml (copiados por padrão): o que os testes leem do disco.
 # Faltar um aqui reprova a execução limpa e o job inteiro — .github/ faltou no push de
 # #67; tests/architecture/test_convencoes.py agora confere.
-also_copy = ["scripts/", "README.md", "CHANGELOG.md", ".env.example", ".github/"]
+also_copy = ["scripts/", "README.md", "CHANGELOG.md", ".env.example", ".github/", "Dockerfile"]
 do_not_mutate = [
     "src/b3datetime/__main__.py",                 # entrypoint de desenvolvimento
     "src/b3datetime/routers/openapi_examples.py", # só dados de documentação

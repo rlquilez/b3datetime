@@ -785,6 +785,71 @@ jobs:
           path: e2e-junit.xml
           if-no-files-found: ignore
 
+  dast:
+    name: DAST · OWASP ZAP
+    timeout-minutes: 25
+    # Varredura ATIVA do OWASP ZAP (Automation Framework, tests/dast/plano-imagem.yaml)
+    # contra a imagem verificada, atrás de tests/stack/compose.yaml: Redis semeado e
+    # ROOT_PATH, o formato que o Kong entrega. As operações vêm do /openapi.json servido;
+    # o spider alcança /docs, /redoc e os assets vendorizados — o 10003 (Vulnerable JS
+    # Library) é o único scanner que enxerga o Swagger UI e o ReDoc. Alerta Low ou acima
+    # reprova; cada filtro do plano é justificado. O scripts/dast_resumo.py exige que
+    # toda operação do contrato tenha sido alcançada com 2xx.
+    # Mesmo artefato `imagem` do e2e: exatamente os bits do smoke e do Trivy.
+    needs: [docker-verify]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: imagem
+      - name: Carregar a imagem verificada
+        run: gunzip -c imagem.tar.gz | docker load
+
+      - name: Subir a stack (app + Redis semeado)
+        env:
+          IMAGE: b3datetime:ci
+        run: docker compose -f tests/stack/compose.yaml up -d --wait
+
+      # A versão do ZAP fica fixada por digest em tests/dast/Dockerfile, onde o
+      # Dependabot (docker, /tests/dast) propõe as novas.
+      - name: Construir a imagem do ZAP
+        run: docker build -t b3datetime-zap tests/dast
+
+      # O usuário `zap` da imagem (uid 1000) escreve os relatórios no diretório montado.
+      - name: Varredura ZAP
+        run: |
+          mkdir -p zap && chmod 777 zap
+          docker run --rm --network b3stack_default \
+            -v "$PWD/tests/dast:/zap/plano:ro" -v "$PWD/zap:/zap/wrk:rw" \
+            b3datetime-zap zap.sh -cmd -autorun /zap/plano/plano-imagem.yaml
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        if: ${{ !cancelled() && hashFiles('zap/zap.json') != '' }}
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      # Só o PyYAML, na versão fixada no requirements-dev.txt (fonte única do pin).
+      - name: Tripwire de cobertura e resumo
+        if: ${{ !cancelled() && hashFiles('zap/zap.json') != '' }}
+        run: |
+          pip install "$(grep -i '^pyyaml==' requirements-dev.txt)"
+          python scripts/dast_resumo.py zap/zap.json zap/arvore.yaml tests/contract/openapi.json
+
+      - name: Logs da stack
+        if: failure()
+        run: docker compose -f tests/stack/compose.yaml logs --no-color
+
+      - name: Publicar relatório do ZAP
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dast-report
+          path: zap/
+          if-no-files-found: ignore
+
   docker-publish:
     name: Entrega · publicar imagem
     timeout-minutes: 45
@@ -1035,6 +1100,7 @@ jobs:
       - trivy-fs
       - docker-verify
       - e2e
+      - dast
     runs-on: ubuntu-latest
     steps:
       # O JSON chega por variável de ambiente, nunca interpolado no script: `${{ }}`
@@ -1077,6 +1143,7 @@ jobs:
               "sonar": "Qualidade · SonarQube",
               "docker-verify": "Imagem · build, smoke e Trivy",
               "e2e": "E2E · contrato 100%",
+              "dast": "DAST · OWASP ZAP",
           }
           icone = {"success": "✅", "skipped": "⏭️", "failure": "❌", "cancelled": "🚫"}
 

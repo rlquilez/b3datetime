@@ -36,11 +36,6 @@ updates:
       actions:
         patterns: ["*"]
 
-  # A base é python:3.14-alpine fixada por digest: o que chega aqui são os digests
-  # novos da mesma tag (patches do Python e do Alpine), testados pelo CI no PR antes
-  # de serem adotados. Trocar de Python (3.15) é decisão deliberada — mexe na matriz
-  # do CI, em sonar.python.version e na documentação —, por isso minor e major são
-  # ignorados.
   # Imagem do Redis dos testes: fonte única em tests/stack/compose.yaml (o service do CI,
   # o smoke e o E2E seguem — tests/unit/test_imagens_fixadas.py confere).
   - package-ecosystem: "docker-compose"
@@ -53,8 +48,14 @@ updates:
     commit-message:
       prefix: "chore"
 
+  # A base é python:3.14-alpine fixada por digest: o que chega aqui são os digests
+  # novos da mesma tag (patches do Python e do Alpine), testados pelo CI no PR antes
+  # de serem adotados. Trocar de Python (3.15) é decisão deliberada — mexe na matriz
+  # do CI, em sonar.python.version e na documentação —, por isso minor e major são
+  # ignorados.
+  # /tests/dast: a imagem do OWASP ZAP do job DAST, também fixada por versão e digest.
   - package-ecosystem: "docker"
-    directory: "/"
+    directories: ["/", "/tests/dast"]
     schedule:
       interval: "weekly"
     labels: ["dependencies"]

@@ -145,5 +145,5 @@ def test_sandbox_da_mutacao_tem_todo_arquivo_que_os_testes_leem() -> None:
         for arquivo in [*(RAIZ / "tests").rglob("*.py"), *(RAIZ / "scripts").glob("*.py")]
         for nome in leitura.findall(arquivo.read_text(encoding="utf-8"))
     }
-    assert ".github" in lidos, "o padrão de busca deixou de achar as leituras"
+    assert {".github", "Dockerfile"} <= lidos, "o padrão de busca deixou de achar as leituras"
     assert lidos <= copiados, f"lidos pelos testes e fora do sandbox: {lidos - copiados}"

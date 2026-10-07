@@ -23,6 +23,7 @@ Cada bloco de teste é **um diretório** em `tests/` e **um job** no [`ci.yml`](
 | `tests/property/` | **Property-based** | propriedades que valem para **toda** entrada gerada, não só para os exemplos escolhidos: nunca levanta, nunca vaza, é idempotente, preserva o resto | nenhuma — Hypothesis |
 | `tests/architecture/` | **Arquitetura** | as regras de desenho: camadas e dependências entre módulos (import-linter), import sem I/O (audit hook) e as convenções do CLAUDE.md sobre a AST | nenhuma |
 | `tests/e2e/` | **E2E** | a **imagem Docker** publicável, caixa-preta: 100% das respostas documentadas, consultas de domínio, documentação, resiliência | Docker (4 ambientes de containers) |
+| `tests/dast/` | **DAST** | a mesma imagem **sob ataque**: varredura ativa do OWASP ZAP em toda operação do contrato, nas páginas de documentação e nos assets JavaScript vendorizados | Docker (`tests/stack/compose.yaml` + ZAP) |
 
 ## O pipeline, bloco a bloco
 
@@ -71,6 +72,7 @@ flowchart LR
         direction TB
         dv["Imagem · build, smoke e Trivy"]:::imagem
         e2e["E2E · contrato 100%"]:::imagem
+        dast["DAST · OWASP ZAP<br/><i>varredura ativa</i>"]:::imagem
     end
 
     ok{{"CI OK"}}:::gate
@@ -80,8 +82,7 @@ flowchart LR
 
     unit & comp & integ & prop & arq --> cov --> sonar
     unit & comp & integ & prop --> mut
-    lint & mypy & cov --> dv
-    lint & mypy & cov --> e2e
+    lint & mypy & cov --> dv --> e2e & dast
     E1 & E2 & E3 & E4 --> ok --> pub --> rel & sbom
 ```
 
@@ -90,7 +91,7 @@ flowchart LR
 | ① Estática | Não executa nada da aplicação: é o mais barato e falha mais cedo. Roda em paralelo, sem dependências. |
 | ② Em processo | Testes rápidos, sem container. Cada bloco publica a sua cobertura parcial e o seu `junit`. |
 | ③ Consolidação | A cobertura só faz sentido somada: o gate de 90% é aplicado **uma vez**, sobre os blocos combinados. O Sonar consome o resultado. |
-| ④ Imagem | Só se constrói e se testa a imagem depois de o código passar em processo — testar a imagem de um código que já falhou é desperdício. |
+| ④ Imagem | Só se constrói e se testa a imagem depois de o código passar em processo — testar a imagem de um código que já falhou é desperdício. E2E e DAST carregam o artefato do `docker-verify`: atacam exatamente os bits que passaram no smoke e no Trivy, em paralelo. |
 | Gate e entrega | `CI OK` decide; `docker-publish` só roda com ele verde. `release` e `SBOM` vêm depois da publicação. |
 
 ## Blocos
@@ -104,7 +105,6 @@ Não executa a aplicação; por isso roda primeiro e em paralelo.
 | Lint · ruff | pyflakes, pycodestyle, bugbear, bandit (`S`), pylint (`PL`), complexidade (mccabe ≤ 10), FastAPI (`FAST`), código comentado (`ERA`), argumentos mortos (`ARG`), `except` cego (`BLE`), `banned-api` | `FAST001` é a mesma regra do Sonar `S8409`; o `banned-api` impede `datetime.now()`/`date.today()` fora de `get_current_datetime()`, que aplica o fuso das settings |
 | Lint · infra | actionlint (workflows e o shell de cada `run:`), hadolint (todo `Dockerfile`, limiar `info`), shellcheck (`scripts/*.sh`) | o pipeline e a imagem também são código |
 | Tipagem · mypy | `strict` + plugin do pydantic, em `src/`, `scripts/` **e** `tests/` | um teste mal tipado pode estar testando a coisa errada; dublês passam por `as_redis()` (um `cast` documentado), nunca por `# type: ignore` |
-
 | SAST · bandit | padrões inseguros em `src/` (severidade média ou mais reprova) | o motor clássico de Python, com SARIF no code scanning |
 | SAST · CodeQL | análise de fluxo de dados em Python e **nos workflows** (`actions`), suíte `security-extended` | o pipeline publica em produção: injeção num `run:` seria execução de código com os secrets do registry |
 | SAST · zizmor | auditoria dedicada de GitHub Actions: injeção de template, permissões excessivas, `persist-credentials`, pin por SHA, cache envenenável, gatilhos perigosos, actions com vulnerabilidade conhecida | limpo até no perfil `pedantic`; o que só o perfil `auditor` aponta (secrets fora de *environment*) exigiria configuração no repositório e está registrado como decisão |
@@ -254,6 +254,58 @@ Roda contra **os bits exatos** que passaram no smoke e no Trivy: o `docker-verif
 
 Com `E2E_BASE_URL`, a mesma suíte roda contra uma API já no ar, só com o que lê.
 
+### DAST — `tests/dast/`
+
+SAST e SCA leem código e manifestos; o DAST **ataca a aplicação rodando**. É o único bloco que enxerga três coisas:
+
+- os **assets JavaScript vendorizados** (`src/b3datetime/static/assets/`: Swagger UI e ReDoc). Nenhum manifesto os declara, então nem o Dependabot nem o Trivy sabem que existem;
+- o comportamento HTTP da imagem diante de entrada hostil: injeção, *path traversal*, divulgação de informação, respostas de erro;
+- os headers de segurança das respostas.
+
+**Já pagou o investimento na primeira varredura.** O Swagger UI 5.17.14 servido em `/docs` embutia o **DOMPurify 3.1.4**, com 19 CVEs de XSS conhecidos. O ZAP o apontou pela regra 10003 (*Vulnerable JS Library*, base do retire.js), e os assets foram atualizados para Swagger UI 5.33.0 e ReDoc 2.5.4 (#69).
+
+```mermaid
+flowchart LR
+    classDef ci fill:#f3e8fb,stroke:#5319e7,color:#2d0c80
+    classDef zap fill:#fdecea,stroke:#d93f0b,color:#7a1f05
+    classDef gate fill:#ffffff,stroke:#24292f,color:#24292f,stroke-width:2px
+
+    art["artefato <code>imagem</code><br/><i>os bits do smoke e do Trivy</i>"]:::ci --> stack["tests/stack/compose.yaml<br/><i>app + Redis semeado + ROOT_PATH</i>"]:::ci
+    subgraph plano["tests/dast/plano-imagem.yaml"]
+        direction TB
+        filtros["alertFilter<br/><i>justificados, escopo mínimo</i>"]:::zap --> oa["openapi<br/><i>o contrato servido</i>"]:::zap --> sp["spider<br/><i>/docs e /redoc</i>"]:::zap --> ps["varredura passiva"]:::zap --> as["varredura ativa"]:::zap --> rel["relatórios HTML/JSON<br/>+ árvore de sites"]:::zap
+    end
+    stack --> filtros
+    rel --> exit{{"exitStatus<br/>Low ou acima reprova"}}:::gate
+    rel --> trip{{"scripts/dast_resumo.py<br/>toda operação com 2xx"}}:::gate
+```
+
+| Peça | Papel |
+|---|---|
+| `tests/dast/Dockerfile` | fixa o ZAP por versão **e digest**; o Dependabot (`docker`, `/tests/dast`) propõe os novos |
+| `tests/dast/plano-imagem.yaml` | o plano do Automation Framework, com cada decisão comentada |
+| `tests/stack/compose.yaml` | o alvo: a imagem verificada, Redis semeado (`10:00`/`17:00`) e `ROOT_PATH=/b3datetime`, o formato que o Kong entrega |
+| `scripts/dast_resumo.py` | o tripwire de cobertura, um veredito por risco independente do ZAP e o resumo do job |
+
+**Filtros: só com justificativa e com o menor escopo possível.** Um alerta novo, de qualquer outra regra ou URL, reprova o job.
+
+| Regra | Tratamento | Por quê |
+|---|---|---|
+| 10038 CSP · 10020 anti-clickjacking · 10021 `nosniff` | rebaixadas a **Info**: continuam no relatório | os headers de segurança são da **borda** (Cloudflare), por decisão de projeto; um dono só evita headers duplicados ou divergentes. A presença deles em produção é verificada pelo job de pós-deploy |
+| 10096 *Timestamp Disclosure* | falso positivo, só em `/static/*.js` | são constantes de 10 dígitos do JavaScript minificado, não timestamps do servidor |
+| 2 *Private IP Disclosure* | falso positivo, só em `redoc.standalone.js` | o gerador de exemplos do ReDoc devolve o literal `192.168.0.1` para campos `format: ipv4` |
+
+**Uma varredura vale o que ela alcança.** Na primeira versão, o ZAP importava `/v1/trading-days` do OpenAPI com o próprio nome do parâmetro como valor (`start=start&end=end`). Toda requisição, inclusive as de ataque, morria no `422` da validação, e a lógica do endpoint nunca era exercitada, sem alerta nenhum. Por isso:
+
+- os parâmetros `start`/`end` ganharam **exemplos no contrato** (2026-09-01 a 2026-09-07). Esse é exatamente o período cujas respostas são os dois exemplos de `200` já documentados, e `tests/integration/test_calendario_bvmf.py` trava o par. O *Try it out* do `/docs` também ganhou com isso;
+- o tripwire exige que **toda operação do contrato** apareça na árvore de sites do ZAP **com resposta 2xx**. Hoje: 8 de 8.
+
+**Sem SARIF no code scanning, de propósito.** Os alertas informativos de header virariam alertas abertos permanentes na aba Security. O relatório HTML/JSON fica no artefato `dast-report`, e a tabela de alertas vai para o resumo do job.
+
+**Ativo só no CI.** A varredura ativa envia milhares de requisições hostis, então só roda contra o container efêmero do job, nunca contra produção. Em produção, o pós-deploy faz apenas uma checagem passiva.
+
+Sabotagem de referência: com os filtros movidos para depois da varredura, eles não se aplicam aos alertas já levantados, e o `exitStatus` reprova (`An alert has been raised with a risk of at least: Low`). Com os assets antigos, a 10003 reprova.
+
 ## Tripwires: provar que o teste rodou
 
 Um teste que deixa de rodar sem ninguém perceber é pior do que um teste que falha. Por isso:
@@ -266,6 +318,9 @@ Um teste que deixa de rodar sem ninguém perceber é pior do que um teste que fa
 | Nenhum teste E2E pulado | `E2E · contrato 100%` | uma resposta documentada ficar sem validação |
 | Pares cobertos = pares documentados | `tests/e2e/test_contrato.py` | rota ou código novo sem caso E2E |
 | `ci-ok` só aceita pulo onde ele é o desenho | `CI OK` | um bloco pulado liberar a publicação |
+| Toda operação do contrato alcançada com **2xx** pela varredura | `DAST · OWASP ZAP` (`scripts/dast_resumo.py`) | o ZAP "passar" sem ter atacado a lógica — como no `422` de `/v1/trading-days` |
+| Todo arquivo do repositório lido pelos testes está no sandbox da mutação | `tests/architecture/test_convencoes.py` | a execução limpa do mutmut reprovar e derrubar o job antes de avaliar mutante algum (o push de #67) |
+| Toda imagem base fixada por digest e acompanhada pelo Dependabot | `tests/unit/test_imagens_fixadas.py` | uma tag mutável trocar a imagem sem commit, ou um digest fixo congelar as correções de segurança |
 
 ## Como rodar localmente
 
@@ -283,9 +338,20 @@ python -m pytest                      # unitários + componente + integração, 
 python -m pytest tests/unit           # um bloco só (a cobertura parcial reprova o gate: use --cov-fail-under=0)
 python -m pytest tests/integration    # precisa de Redis em localhost:6379 (db 15) para não pular
 HYPOTHESIS_PROFILE=ci python -m pytest tests/property --cov-fail-under=0   # como no CI (500 exemplos)
-HYPOTHESIS_PROFILE=mutation mutmut run && mutmut results   # mutação (precisa do Redis para tests/integration)
+HYPOTHESIS_PROFILE=mutation mutmut run && mutmut results   # mutação (sem Redis: a integração fica fora da seleção)
 mutmut export-cicd-stats && mutmut results > s.txt && python scripts/mutation_gate.py mutants/mutmut-cicd-stats.json s.txt
 docker run -d --rm -p 6379:6379 redis:7.4-alpine   # um Redis descartável para a integração
 
 docker build -t b3datetime:e2e . && E2E_IMAGE=b3datetime:e2e python -m pytest -m e2e tests/e2e --no-cov
+```
+
+DAST, como no CI (~3 min, dos quais ~2 de varredura ativa):
+
+```bash
+docker build -t b3datetime:ci . && IMAGE=b3datetime:ci docker compose -f tests/stack/compose.yaml up -d --wait
+docker build -t b3datetime-zap tests/dast && mkdir -p zap && chmod 777 zap
+docker run --rm --network b3stack_default -v "$PWD/tests/dast:/zap/plano:ro" -v "$PWD/zap:/zap/wrk:rw" \
+  b3datetime-zap zap.sh -cmd -autorun /zap/plano/plano-imagem.yaml
+python scripts/dast_resumo.py zap/zap.json zap/arvore.yaml tests/contract/openapi.json
+IMAGE=b3datetime:ci docker compose -f tests/stack/compose.yaml down -v
 ```

@@ -1,0 +1,114 @@
+# Plano do OWASP ZAP (Automation Framework) para o job "DAST · OWASP ZAP".
+#
+# Alvo: a imagem verificada pelo CI (artefato `imagem`), atrás de tests/stack/compose.yaml
+# — Redis semeado e ROOT_PATH=/b3datetime, o formato que o Kong entrega. O ZAP roda na
+# mesma rede do compose e enxerga a app como http://app:8000.
+#
+# Varredura ATIVA: só contra o container do CI, nunca contra produção (o pós-deploy usa
+# um plano passivo). Racional e decisões: tests/README.md, seção DAST.
+env:
+  contexts:
+    - name: b3datetime
+      urls:
+        - http://app:8000/b3datetime/
+      includePaths:
+        - "http://app:8000/b3datetime.*"
+  parameters:
+    failOnError: true
+    failOnWarning: false
+    progressToStdout: true
+
+jobs:
+  # Os filtros valem para os alertas levantados DEPOIS deste job — por isso ele vem
+  # antes de qualquer varredura. Todo filtro tem justificativa e é o mais estreito
+  # possível: um alerta novo, de qualquer outra regra ou URL, reprova o job (exitStatus).
+  - type: alertFilter
+    alertFilters:
+      # Headers de segurança são da borda (Cloudflare), por decisão registrada no
+      # tests/README.md (seção DAST): um único dono evita valores divergentes e
+      # duplicados. Rebaixados a informativo — continuam visíveis no relatório — e
+      # verificados em produção pelo job "Produção · pós-deploy".
+      - ruleId: 10038 # Content Security Policy (CSP) Header Not Set
+        newRisk: Info
+      - ruleId: 10020 # Missing Anti-clickjacking Header
+        newRisk: Info
+      - ruleId: 10021 # X-Content-Type-Options Header Missing
+        newRisk: Info
+      # Falso positivo: inteiros de 10 dígitos dentro do JavaScript minificado dos
+      # assets vendorizados (constantes do bundle), não timestamps do servidor.
+      - ruleId: 10096 # Timestamp Disclosure - Unix
+        newRisk: False Positive
+        url: "http://app:8000/b3datetime/static/.*\\.js"
+        urlRegex: true
+      # Falso positivo: o gerador de exemplos do ReDoc (openapi-sampler) devolve o
+      # literal "192.168.0.1" para campos `format: ipv4`. Não é endereço da infra.
+      - ruleId: 2 # Private IP Disclosure
+        newRisk: False Positive
+        url: "http://app:8000/b3datetime/static/redoc.standalone.js"
+
+  # As operações vêm do contrato servido, não de uma lista mantida à mão: um endpoint
+  # novo entra na varredura sozinho.
+  - type: openapi
+    parameters:
+      apiUrl: http://app:8000/b3datetime/openapi.json
+      targetUrl: http://app:8000/b3datetime
+      context: b3datetime
+
+  # As páginas de documentação e os assets vendorizados só são alcançados pelo spider.
+  # São o único lugar onde o 10003 (Vulnerable JS Library) enxerga o Swagger UI e o
+  # ReDoc — nem o Dependabot nem o Trivy os veem.
+  - type: spider
+    name: spider-docs
+    parameters:
+      context: b3datetime
+      url: http://app:8000/b3datetime/docs
+      maxDuration: 1
+  - type: spider
+    name: spider-redoc
+    parameters:
+      context: b3datetime
+      url: http://app:8000/b3datetime/redoc
+      maxDuration: 1
+
+  - type: passiveScan-wait
+    parameters:
+      maxDuration: 2
+
+  - type: activeScan
+    parameters:
+      context: b3datetime
+      maxScanDurationInMins: 8
+      maxRuleDurationInMins: 2
+
+  # HTML para gente, JSON para o tripwire. Sem SARIF no code scanning de propósito: os
+  # alertas informativos de header (responsabilidade da borda) virariam alertas abertos
+  # permanentes na aba Security.
+  - type: report
+    name: relatorio-html
+    parameters:
+      template: traditional-html
+      reportDir: /zap/wrk
+      reportFile: zap
+      reportTitle: DAST · OWASP ZAP — b3datetime
+  - type: report
+    name: relatorio-json
+    parameters:
+      template: traditional-json
+      reportDir: /zap/wrk
+      reportFile: zap
+
+  # A árvore de sites é o que a varredura ativa ataca. O tripwire
+  # (scripts/dast_resumo.py) exige que toda operação do contrato apareça nela.
+  - type: export
+    parameters:
+      context: b3datetime
+      type: yaml
+      source: sitestree
+      fileName: /zap/wrk/arvore.yaml
+
+  # Qualquer alerta Low ou acima, depois dos filtros, reprova.
+  - type: exitStatus
+    parameters:
+      errorLevel: Low
+      okExitValue: 0
+      errorExitValue: 1

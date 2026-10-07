@@ -10,6 +10,7 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 ### Adicionado
 
 - `GET /` informa em `build` o commit (SHA) da imagem em execução. A versão só muda nas releases; o `build` muda a cada deploy, e é por ele que o pipeline confirma que a produção já serve a imagem recém-publicada. Fora da imagem publicada, o valor é `local`. (#66)
+- Os parâmetros `start` e `end` de `/v1/trading-days` ganham exemplo no OpenAPI: o período de 2026-09-01 a 2026-09-07, cuja resposta é exatamente a dos dois exemplos de `200` (com e sem `exclude`). O *Try it out* do `/docs` já vem preenchido com um período válido. (#69)
 
 ### Alterado
 
@@ -25,6 +26,7 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ### Segurança
 
+- **Swagger UI (`/docs`) atualizado de 5.17.14 para 5.33.0.** A versão anterior embutia o DOMPurify 3.1.4, com 19 CVEs de XSS conhecidos (entre eles CVE-2025-26791); a nova traz o DOMPurify 3.4.13. O ReDoc (`/redoc`) também foi atualizado, de 2.1.5 para 2.5.4. A vulnerabilidade foi encontrada pelo novo teste dinâmico de segurança (DAST, OWASP ZAP), o único scanner que enxerga esses assets servidos localmente. (#69)
 - A URL do Redis deixa de vazar credenciais no log em formas que a redação não cobria: sem host (`redis://:senha@/0`, `unix://:senha@/caminho.sock`) e com a senha na query (`?password=`). Uma porta inválida em `REDIS_URL_ENV` (`:abc`, `:99999`) também deixa de derrubar o arranque. (#58)
 
 ## [2.0.4] - 2026-09-26

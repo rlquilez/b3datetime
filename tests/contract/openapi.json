@@ -330,7 +330,13 @@
               "description": "Data inicial (YYYY-MM-DD)",
               "title": "Start"
             },
-            "description": "Data inicial (YYYY-MM-DD)"
+            "description": "Data inicial (YYYY-MM-DD)",
+            "examples": {
+              "exemplo": {
+                "summary": "Início do período",
+                "value": "2026-09-01"
+              }
+            }
           },
           {
             "name": "end",
@@ -342,7 +348,13 @@
               "description": "Data final (YYYY-MM-DD)",
               "title": "End"
             },
-            "description": "Data final (YYYY-MM-DD)"
+            "description": "Data final (YYYY-MM-DD)",
+            "examples": {
+              "exemplo": {
+                "summary": "Fim do período",
+                "value": "2026-09-07"
+              }
+            }
           },
           {
             "name": "exclude",

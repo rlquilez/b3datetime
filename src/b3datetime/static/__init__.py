@@ -18,8 +18,8 @@ from pathlib import Path
 
 STATIC_DIR = Path(__file__).resolve().parent / "assets"
 
-SWAGGER_UI_VERSION = "5.17.14"
-REDOC_VERSION = "2.1.5"
+SWAGGER_UI_VERSION = "5.33.0"
+REDOC_VERSION = "2.5.4"
 
 SWAGGER_JS = "swagger-ui-bundle.js"
 SWAGGER_CSS = "swagger-ui.css"

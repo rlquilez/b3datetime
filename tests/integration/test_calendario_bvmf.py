@@ -13,6 +13,8 @@ from datetime import date
 import pytest
 
 from b3datetime.config import Settings
+from b3datetime.main import create_app
+from b3datetime.routers.dates import _dias_do_periodo
 from b3datetime.services.calendar_service import TradingCalendar, build_bvmf_calendar
 from tests.e2e.calendario_b3 import SESSOES_POR_ANO, fechamentos_da_b3, quarta_de_cinzas
 
@@ -70,3 +72,28 @@ def test_complemento_cobre_exatamente_o_intervalo(calendario_2017_2025: TradingC
     assert len(sessoes) + len(fechados) == (fim - inicio).days + 1
     assert min(sessoes + fechados) == inicio
     assert max(sessoes + fechados) == fim
+
+
+def test_exemplos_de_trading_days_sao_a_resposta_real_do_periodo_de_exemplo() -> None:
+    """O período de exemplo dos parâmetros e os dois exemplos de 200 são um par: quem usa
+    o "Try it out" — e o ZAP, que importa os mesmos exemplos — recebe exatamente o que a
+    documentação mostra, com e sem ``exclude``."""
+    settings = Settings(_env_file=None)
+    operacao = create_app(settings).openapi()["paths"]["/v1/trading-days"]["get"]
+    periodo = {
+        p["name"]: date.fromisoformat(p["examples"]["exemplo"]["value"])
+        for p in operacao["parameters"]
+        if p["name"] in {"start", "end"}
+    }
+    exemplos = operacao["responses"]["200"]["content"]["application/json"]["examples"]
+    calendario = build_bvmf_calendar(settings, start="2026-01-01", end="2026-12-31")
+
+    for exclude, nome in ((False, "trading_days"), (True, "non_trading_days")):
+        dias = _dias_do_periodo(
+            calendario,
+            periodo["start"],
+            periodo["end"],
+            exclude=exclude,
+            max_range_days=settings.max_range_days,
+        )
+        assert dias == exemplos[nome]["value"], nome

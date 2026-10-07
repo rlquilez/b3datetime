@@ -141,6 +141,19 @@ RANGE_OUT_OF_BOUNDS_EXAMPLE = {
     ),
 }
 
+# Período de exemplo de /v1/trading-days. Os dois exemplos de 200 do endpoint são a
+# resposta real para ele — sem e com `exclude` (o 07/09 é feriado). É também o valor que o
+# "Try it out" e o ZAP usam: sem exemplo, o ZAP mandava `start=start` e a varredura ativa
+# só alcançava a validação (422), nunca a lógica do endpoint.
+TRADING_DAYS_EXAMPLE_START = "2026-09-01"
+TRADING_DAYS_EXAMPLE_END = "2026-09-07"
+
+
+def parameter_example(summary: str, value: str) -> dict[str, dict[str, str]]:
+    """Exemplo nomeado de parâmetro (``openapi_examples`` do FastAPI)."""
+    return {"exemplo": {"summary": summary, "value": value}}
+
+
 CALENDAR_INFO_EXAMPLE = {
     "exchange": "BVMF",
     "coverage_start": "2016-09-04",

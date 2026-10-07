@@ -25,7 +25,10 @@ from b3datetime.routers.openapi_examples import (
     RESPONSE_CALENDAR_UNAVAILABLE,
     RESPONSE_RANGE_INVALID,
     TAG_DATES,
+    TRADING_DAYS_EXAMPLE_END,
+    TRADING_DAYS_EXAMPLE_START,
     examples_response,
+    parameter_example,
     success_response,
 )
 from b3datetime.services.calendar_service import CalendarRangeOutOfBoundsError, TradingCalendar
@@ -250,8 +253,20 @@ async def get_trading_days(
     settings: SettingsDep,
     # Tipar como `date` deixa o FastAPI validar e responder 422 para formato inválido,
     # em vez do parse manual que respondia 400 e aceitava datas como 2024-13-45.
-    start: Annotated[date, Query(description="Data inicial (YYYY-MM-DD)")],
-    end: Annotated[date, Query(description="Data final (YYYY-MM-DD)")],
+    start: Annotated[
+        date,
+        Query(
+            description="Data inicial (YYYY-MM-DD)",
+            openapi_examples=parameter_example("Início do período", TRADING_DAYS_EXAMPLE_START),
+        ),
+    ],
+    end: Annotated[
+        date,
+        Query(
+            description="Data final (YYYY-MM-DD)",
+            openapi_examples=parameter_example("Fim do período", TRADING_DAYS_EXAMPLE_END),
+        ),
+    ],
     exclude: Annotated[
         bool,
         Query(description="Se true, retorna dias SEM negociação; se false, dias COM negociação"),

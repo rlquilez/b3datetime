@@ -810,6 +810,7 @@ A suíte cobre 100% das linhas de `src/b3datetime/` e é organizada em **blocos*
 | `tests/integration/` | Testes · integração | Redis real, calendário BVMF real (2017–2025 contra as regras da B3), lifespan real e a app inteira com tudo real | Redis em `localhost:6379`, **db 15** |
 | `tests/property/` | Testes · property-based | Propriedades sobre entradas geradas: a redação da URL do Redis nunca levanta, nunca vaza credencial, é idempotente | Hypothesis, 500 exemplos por propriedade no CI |
 | `tests/e2e/` | E2E · contrato 100% | **100% dos endpoints publicados**, contra a imagem real: toda resposta documentada de toda operação, as consultas e a documentação | containers com Redis real e o calendário BVMF real; fora da execução padrão (`-m e2e`) |
+| `tests/dast/` | DAST · OWASP ZAP | **Varredura ativa** da imagem real: toda operação do contrato, `/docs`, `/redoc` e os assets JavaScript vendorizados | ZAP (Automation Framework) na rede de `tests/stack/compose.yaml`, com Redis semeado e `ROOT_PATH` |
 
 A cobertura de cada bloco é parcial; o job **Cobertura · combinada** soma os blocos, aplica o gate de 90% e reprova se qualquer teste tiver sido pulado.
 
@@ -884,9 +885,10 @@ flowchart LR
     end
     test --> cov["cobertura combinada<br/>≥ 90% · nenhum teste pulado"] --> sonar["SonarQube<br/>quality gate bloqueante"]
     lint & typecheck & cov --> dv["docker-verify<br/>build amd64 · smoke test · Trivy"]
-    lint & typecheck & cov --> e2e["e2e<br/>100% dos endpoints · 4 ambientes"]
+    dv --> e2e["e2e<br/>100% dos endpoints · 4 ambientes"]
+    dv --> dast["DAST (OWASP ZAP)<br/>varredura ativa da imagem"]
     pub --> rel["release (versão nova)<br/>tag vX.Y.Z · X · X.Y · X.Y.Z · GitHub Release"]
-    lint & typecheck & test & cov & sonar & bandit & pipaudit & gitleaks & codeql & trivyfs & contract & dv & e2e & depreview --> ok["ci-ok<br/>agrega todos os blocos"]
+    lint & typecheck & test & cov & sonar & bandit & pipaudit & gitleaks & codeql & trivyfs & contract & dv & e2e & dast & depreview --> ok["ci-ok<br/>agrega todos os blocos"]
     ok --> pub["docker-publish (push na main)<br/>latest · sha-abc1234"] --> sbom["SBOM"]
 ```
 
@@ -907,11 +909,12 @@ flowchart LR
 | Filesystem e imagem | Trivy | `CRITICAL`/`HIGH` reprovam |
 | Smoke test | `scripts/smoke_image.sh` | container real, com e sem prefixo, Redis real e `HEALTHCHECK` |
 | E2E | `pytest -m e2e tests/e2e` contra a imagem | 100% das respostas documentadas das 8 operações, consultas e documentação; nenhum teste pode ser pulado |
+| DAST | OWASP ZAP (`tests/dast/plano-imagem.yaml`) | varredura ativa contra a imagem verificada; toda operação do contrato tem de ser alcançada com 2xx; alerta Low ou acima reprova, e cada filtro é justificado no plano |
 | Qualidade | SonarQube | quality gate **bloqueante**: coverage, duplicação e issues em código novo |
 | Publicação | imagem multi-arch + SBOM | só em push na `main`, só com tudo verde |
 | Release | tag, retag da imagem e GitHub Release | automática quando a `api_version` do commit publicado ainda não tem Release |
 
-- `ci-ok` é o único check agregador, e o `docker-publish` depende dele: nenhuma imagem é publicada sem **todos** os blocos aprovados — lint, tipagem, testes, SAST, SCA, segredos, smoke, E2E, scan da imagem e quality gate. Em push, um bloco pulado também reprova; o resumo do run traz a tabela de blocos com o resultado de cada um.
+- `ci-ok` é o único check agregador, e o `docker-publish` depende dele: nenhuma imagem é publicada sem **todos** os blocos aprovados — lint, tipagem, testes, SAST, SCA, segredos, smoke, E2E, DAST, scan da imagem e quality gate. Em push, um bloco pulado também reprova; o resumo do run traz a tabela de blocos com o resultado de cada um.
 - Actions fixadas por SHA de commit (com a versão em comentário, atualizada pelo Dependabot), `persist-credentials: false` em todo checkout e `timeout-minutes` em todo job.
 - É o **único workflow** do repositório: não há gatilho de tag. A release é um job do próprio `ci.yml` que roda depois da publicação (ver [Versionamento e Release](#️-versionamento-e-release)).
 - Em PRs do Dependabot o job do SonarQube é pulado (o PR não recebe os secrets); o restante roda normalmente.
@@ -937,7 +940,8 @@ flowchart LR
 
 - **Sem autenticação na aplicação** por desenho: quem valida chaves é o gateway. `API_KEY_REQUIRED` só documenta.
 - Imagem mínima sobre `python:3.14-alpine` fixada por digest, com usuário sem privilégios, sem `pip`/`setuptools`/`wheel`, patches do sistema (`apk upgrade`) aplicados a cada build e varrida pelo Trivy a cada CI.
-- Assets da documentação versionados e servidos localmente (sem CDN, sem SRI para gerenciar); o diretório servido contém só os assets, nunca código Python.
+- Assets da documentação versionados e servidos localmente (sem CDN, sem SRI para gerenciar); o diretório servido contém só os assets, nunca código Python. Como nenhum manifesto os declara, quem os vigia é o **DAST** (OWASP ZAP, regra *Vulnerable JS Library*): foi ele que apontou o DOMPurify vulnerável dentro do Swagger UI 5.17.14.
+- **Varredura dinâmica (DAST)** a cada push: o ZAP ataca a imagem verificada antes de qualquer publicação. Os headers de segurança da resposta (CSP, `X-Frame-Options`, HSTS, `Referrer-Policy`) são responsabilidade da borda (Cloudflare), não da aplicação.
 - CORS sem credenciais e só para métodos de leitura; redirecionamentos que expunham o host interno do upstream foram eliminados.
 - A URL do Redis é redigida nos logs (senha nunca aparece); dependências pinadas e auditadas por pip-audit, dependency-review e Dependabot; código analisado por bandit, CodeQL e SonarQube; segredos varridos por gitleaks.
 - Encontrou uma vulnerabilidade? Abra um [report privado](https://github.com/rlquilez/b3datetime/security/advisories/new) no GitHub em vez de uma issue pública.

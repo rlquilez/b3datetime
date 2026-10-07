@@ -232,3 +232,6 @@ junit-*.xml
 mutants/
 mutmut-*.txt
 mutmut-run.log
+
+# DAST (OWASP ZAP): relatórios e árvore de sites
+zap/

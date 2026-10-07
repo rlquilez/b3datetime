@@ -1,4 +1,6 @@
-"""A imagem do Redis dos testes é uma só, fixada por digest, em todo lugar.
+"""Imagens fixadas por digest: o Redis dos testes e as bases dos Dockerfiles.
+
+A imagem do Redis dos testes é uma só, fixada por digest, em todo lugar.
 
 A fonte é ``tests/stack/compose.yaml`` — o Dependabot (ecossistema ``docker-compose``)
 propõe o digest novo ali. O E2E e o smoke test a leem de lá; o service do CI não tem como
@@ -10,6 +12,9 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+
+import pytest
+import yaml
 
 RAIZ = Path(__file__).resolve().parents[2]
 REDIS = re.compile(r"(redis:[\w.-]+@sha256:[0-9a-f]{64})")
@@ -36,3 +41,32 @@ def test_e2e_e_smoke_leem_da_fonte_sem_tag_solta() -> None:
         # Versão com ponto (7.4-alpine), não porta (:6379); quantificador possessivo para o
         # lookahead não "achar" um prefixo da tag que não seja seguido de @.
         assert not re.search(r"\bredis:\d+\.\d[\w.-]*+(?!@)", texto), caminho
+
+
+# --- Imagens base dos Dockerfiles ------------------------------------------------------
+
+DOCKERFILES = [RAIZ / "Dockerfile", *sorted((RAIZ / "tests").rglob("Dockerfile"))]
+FROM = re.compile(r"^FROM\s+(?:--platform=\S+\s+)?(\S+)", re.MULTILINE)
+
+
+def _dir_do_dependabot(dockerfile: Path) -> str:
+    return "/" + dockerfile.parent.relative_to(RAIZ).as_posix().removeprefix(".")
+
+
+@pytest.mark.parametrize("dockerfile", DOCKERFILES, ids=_dir_do_dependabot)
+def test_toda_imagem_base_e_fixada_por_digest(dockerfile: Path) -> None:
+    """Tag mutável na base muda a imagem sem commit: o que o CI escaneou deixa de ser o
+    que roda. Vale também para ferramentas, como o ZAP do DAST (tests/dast/Dockerfile)."""
+    bases = FROM.findall(dockerfile.read_text(encoding="utf-8"))
+    assert bases, dockerfile
+    for base in bases:
+        assert re.fullmatch(r"[\w./:-]+:[\w.-]+@sha256:[0-9a-f]{64}", base), base
+
+
+@pytest.mark.parametrize("dockerfile", DOCKERFILES, ids=_dir_do_dependabot)
+def test_dependabot_acompanha_cada_dockerfile(dockerfile: Path) -> None:
+    """Um digest fixado sem Dependabot congela a imagem — e as correções de segurança dela."""
+    config = yaml.safe_load((RAIZ / ".github" / "dependabot.yml").read_text(encoding="utf-8"))
+    docker = [u for u in config["updates"] if u["package-ecosystem"] == "docker"]
+    diretorios = {d for u in docker for d in u.get("directories", [u.get("directory")])}
+    assert _dir_do_dependabot(dockerfile) in diretorios
