@@ -68,7 +68,9 @@ ENV PATH=/home/app/.local/bin:$PATH \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-USER app
+# UID:GID numéricos, e não o nome: o Kubernetes só consegue verificar `runAsNonRoot`
+# com um UID numérico (hadolint DL3066). São os do usuário `app` criado acima.
+USER 1001:1001
 
 EXPOSE 8000
 
@@ -76,8 +78,11 @@ EXPOSE 8000
 # não-2xx — é essa combinação que permite ao Docker marcar o container como
 # unhealthy. Enquanto /v1/health respondia 200 em todos os estados, este
 # HEALTHCHECK não tinha como falhar nunca.
+# Forma exec (JSON), sem shell (hadolint DL3025): o Python sai com código 1 quando o
+# urlopen levanta, que é exatamente o "unhealthy" do Docker — o `|| exit 1` da forma
+# shell era redundante.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/v1/health')" || exit 1
+    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/v1/health')"]
 
 # --proxy-headers e --forwarded-allow-ips: atrás do Kong em outro host, o default
 # (127.0.0.1) faz o uvicorn descartar X-Forwarded-Proto/For. O efeito é url_for e
