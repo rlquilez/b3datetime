@@ -808,7 +808,8 @@ A suíte cobre 100% das linhas de `src/b3datetime/` e é organizada em **blocos*
 | `tests/unit/` | Testes · unitários | `Settings`, `RedisService`/`RedisCache`, `TradingCalendar`, middleware, tabela-verdade do health, validação de período, scripts de gate | `fakeredis`, relógio injetado (`now_fn`), calendário sintético; sem I/O |
 | `tests/api/` | Testes · componente | Todos os endpoints e páginas, cada código documentado, contrato do OpenAPI, os três modos de proxy, CORS | `httpx.ASGITransport` sobre a app real, sem lifespan e sem I/O |
 | `tests/integration/` | Testes · integração | Redis real, calendário BVMF real (2017–2025 contra as regras da B3), lifespan real e a app inteira com tudo real | Redis em `localhost:6379`, **db 15** |
-| `tests/property/` | Testes · property-based | Propriedades sobre entradas geradas: a redação da URL do Redis nunca levanta, nunca vaza credencial, é idempotente | Hypothesis, 500 exemplos por propriedade no CI |
+| `tests/property/` | Testes · property-based | Propriedades sobre **toda** entrada gerada: a redação da URL do Redis nunca vaza, `HH:MM` aceito só em ASCII, partição do calendário, middleware, máquina de estados do cache (inclusive na virada do horário de verão) e o fuzzing da API inteira pelo contrato | Hypothesis (500 exemplos por propriedade no CI) e Schemathesis |
+| `tests/architecture/` | Arquitetura · import-linter + regras | Camadas e dependências entre módulos, import sem I/O (audit hook) e as convenções do projeto sobre a AST | import-linter e pytest |
 | `tests/e2e/` | E2E · contrato 100% | **100% dos endpoints publicados**, contra a imagem real: toda resposta documentada de toda operação, as consultas e a documentação | containers com Redis real e o calendário BVMF real; fora da execução padrão (`-m e2e`) |
 | `tests/dast/` | DAST · OWASP ZAP | **Varredura ativa** da imagem real: toda operação do contrato, `/docs`, `/redoc` e os assets JavaScript vendorizados | ZAP (Automation Framework) na rede de `tests/stack/compose.yaml`, com Redis semeado e `ROOT_PATH` |
 | `tests/load/` | Performance · k6 | **Carga concorrente** na imagem real: todas as operações a taxa constante, o pior caso de `/v1/trading-days` em paralelo e o health medido durante os dois | k6 na mesma stack; o health sob carga não pode ficar mais de 5× mais lento que o ocioso |
@@ -872,27 +873,35 @@ Pipeline em [`.github/workflows/ci.yml`](.github/workflows/ci.yml), disparado em
 
 ```mermaid
 flowchart LR
-    subgraph paralelo["Sem dependências"]
-        lint["lint (ruff)"]
-        typecheck["tipagem (mypy)"]
-        test["testes por bloco<br/>unitários · componente · integração · property-based"]
-        bandit["bandit"]
-        pipaudit["pip-audit"]
-        gitleaks["gitleaks"]
-        codeql["CodeQL"]
-        trivyfs["Trivy fs"]
-        depreview["dependency-review (só PR)"]
-        contract["contrato (oasdiff × SemVer)"]
+    subgraph s1["① Estática, em paralelo"]
+        direction TB
+        lint["lint (ruff) · lint de infra"]
+        tipos["tipagem (mypy strict)"]
+        arq["arquitetura · código morto"]
+        sast["SAST: bandit · CodeQL · zizmor"]
+        sca["SCA: pip-audit · Trivy fs · dependency-review (PR)"]
+        seg["segredos (gitleaks) · contrato (oasdiff × SemVer)"]
     end
-    test --> cov["cobertura combinada<br/>≥ 90% · nenhum teste pulado"] --> sonar["SonarQube<br/>quality gate bloqueante"]
-    lint & typecheck & cov --> dv["docker-verify<br/>build amd64 · smoke test · Trivy"]
-    dv --> e2e["e2e<br/>100% dos endpoints · 4 ambientes"]
-    dv --> dast["DAST (OWASP ZAP)<br/>varredura ativa da imagem"]
-    dv --> perf["performance (k6)<br/>carga concorrente"]
-    pub --> rel["release (versão nova)<br/>tag vX.Y.Z · X · X.Y · X.Y.Z · GitHub Release"]
-    lint & typecheck & test & cov & sonar & bandit & pipaudit & gitleaks & codeql & trivyfs & contract & dv & e2e & dast & perf & depreview --> ok["ci-ok<br/>agrega todos os blocos"]
-    ok --> pub["docker-publish (push na main)<br/>latest · sha-abc1234"] --> sbom["SBOM"]
-    pub --> pos["pós-deploy (produção)<br/>build = SHA · E2E de leitura · ZAP passivo · headers da borda"]
+    subgraph s2["② Testes em processo"]
+        direction TB
+        blocos["unitários · componente<br/>integração · property-based"]
+    end
+    subgraph s3["③ Consolidação"]
+        direction TB
+        cov["cobertura combinada ≥ 90%"] --> sonar["SonarQube<br/>quality gate"]
+        mut["mutação (mutmut) ≥ 99%"]
+    end
+    subgraph s4["④ A imagem (mesmo artefato)"]
+        direction TB
+        dv["build · smoke · Trivy"] --> e2e["E2E · 100% do contrato"]
+        dv --> dast["DAST (ZAP, ativo)"]
+        dv --> perf["performance (k6)"]
+    end
+    blocos --> cov & mut
+    lint & tipos & cov --> dv
+    s1 & s2 & s3 & s4 --> ok{{"ci-ok"}}
+    ok --> pub["docker-publish (push na main)<br/>latest · sha-abc1234"]
+    pub --> rel["release (versão nova)"] & sbom["SBOM"] & pos["pós-deploy (produção)<br/>build = SHA · E2E de leitura · ZAP passivo · headers da borda"]
 ```
 
 | Etapa | Ferramenta | Observação |

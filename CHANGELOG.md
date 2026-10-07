@@ -10,6 +10,18 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 ### Adicionado
 
 - `GET /` informa em `build` o commit (SHA) da imagem em execução. A versão só muda nas releases; o `build` muda a cada deploy, e é por ele que o pipeline confirma que a produção já serve a imagem recém-publicada. Fora da imagem publicada, o valor é `local`. (#66)
+- **Stack de testes completa, com cada bloco visível no pipeline** (#51–#73). Nenhuma imagem é publicada sem todos os blocos aprovados. Os blocos novos:
+  - **property-based** (Hypothesis) e fuzzing da API inteira pelo próprio contrato (Schemathesis);
+  - **teste de mutação** bloqueante (mutmut, 99,59%);
+  - **arquitetura** como contrato (import-linter, import sem I/O, convenções verificadas na AST);
+  - **código morto** (vulture, deptry, fixtures órfãs);
+  - **contrato evolutivo** (oasdiff: breaking change só com bump de MAJOR);
+  - **DAST** com OWASP ZAP contra a imagem;
+  - **carga** com k6;
+  - SAST também dos próprios workflows (CodeQL `actions`, zizmor);
+  - **verificação pós-deploy** em produção: o `build` publicado, o E2E de leitura, uma varredura passiva e os headers de segurança da borda.
+
+  A arquitetura completa, com racional e diagramas, está em `tests/README.md`.
 - Os parâmetros `start` e `end` de `/v1/trading-days` ganham exemplo no OpenAPI: o período de 2026-09-01 a 2026-09-07, cuja resposta é exatamente a dos dois exemplos de `200` (com e sem `exclude`). O *Try it out* do `/docs` já vem preenchido com um período válido. (#69)
 
 ### Alterado

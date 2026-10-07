@@ -6,9 +6,14 @@
 ## Sumário
 
 - [Visão geral](#visão-geral)
+- [A pirâmide, adaptada](#a-pirâmide-adaptada)
 - [O pipeline, bloco a bloco](#o-pipeline-bloco-a-bloco)
 - [Blocos](#blocos)
 - [Tripwires: provar que o teste rodou](#tripwires-provar-que-o-teste-rodou)
+- [Invariantes e o teste que trava cada uma](#invariantes-e-o-teste-que-trava-cada-uma)
+- [Checklist: endpoint novo](#checklist-endpoint-novo)
+- [Decisões](#decisões)
+- [Números atuais](#números-atuais)
 - [Como rodar localmente](#como-rodar-localmente)
 
 ## Visão geral
@@ -25,6 +30,40 @@ Cada bloco de teste é **um diretório** em `tests/` e **um job** no [`ci.yml`](
 | `tests/e2e/` | **E2E** | a **imagem Docker** publicável, caixa-preta: 100% das respostas documentadas, consultas de domínio, documentação, resiliência | Docker (4 ambientes de containers) |
 | `tests/dast/` | **DAST** | a mesma imagem **sob ataque**: varredura ativa do OWASP ZAP em toda operação do contrato, nas páginas de documentação e nos assets JavaScript vendorizados | Docker (`tests/stack/compose.yaml` + ZAP) |
 | `tests/load/` | **Performance** | a mesma imagem **sob carga concorrente**: todas as operações a taxa constante, o pior caso de `/v1/trading-days` em paralelo e o health medido durante os dois | Docker (`tests/stack/compose.yaml` + k6) |
+
+## A pirâmide, adaptada
+
+A pirâmide clássica (muitos unitários, poucos E2E) continua valendo na **quantidade**: 310 unitários contra 61 E2E. Mas cada camada aqui existe porque **enxerga algo que as de baixo não enxergam**, e cada uma pegou ao menos um defeito real que as outras deixavam passar.
+
+```mermaid
+flowchart TB
+    classDef estatica fill:#e8f1fb,stroke:#1d76db,color:#0b3d75
+    classDef processo fill:#e9f7ef,stroke:#0e8a16,color:#0b4d14
+    classDef meta fill:#fff6e0,stroke:#d4a017,color:#5c4500
+    classDef imagem fill:#f3e8fb,stroke:#5319e7,color:#2d0c80
+    classDef producao fill:#e6f6f4,stroke:#0f766e,color:#134e4a
+
+    prod["🌐 Produção · pós-deploy<br/><i>a resposta depois do Kong e do Cloudflare: build, contrato, headers da borda</i>"]:::producao
+    img["📦 Imagem · smoke · E2E · DAST · k6<br/><i>o container real: caixa-preta, sob ataque e sob carga</i>"]:::imagem
+    mut["🧬 Mutação<br/><i>os testes percebem um defeito? (não só: a linha rodou?)</i>"]:::meta
+    real["🔌 Integração · 🎲 Property-based<br/><i>dependências reais · toda entrada gerada, não só os exemplos</i>"]:::processo
+    comp["🧩 Componente<br/><i>a aplicação ASGI inteira, em processo, nos três formatos de proxy</i>"]:::processo
+    unit["🔬 Unitários<br/><i>cada peça isolada, sem I/O, relógio injetado</i>"]:::processo
+    est["📐 Estática<br/><i>lint · tipos · arquitetura · código morto · SAST · SCA · contrato</i>"]:::estatica
+
+    prod --- img --- mut --- real --- comp --- unit --- est
+```
+
+| Camada | O que só ela viu |
+|---|---|
+| Estática | `get_settings()` aplicado em vez das settings da app (#60), visto pela regra de AST; código que só os testes chamavam (#64), pelo vulture |
+| Unitários | a idade `0.0` e a string vazia lidas como "ausente" (o truthiness que virava 503) |
+| Componente | o `/docs` em branco atrás do Kong com `strip_path: true`, enquanto a suíte estava verde |
+| Integração | a semântica real do Redis (`""` ≠ `None`, `MGET` parcial) e os feriados reais da BVMF |
+| Property-based | a senha vazando em `redis://:senha@/0` (#58), o `\d` Unicode do pydantic-core (#59) e a idade do cache errada na virada do horário de verão (#61) |
+| Mutação | dezenas de defeitos que a suíte deixava passar (score de 81,5% antes): fronteiras (`<` × `<=`) e mensagens conferidas só por trecho (#65) |
+| Imagem | o DOMPurify com 19 CVEs de XSS dentro do Swagger UI (#69), visto pelo DAST; o event loop bloqueado, pela sabotagem do k6 |
+| Produção | o HSTS presente e desligado (`max-age=0`) na borda (#72) |
 
 ## O pipeline, bloco a bloco
 
@@ -313,7 +352,7 @@ Sabotagem de referência: com os filtros movidos para depois da varredura, eles 
 
 ### Performance — `tests/load/`
 
-O teste de escala em processo (`tests/api/test_performance.py`) prova que `/v1/trading-days` não voltou a ser quadrático, mas roda uma requisição por vez. Uma classe de regressão só aparece com **várias requisições simultâneas** contra o servidor real, de um único worker do uvicorn:
+O teste de escala em processo (`tests/unit/test_calendar_service.py::test_custo_do_complemento_nao_escala_com_o_numero_de_sessoes`) prova que `/v1/trading-days` não voltou a ser quadrático, mas mede uma chamada por vez, sem servidor. Uma classe de regressão só aparece com **várias requisições simultâneas** contra o servidor real, de um único worker do uvicorn:
 
 - uma chamada **bloqueante** dentro de um handler `async` (I/O síncrono, `time.sleep`, CPU pesado) congela o event loop — e com ele o `/v1/health` que o orquestrador consulta;
 - 5xx ou conexão recusada sob concorrência;
@@ -422,6 +461,77 @@ Um teste que deixa de rodar sem ninguém perceber é pior do que um teste que fa
 | Todo endpoint do contrato com cenário **e** com amostras na carga | `Performance · k6` (`scripts/k6_resumo.py`) e `tests/unit/test_scripts_k6_resumo.py` | um limiar de p95 passar sobre um endpoint que nunca foi chamado |
 | Todo arquivo do repositório lido pelos testes está no sandbox da mutação | `tests/architecture/test_convencoes.py` | a execução limpa do mutmut reprovar e derrubar o job antes de avaliar mutante algum (o push de #67) |
 | Toda imagem base fixada por digest e acompanhada pelo Dependabot | `tests/unit/test_imagens_fixadas.py` | uma tag mutável trocar a imagem sem commit, ou um digest fixo congelar as correções de segurança |
+
+## Invariantes e o teste que trava cada uma
+
+Cada invariante do [`CLAUDE.md`](../CLAUDE.md) nasceu de um bug. Reverter qualquer uma faz o teste abaixo reprovar, e isso foi verificado, não suposto.
+
+| Invariante | Bug que a originou | Teste que a trava |
+|---|---|---|
+| Nada faz I/O no import | o calendário quebrado matava o processo antes de o uvicorn abrir a porta (crash-loop sem log) | `integration/test_lifespan.py::test_import_nao_faz_io`, `architecture/test_import_sem_io.py` |
+| O cliente do Redis nunca vira `None` | Redis fora no arranque → 503 **para sempre**, mesmo depois de ele voltar | `unit/test_redis_service.py::test_reconecta_depois_que_o_redis_volta`, `e2e/test_resiliencia.py` |
+| Cobertura ≠ primeira/última sessão | janela começando em feriado fazia a API rejeitar um período que ela responde | `unit/test_calendar_service.py::test_cobertura_e_sessoes_sao_distintas` |
+| Tempo decorrido em instantes, não em relógio de parede | na volta do horário de verão, 2 h reais contavam 1 h e um cache vencido seguia servido (#61) | `unit/test_redis_cache.py::test_idade_atravessa_o_fim_do_horario_de_verao`, `property/test_cache_estado.py` |
+| `is not None`, nunca truthiness | `""` e idade `0.0` lidos como ausência: Redis saudável virava 503 | `unit/test_redis_cache.py::test_string_vazia_e_um_valor_legitimo`, `::test_idade_zero_e_zero_e_nao_none` |
+| Chave ausente (404) ≠ Redis fora (503) | a API dizia "Redis indisponível" quando faltava um `SET` | `unit/test_redis_service.py::test_chave_ausente_com_redis_no_ar_e_404`, `api/test_hours.py::test_404_quando_a_chave_nao_existe` |
+| 502 só vem de `InvalidUpstreamValueError` | bug interno parecia dado ruim do Redis; bytes não-UTF-8 davam 500; `\d` aceitava dígito arábico (#59) | `api/test_health.py::test_validationerror_que_nao_vem_do_redis_nao_vira_502`, `api/test_hours.py::test_valor_nao_utf8_no_redis_e_502_e_nao_500`, `property/test_horarios.py` |
+| `/v1/health` responde 503 em `unhealthy` | com 200 em todo estado, o `HEALTHCHECK` e as probes nunca viam falha | `api/test_health.py::test_unhealthy_responde_503` |
+| `/v1/trading-days` limita o span | um período sem limite custava ~77 s de CPU e ~117 MB no event loop | `api/test_dates.py::test_span_acima_do_limite_e_400_imediato`, `unit/test_calendar_service.py::test_custo_do_complemento_nao_escala_com_o_numero_de_sessoes`, k6 |
+| `scope["path"]` começa com `root_path` | atrás do Kong, todo asset dava 404 e o `/docs` ficava em branco | `api/test_proxy_prefix.py::test_static_atras_do_kong_com_strip_path_true`, `::test_paginas_referenciam_assets_que_respondem` |
+| Sem redirect de barra final | o `Location` expunha o IP interno do upstream | `api/test_proxy_prefix.py::test_barra_final_nao_redireciona_para_host_interno` |
+| O diretório estático só tem assets | montar o pacote servia `__init__.py` | `api/test_static.py::test_static_nao_serve_o_pacote` |
+| Docs nunca afirmam `apikey` obrigatório | a documentação exigia uma chave que a produção não pede | `api/test_openapi.py::test_sem_autenticacao_por_padrao`, `::test_esquema_apikey_quando_exigido` |
+| A janela do calendário é móvel | a constante 2006 discordava da janela real e devolvia dado financeiro errado com 200 | `unit/test_validate_range.py`, os testes de domínio do E2E (nenhum ano fixo) |
+
+## Checklist: endpoint novo
+
+Um endpoint novo não passa no pipeline sem tudo isto, e cada item tem um teste que reprova se faltar:
+
+| Item | O que reprova se faltar |
+|---|---|
+| Linha em `DOCUMENTED_CODES` (`tests/api/test_openapi.py`) | `test_openapi.py`: a rota vem de `app.routes` |
+| Router novo em `ROUTERS` (`tests/architecture/test_convencoes.py`) | `test_routers_conhecidos_sao_todos_os_que_existem` |
+| Caso E2E para cada par (operação, código) em `CASOS` (`tests/e2e/test_contrato.py`) | `test_cobertura_de_100_por_cento_do_contrato` |
+| Snapshot regenerado (`PYTHONPATH=src python scripts/gerar_openapi.py`) | `test_snapshot_do_contrato_esta_em_dia`; e o oasdiff, se for breaking sem bump de MAJOR |
+| Entrada em `ENDPOINTS` de `tests/load/smoke.js` | `test_o_script_do_k6_cobre_toda_operacao_do_contrato` |
+| Parâmetros com `openapi_examples` que respondem 2xx | o tripwire do DAST: operação alcançada só com 4xx reprova |
+| Lógica fora do corpo decorado com `@router.get` | a mutação: o mutmut não muta funções decoradas, e a lógica ficaria sem teste de mutação |
+| Exemplo no README, se for público | `e2e/test_exemplos_do_readme.py` executa os exemplos que existirem |
+
+## Decisões
+
+Registro curto das escolhas, no formato *contexto → decisão → por quê*.
+
+| Tema | Decisão | Por quê |
+|---|---|---|
+| Mutação | **mutmut 3** (não cosmic-ray) | Configuração no `pyproject.toml`, trampolins rápidos e `export-cicd-stats` para o gate. O cosmic-ray pediria banco de sessão e orquestração própria. O preço foi renomear o pacote: o mutmut recusa um pacote chamado `src` (#52) |
+| Layout do pacote | `src/b3datetime/` | Exigido pelo mutmut; também tira a ambiguidade de "`src` é diretório ou pacote?" de mypy, coverage e import-linter |
+| Arquitetura | **import-linter** + regras próprias de AST (não tach nem pytestarch) | Contratos declarativos no `pyproject.toml`, maduro, com camadas, independência e `forbidden`. O que o grafo de imports não vê (I/O no import, `Depends(get_settings)`) virou teste de AST e audit hook |
+| Fuzzing da API | **Schemathesis** em processo | Gera casos do próprio OpenAPI e valida status, schema e content-type, sem servidor, no bloco property-based |
+| Property-based | **Hypothesis** com perfis `dev`/`ci`/`mutation` | Seed do CI = `run_id`: um re-run reproduz e cada push explora entradas novas. O perfil da mutação é determinístico |
+| DAST | **OWASP ZAP** (Automation Framework) em container fixado por digest | Plano declarativo versionado, filtros com justificativa, export da árvore de sites para o tripwire. Container em vez de action: Dependabot e teste de imagens fixadas de graça |
+| Carga | **k6** (não Locust), também em container | Limiares declarativos com exit code, sem escrever um runner. Taxa constante e limiar relativo para conviver com o runner compartilhado |
+| SAST | bandit + CodeQL + zizmor + regras `S` do ruff; **Semgrep não adotado** | Seria o quarto motor de SAST Python, com custo de triagem e sem regra exclusiva relevante |
+| Contrato | snapshot versionado em `tests/contract/openapi.json` (não asset de release) | O diff do commit mostra toda mudança de contrato; o oasdiff compara com o snapshot da última tag |
+| Headers de segurança | **na borda** (Cloudflare), verificados no pós-deploy | Um dono só evita headers duplicados ou divergentes; o DAST da imagem os rebaixa a informativo e o pós-deploy confere os valores |
+| Imagem testada | um artefato só (`docker save`) para smoke, Trivy, E2E, DAST e k6 | Todos exercitam exatamente os mesmos bits. Reconstruir do cache dava os mesmos passos, mas não necessariamente os mesmos bits |
+| Gate | `ci-ok` único, que em push só aceita pulo do `dependency-review` | Um bloco pulado não pode liberar a publicação |
+
+## Números atuais
+
+Medidos em 2026-10-07, no run [37699640613](https://github.com/rlquilez/b3datetime/actions/runs/37699640613).
+
+| Métrica | Valor |
+|---|---|
+| Testes em processo | **571**: unitários 310 · componente 165 · integração 35 · property-based 20 (500 exemplos cada no CI) · arquitetura 41 |
+| Testes E2E | 61 contra a imagem; 45 contra a produção (16 exigem containers) |
+| Cobertura de linhas e ramos | **100%** (`src/b3datetime`) |
+| Mutação | **99,59%** (730 de 733; os 3 sobreviventes são equivalentes documentados) |
+| Contrato | 8 operações · 23 pares (operação, código) · 100% com caso E2E |
+| DAST | 8 de 8 operações com 2xx · 0 alertas Low ou acima |
+| Carga | ~97 req/s · p95 de 1 a 9 ms por endpoint · health sob carga ≤ 1,5× o ocioso |
+| SonarQube | quality gate OK · 0 issues · 0 hotspots · duplicação 0,0% |
+| Tempo até publicar | ~9 min (caminho crítico: testes → cobertura → imagem → DAST, com ~4 min de ZAP) |
 
 ## Como rodar localmente
 
