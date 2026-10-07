@@ -17,6 +17,8 @@ Convenção: **[SemVer](https://semver.org/lang/pt-BR/)** + **[Keep a Changelog]
 | **MINOR** | Funcionalidade nova, retrocompatível | Novo endpoint; novo campo opcional na resposta; novo parâmetro opcional de query |
 | **PATCH** | Correção sem mudar contrato | Corrigir cálculo interno; corrigir vazamento de credencial em log; performance; dependências |
 
+O job **`Contrato · oasdiff`** do CI torna a regra do MAJOR executável: ele compara `tests/contract/openapi.json` com o snapshot da última release e **reprova breaking change no contrato se o MAJOR não subiu**. Como todo push na `main` vai para produção, a quebra e o bump chegam no mesmo push. Ele não substitui o julgamento abaixo: mudança de status HTTP ou de semântica sem mudança de schema não aparece no diff.
+
 Regras que evitam erro:
 
 - **Mudança de status HTTP é MAJOR**, mesmo quando o status antigo estava errado. Orquestradores, retries e clientes reagem a código de status.
@@ -34,9 +36,10 @@ Regras que evitam erro:
 | `pyproject.toml` | `version = "X.Y.Z"` em `[project]` |
 | `README.md` | a linha `<strong>Versão atual: X.Y.Z</strong>` do cabeçalho (é o que o teste de sincronia procura); o exemplo de `GET /` na seção de endpoints também cita a versão |
 | `CHANGELOG.md` | nova seção `## [X.Y.Z] - AAAA-MM-DD` e os links de comparação no rodapé |
+| `tests/contract/openapi.json` | o snapshot do contrato traz `info.version`: regenere com `PYTHONPATH=src python scripts/gerar_openapi.py` |
 | tag git | **não se cria à mão**: o job `release` do CI cria `vX.Y.Z` (com o `v`, a única forma que leva prefixo) no commit de release |
 
-Os testes de `tests/unit/test_config.py` **impõem** essa sincronia no job `test` do CI, antes de qualquer publicação:
+Os testes de `tests/unit/test_config.py` **impõem** essa sincronia no CI, antes de qualquer publicação (e `tests/api/test_openapi.py::test_snapshot_do_contrato_esta_em_dia` impõe o snapshot):
 
 - `test_versao_sincronizada_com_pyproject`: `pyproject.toml` igual a `api_version`;
 - `test_versao_sincronizada_com_readme_e_changelog`: README com `Versão atual: X.Y.Z` e CHANGELOG com `## [X.Y.Z] - AAAA-MM-DD`;
@@ -89,6 +92,7 @@ Regras de escrita:
 
 ```bash
 # 1. Versão nova em src/b3datetime/config.py, pyproject.toml e README.md sincronizados
+#    e o snapshot do contrato regenerado: PYTHONPATH=src python scripts/gerar_openapi.py
 # 2. Seção do CHANGELOG escrita, com a data de hoje, e links de comparação atualizados
 
 # 3. Commit e push da main — e só. Nenhuma tag à mão.

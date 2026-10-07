@@ -1,0 +1,1160 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "B3 DateTime API",
+    "description": "API para consultar horários de operação e dias de negociação da B3 (Bolsa de Valores de São Paulo).\n\n## Características\n\n* **Horários de Operação**: abertura e fechamento lidos do Redis, com cache local de 1 h\n* **Dias de Negociação**: dias úteis na B3 segundo o calendário BVMF do `exchange_calendars`\n* **Janela de dados**: o calendário cobre uma janela móvel; consulte `GET /v1/calendar-info`\n  para os limites vigentes\n* **Timezone**: todos os horários e datas usam America/Sao_Paulo\n\n## Códigos de resposta\n\n| Código | Quando |\n|---|---|\n| `200` | Sucesso |\n| `400` | Período inválido em `/v1/trading-days`: ordem, span acima do máximo ou fora da janela |\n| `404` | Redis disponível, mas a chave não existe |\n| `422` | Data mal formada |\n| `502` | Valor no Redis fora do formato `HH:MM` |\n| `503` | Redis indisponível sem cache válido, ou calendário indisponível |\n\nAs URLs canônicas não têm barra final (`/docs/` responde 404). Código, guia de migração e\nCHANGELOG: [github.com/rlquilez/b3datetime](https://github.com/rlquilez/b3datetime).\n\n## Autenticação\n\n**Sem autenticação no momento.** As requisições não precisam de nenhum header. Quando o Kong passar a exigir o header `apikey`, a API é publicada com `API_KEY_REQUIRED=true` e esta documentação passa a declarar o esquema de segurança.",
+    "contact": {
+      "name": "Rodrigo Quilez",
+      "url": "https://github.com/rlquilez/b3datetime"
+    },
+    "license": {
+      "name": "MIT",
+      "url": "https://opensource.org/licenses/MIT"
+    },
+    "version": "2.0.4"
+  },
+  "paths": {
+    "/v1/hours": {
+      "get": {
+        "tags": [
+          "Horários de Operação"
+        ],
+        "summary": "Obter horários de abertura e fechamento",
+        "description": "Retorna os horários de abertura e fechamento da B3.\n\nOs horários são obtidos do Redis e mantidos em cache local por até 1 hora. Se o Redis estiver indisponível por mais tempo que isso, a resposta é 503. Se o Redis estiver disponível mas a chave não existir, a resposta é 404. Se o valor armazenado não estiver no formato `HH:MM`, a resposta é 502.\n\nAs duas chaves são lidas numa única operação atômica, de modo que a resposta nunca\ncombina um horário de abertura antigo com um de fechamento novo.",
+        "operationId": "get_trading_hours_v1_hours_get",
+        "responses": {
+          "200": {
+            "description": "Horários obtidos com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingHours"
+                },
+                "example": {
+                  "open": "10:00",
+                  "close": "17:00"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Redis disponível, mas a chave não existe",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": {
+                    "error": "Not Found",
+                    "message": "Chave não encontrada no Redis",
+                    "key": "b3:trading:hours:open"
+                  }
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Valor lido do Redis fora do formato HH:MM",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": {
+                    "error": "Bad Gateway",
+                    "message": "O valor armazenado no Redis não está no formato esperado"
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Redis indisponível e cache local expirado ou ausente",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": {
+                    "error": "Service Unavailable",
+                    "message": "Redis indisponível há mais de 3600s",
+                    "cache_age_seconds": 3700,
+                    "key": "b3:trading:hours:open"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/hours/open": {
+      "get": {
+        "tags": [
+          "Horários de Operação"
+        ],
+        "summary": "Obter horário de abertura",
+        "description": "Retorna apenas o horário de abertura da B3.\n\nOs horários são obtidos do Redis e mantidos em cache local por até 1 hora. Se o Redis estiver indisponível por mais tempo que isso, a resposta é 503. Se o Redis estiver disponível mas a chave não existir, a resposta é 404. Se o valor armazenado não estiver no formato `HH:MM`, a resposta é 502.",
+        "operationId": "get_open_time_v1_hours_open_get",
+        "responses": {
+          "200": {
+            "description": "Horário de abertura obtido com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingTime"
+                },
+                "example": {
+                  "time": "10:00"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Redis disponível, mas a chave não existe",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": {
+                    "error": "Not Found",
+                    "message": "Chave não encontrada no Redis",
+                    "key": "b3:trading:hours:open"
+                  }
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Valor lido do Redis fora do formato HH:MM",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": {
+                    "error": "Bad Gateway",
+                    "message": "O valor armazenado no Redis não está no formato esperado"
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Redis indisponível e cache local expirado ou ausente",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": {
+                    "error": "Service Unavailable",
+                    "message": "Redis indisponível há mais de 3600s",
+                    "cache_age_seconds": 3700,
+                    "key": "b3:trading:hours:open"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/hours/close": {
+      "get": {
+        "tags": [
+          "Horários de Operação"
+        ],
+        "summary": "Obter horário de fechamento",
+        "description": "Retorna apenas o horário de fechamento da B3.\n\nOs horários são obtidos do Redis e mantidos em cache local por até 1 hora. Se o Redis estiver indisponível por mais tempo que isso, a resposta é 503. Se o Redis estiver disponível mas a chave não existir, a resposta é 404. Se o valor armazenado não estiver no formato `HH:MM`, a resposta é 502.",
+        "operationId": "get_close_time_v1_hours_close_get",
+        "responses": {
+          "200": {
+            "description": "Horário de fechamento obtido com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingTime"
+                },
+                "example": {
+                  "time": "17:00"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Redis disponível, mas a chave não existe",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": {
+                    "error": "Not Found",
+                    "message": "Chave não encontrada no Redis",
+                    "key": "b3:trading:hours:open"
+                  }
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Valor lido do Redis fora do formato HH:MM",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": {
+                    "error": "Bad Gateway",
+                    "message": "O valor armazenado no Redis não está no formato esperado"
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Redis indisponível e cache local expirado ou ausente",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": {
+                    "error": "Service Unavailable",
+                    "message": "Redis indisponível há mais de 3600s",
+                    "cache_age_seconds": 3700,
+                    "key": "b3:trading:hours:open"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/calendar-info": {
+      "get": {
+        "tags": [
+          "Dias de Negociação"
+        ],
+        "summary": "Consultar os limites do calendário",
+        "description": "Retorna os limites vigentes do calendário carregado.\n\nA janela do calendário é **móvel** e se desloca conforme o tempo passa, portanto\nconsulte este endpoint em vez de assumir uma data mínima fixa. Períodos fora destes\nlimites são rejeitados com 400 por `/v1/trading-days`.\n\n`coverage_*` é o intervalo respondível; `first_session`/`last_session` são o primeiro e\no último pregão dentro dele. Os dois diferem quando a janela começa num feriado ou fim\nde semana.",
+        "operationId": "get_calendar_info_v1_calendar_info_get",
+        "responses": {
+          "200": {
+            "description": "Limites obtidos com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalendarInfoResponse"
+                },
+                "example": {
+                  "exchange": "BVMF",
+                  "coverage_start": "2016-09-04",
+                  "coverage_end": "2027-09-03",
+                  "first_session": "2016-09-05",
+                  "last_session": "2027-09-03",
+                  "sessions_count": 2730,
+                  "max_range_days": 3660
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Calendário de negociação indisponível",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": {
+                    "error": "Service Unavailable",
+                    "message": "Calendário de negociação indisponível"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/is-trading-day": {
+      "get": {
+        "tags": [
+          "Dias de Negociação"
+        ],
+        "summary": "Verificar se hoje é dia de negociação",
+        "description": "Verifica se o dia atual é um dia de negociação na B3, considerando feriados e\nfinais de semana do calendário BVMF.\n\nO \"dia atual\" é determinado no timezone America/Sao_Paulo. Se ele estiver fora da\njanela do calendário a resposta é 503 — nunca `false`, que seria indistinguível de um\nferiado legítimo.",
+        "operationId": "is_trading_day_v1_is_trading_day_get",
+        "responses": {
+          "200": {
+            "description": "Verificação realizada com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TradingDayResponse"
+                },
+                "examples": {
+                  "trading_day": {
+                    "summary": "Dia de negociação",
+                    "value": {
+                      "date": "2026-09-04",
+                      "is_trading_day": true
+                    }
+                  },
+                  "non_trading_day": {
+                    "summary": "Não é dia de negociação",
+                    "value": {
+                      "date": "2026-09-05",
+                      "is_trading_day": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Calendário de negociação indisponível",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": {
+                    "error": "Service Unavailable",
+                    "message": "Calendário de negociação indisponível"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/trading-days": {
+      "get": {
+        "tags": [
+          "Dias de Negociação"
+        ],
+        "summary": "Listar dias de negociação em um período",
+        "description": "Retorna os dias de negociação (ou de não-negociação) num período.\n\n**Parâmetros**\n- `start`: data inicial no formato YYYY-MM-DD\n- `end`: data final no formato YYYY-MM-DD, maior ou igual a `start`\n- `exclude`: se `true`, retorna os dias **sem** negociação; se `false` (padrão), os\n  dias **com** negociação\n\n**Restrições**\n- O período deve estar inteiramente dentro da janela do calendário. Consulte\n  `GET /v1/calendar-info` para os limites vigentes. Fora dela a resposta é 400 — a API\n  não devolve resultado parcial em silêncio.\n- O span máximo por requisição é limitado (`max_range_days`); períodos maiores são\n  rejeitados com 400.\n- Data mal formada responde 422.",
+        "operationId": "get_trading_days_v1_trading_days_get",
+        "parameters": [
+          {
+            "name": "start",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "description": "Data inicial (YYYY-MM-DD)",
+              "title": "Start"
+            },
+            "description": "Data inicial (YYYY-MM-DD)"
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "description": "Data final (YYYY-MM-DD)",
+              "title": "End"
+            },
+            "description": "Data final (YYYY-MM-DD)"
+          },
+          {
+            "name": "exclude",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Se true, retorna dias SEM negociação; se false, dias COM negociação",
+              "default": false,
+              "title": "Exclude"
+            },
+            "description": "Se true, retorna dias SEM negociação; se false, dias COM negociação"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de datas obtida com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Response Get Trading Days V1 Trading Days Get"
+                },
+                "examples": {
+                  "trading_days": {
+                    "summary": "Dias de negociação",
+                    "value": [
+                      "2026-09-01",
+                      "2026-09-02",
+                      "2026-09-03",
+                      "2026-09-04"
+                    ]
+                  },
+                  "non_trading_days": {
+                    "summary": "Dias sem negociação (exclude=true)",
+                    "value": [
+                      "2026-09-05",
+                      "2026-09-06",
+                      "2026-09-07"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Período inválido ou fora da janela do calendário",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": {
+                    "error": "Bad Request",
+                    "message": "Período fora da janela coberta pelo calendário (2016-09-04 a 2027-09-03). Consulte GET /v1/calendar-info para os limites vigentes."
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Calendário de negociação indisponível",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": {
+                    "error": "Service Unavailable",
+                    "message": "Calendário de negociação indisponível"
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/health": {
+      "get": {
+        "tags": [
+          "Health Check"
+        ],
+        "summary": "Verificar saúde da API",
+        "description": "Retorna o estado da API e de suas dependências.\n\n**Estados e códigos HTTP**\n- `healthy` (200): Redis conectado e calendário carregado\n- `degraded` (200): Redis desconectado, mas ambas as chaves têm cache local válido\n- `unhealthy` (**503**): sem cache utilizável, ou cache expirado, ou calendário\n  indisponível\n\nO 503 em `unhealthy` é o que permite ao Docker HEALTHCHECK e a probes do Kubernetes\ndetectarem a falha.",
+        "operationId": "health_check_v1_health_get",
+        "responses": {
+          "200": {
+            "description": "API saudável ou degradada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                },
+                "examples": {
+                  "healthy": {
+                    "summary": "Sistema saudável",
+                    "value": {
+                      "status": "healthy",
+                      "timestamp": "2026-09-04T10:30:00-03:00",
+                      "redis_status": "connected",
+                      "cache": {
+                        "redis_connected": true,
+                        "open_cache_age_seconds": 120,
+                        "close_cache_age_seconds": 120,
+                        "open_cache_expired": false,
+                        "close_cache_expired": false,
+                        "cache_ttl_seconds": 3600
+                      },
+                      "calendar": {
+                        "available": true,
+                        "first_session": "2016-09-05",
+                        "last_session": "2027-09-03",
+                        "sessions_count": 2730
+                      }
+                    }
+                  },
+                  "degraded": {
+                    "summary": "Redis offline, cache local ainda válido",
+                    "value": {
+                      "status": "degraded",
+                      "timestamp": "2026-09-04T10:30:00-03:00",
+                      "redis_status": "disconnected",
+                      "cache": {
+                        "redis_connected": false,
+                        "open_cache_age_seconds": 1800,
+                        "close_cache_age_seconds": 1800,
+                        "open_cache_expired": false,
+                        "close_cache_expired": false,
+                        "cache_ttl_seconds": 3600
+                      },
+                      "calendar": {
+                        "available": true,
+                        "first_session": "2016-09-05",
+                        "last_session": "2027-09-03",
+                        "sessions_count": 2730
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "API não saudável",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                },
+                "examples": {
+                  "redis_unavailable": {
+                    "summary": "Redis offline e sem cache utilizável",
+                    "value": {
+                      "status": "unhealthy",
+                      "timestamp": "2026-09-04T10:30:00-03:00",
+                      "redis_status": "disconnected",
+                      "cache": {
+                        "redis_connected": false,
+                        "open_cache_expired": true,
+                        "close_cache_expired": true,
+                        "cache_ttl_seconds": 3600
+                      },
+                      "calendar": {
+                        "available": true,
+                        "first_session": "2016-09-05",
+                        "last_session": "2027-09-03",
+                        "sessions_count": 2730
+                      }
+                    }
+                  },
+                  "calendar_unavailable": {
+                    "summary": "Calendário indisponível",
+                    "value": {
+                      "status": "unhealthy",
+                      "timestamp": "2026-09-04T10:30:00-03:00",
+                      "redis_status": "connected",
+                      "cache": {
+                        "redis_connected": true,
+                        "open_cache_age_seconds": 5,
+                        "close_cache_age_seconds": 5,
+                        "open_cache_expired": false,
+                        "close_cache_expired": false,
+                        "cache_ttl_seconds": 3600
+                      },
+                      "calendar": {
+                        "available": false
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "tags": [
+          "Informações da API"
+        ],
+        "summary": "Informações da API",
+        "description": "Nome, versão, links para a documentação e para cada endpoint, e a forma de autenticação em vigor. Atrás de um proxy com prefixo os links já vêm prefixados (ex.: `/<prefixo>/docs`).",
+        "operationId": "root__get",
+        "responses": {
+          "200": {
+            "description": "Metadados obtidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RootResponse"
+                },
+                "example": {
+                  "name": "B3 DateTime API",
+                  "version": "2.0.4",
+                  "description": "API para consultar horários e dias de operação da B3",
+                  "docs": {
+                    "swagger": "/docs",
+                    "redoc": "/redoc",
+                    "openapi": "/openapi.json"
+                  },
+                  "endpoints": {
+                    "hours": {
+                      "all": "/v1/hours",
+                      "open": "/v1/hours/open",
+                      "close": "/v1/hours/close"
+                    },
+                    "dates": {
+                      "is_trading_day": "/v1/is-trading-day",
+                      "trading_days": "/v1/trading-days?start=YYYY-MM-DD&end=YYYY-MM-DD&exclude=false",
+                      "calendar_info": "/v1/calendar-info"
+                    },
+                    "health": "/v1/health"
+                  },
+                  "authentication": {
+                    "required": false,
+                    "managed_by": "Kong Gateway"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AuthInfo": {
+        "properties": {
+          "required": {
+            "type": "boolean",
+            "title": "Required",
+            "description": "Se as requisições precisam de credencial"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type",
+            "description": "Tipo da credencial, quando exigida",
+            "example": "API Key"
+          },
+          "header": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Header",
+            "description": "Header que carrega a credencial, quando exigida",
+            "example": "apikey"
+          },
+          "managed_by": {
+            "type": "string",
+            "title": "Managed By",
+            "description": "Quem valida a credencial",
+            "example": "Kong Gateway"
+          }
+        },
+        "type": "object",
+        "required": [
+          "required",
+          "managed_by"
+        ],
+        "title": "AuthInfo",
+        "description": "Forma de autenticação em vigor. Só informa; quem valida é o Kong."
+      },
+      "CacheStatus": {
+        "properties": {
+          "redis_connected": {
+            "type": "boolean",
+            "title": "Redis Connected",
+            "description": "Ping ao Redis bem-sucedido nesta verificação"
+          },
+          "open_cache_age_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Open Cache Age Seconds",
+            "description": "Idade do cache da abertura, em segundos; null se nunca populado"
+          },
+          "close_cache_age_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Close Cache Age Seconds",
+            "description": "Idade do cache do fechamento, em segundos; null se nunca populado"
+          },
+          "open_cache_expired": {
+            "type": "boolean",
+            "title": "Open Cache Expired",
+            "description": "Cache da abertura ausente ou mais velho que o TTL"
+          },
+          "close_cache_expired": {
+            "type": "boolean",
+            "title": "Close Cache Expired",
+            "description": "Cache do fechamento ausente ou mais velho que o TTL"
+          },
+          "cache_ttl_seconds": {
+            "type": "integer",
+            "title": "Cache Ttl Seconds",
+            "description": "TTL configurado (CACHE_TTL_SECONDS)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "redis_connected",
+          "open_cache_age_seconds",
+          "close_cache_age_seconds",
+          "open_cache_expired",
+          "close_cache_expired",
+          "cache_ttl_seconds"
+        ],
+        "title": "CacheStatus",
+        "description": "Estado do cache local dos horários."
+      },
+      "CalendarInfoResponse": {
+        "properties": {
+          "exchange": {
+            "type": "string",
+            "title": "Exchange",
+            "description": "Código da bolsa no exchange_calendars",
+            "example": "BVMF"
+          },
+          "coverage_start": {
+            "type": "string",
+            "title": "Coverage Start",
+            "description": "Primeira data respondível. Períodos que comecem antes são rejeitados",
+            "example": "2016-09-04"
+          },
+          "coverage_end": {
+            "type": "string",
+            "title": "Coverage End",
+            "description": "Última data respondível",
+            "example": "2027-09-03"
+          },
+          "first_session": {
+            "type": "string",
+            "title": "First Session",
+            "description": "Primeiro dia de negociação dentro da cobertura",
+            "example": "2016-09-05"
+          },
+          "last_session": {
+            "type": "string",
+            "title": "Last Session",
+            "description": "Último dia de negociação dentro da cobertura",
+            "example": "2027-09-03"
+          },
+          "sessions_count": {
+            "type": "integer",
+            "title": "Sessions Count",
+            "description": "Quantidade de dias de negociação na cobertura",
+            "example": 2730
+          },
+          "max_range_days": {
+            "type": "integer",
+            "title": "Max Range Days",
+            "description": "Span máximo aceito por /v1/trading-days, em dias",
+            "example": 3660
+          }
+        },
+        "type": "object",
+        "required": [
+          "exchange",
+          "coverage_start",
+          "coverage_end",
+          "first_session",
+          "last_session",
+          "sessions_count",
+          "max_range_days"
+        ],
+        "title": "CalendarInfoResponse",
+        "description": "Limites vigentes do calendário carregado."
+      },
+      "CalendarStatus": {
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "title": "Available",
+            "description": "Calendário construído no arranque"
+          },
+          "first_session": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Session",
+            "description": "Primeira sessão carregada"
+          },
+          "last_session": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Session",
+            "description": "Última sessão carregada"
+          },
+          "sessions_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sessions Count",
+            "description": "Quantidade de sessões carregadas"
+          }
+        },
+        "type": "object",
+        "required": [
+          "available"
+        ],
+        "title": "CalendarStatus",
+        "description": "Estado do calendário de negociação. Os limites só aparecem quando ele existe."
+      },
+      "DatesLinks": {
+        "properties": {
+          "is_trading_day": {
+            "type": "string",
+            "title": "Is Trading Day",
+            "description": "Hoje é dia de negociação?",
+            "example": "/v1/is-trading-day"
+          },
+          "trading_days": {
+            "type": "string",
+            "title": "Trading Days",
+            "description": "Modelo de URL com os parâmetros obrigatórios",
+            "example": "/v1/trading-days?start=YYYY-MM-DD&end=YYYY-MM-DD&exclude=false"
+          },
+          "calendar_info": {
+            "type": "string",
+            "title": "Calendar Info",
+            "description": "Janela coberta pelo calendário",
+            "example": "/v1/calendar-info"
+          }
+        },
+        "type": "object",
+        "required": [
+          "is_trading_day",
+          "trading_days",
+          "calendar_info"
+        ],
+        "title": "DatesLinks",
+        "description": "Endpoints de dias de negociação."
+      },
+      "DocsLinks": {
+        "properties": {
+          "swagger": {
+            "type": "string",
+            "title": "Swagger",
+            "description": "Swagger UI",
+            "example": "/docs"
+          },
+          "redoc": {
+            "type": "string",
+            "title": "Redoc",
+            "description": "ReDoc",
+            "example": "/redoc"
+          },
+          "openapi": {
+            "type": "string",
+            "title": "Openapi",
+            "description": "Schema OpenAPI em JSON",
+            "example": "/openapi.json"
+          }
+        },
+        "type": "object",
+        "required": [
+          "swagger",
+          "redoc",
+          "openapi"
+        ],
+        "title": "DocsLinks",
+        "description": "Links da documentação interativa."
+      },
+      "EndpointLinks": {
+        "properties": {
+          "hours": {
+            "$ref": "#/components/schemas/HoursLinks"
+          },
+          "dates": {
+            "$ref": "#/components/schemas/DatesLinks"
+          },
+          "health": {
+            "type": "string",
+            "title": "Health",
+            "description": "Health check",
+            "example": "/v1/health"
+          }
+        },
+        "type": "object",
+        "required": [
+          "hours",
+          "dates",
+          "health"
+        ],
+        "title": "EndpointLinks",
+        "description": "Todos os endpoints da API."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "Estado geral da API: healthy, degraded ou unhealthy",
+            "example": "healthy"
+          },
+          "timestamp": {
+            "type": "string",
+            "title": "Timestamp",
+            "description": "Momento da verificação, em ISO 8601",
+            "example": "2026-09-04T10:30:00-03:00"
+          },
+          "redis_status": {
+            "type": "string",
+            "title": "Redis Status",
+            "description": "Estado da conexão com o Redis: connected ou disconnected",
+            "example": "connected"
+          },
+          "cache": {
+            "$ref": "#/components/schemas/CacheStatus",
+            "description": "Estado do cache local"
+          },
+          "calendar": {
+            "$ref": "#/components/schemas/CalendarStatus",
+            "description": "Estado do calendário de negociação"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "timestamp",
+          "redis_status",
+          "cache",
+          "calendar"
+        ],
+        "title": "HealthResponse",
+        "description": "Estado da API e de suas dependências."
+      },
+      "HoursLinks": {
+        "properties": {
+          "all": {
+            "type": "string",
+            "title": "All",
+            "description": "Abertura e fechamento",
+            "example": "/v1/hours"
+          },
+          "open": {
+            "type": "string",
+            "title": "Open",
+            "description": "Só a abertura",
+            "example": "/v1/hours/open"
+          },
+          "close": {
+            "type": "string",
+            "title": "Close",
+            "description": "Só o fechamento",
+            "example": "/v1/hours/close"
+          }
+        },
+        "type": "object",
+        "required": [
+          "all",
+          "open",
+          "close"
+        ],
+        "title": "HoursLinks",
+        "description": "Endpoints de horários de operação."
+      },
+      "RootResponse": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Nome da API"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version",
+            "description": "Versão publicada (SemVer)"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "description": "Resumo do que a API faz"
+          },
+          "docs": {
+            "$ref": "#/components/schemas/DocsLinks"
+          },
+          "endpoints": {
+            "$ref": "#/components/schemas/EndpointLinks"
+          },
+          "authentication": {
+            "$ref": "#/components/schemas/AuthInfo"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "version",
+          "description",
+          "docs",
+          "endpoints",
+          "authentication"
+        ],
+        "title": "RootResponse",
+        "description": "Metadados da API. Os links incluem o prefixo do proxy quando há um."
+      },
+      "TradingDayResponse": {
+        "properties": {
+          "date": {
+            "type": "string",
+            "title": "Date",
+            "description": "Data verificada no formato YYYY-MM-DD",
+            "example": "2026-09-04"
+          },
+          "is_trading_day": {
+            "type": "boolean",
+            "title": "Is Trading Day",
+            "description": "Se é um dia de negociação na B3",
+            "example": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "date",
+          "is_trading_day"
+        ],
+        "title": "TradingDayResponse",
+        "description": "Resultado da verificação de um dia de negociação."
+      },
+      "TradingHours": {
+        "properties": {
+          "open": {
+            "type": "string",
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+            "title": "Open",
+            "description": "Horário de abertura no formato HH:MM",
+            "example": "10:00"
+          },
+          "close": {
+            "type": "string",
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+            "title": "Close",
+            "description": "Horário de fechamento no formato HH:MM",
+            "example": "17:00"
+          }
+        },
+        "type": "object",
+        "required": [
+          "open",
+          "close"
+        ],
+        "title": "TradingHours",
+        "description": "Horários de abertura e fechamento."
+      },
+      "TradingTime": {
+        "properties": {
+          "time": {
+            "type": "string",
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
+            "title": "Time",
+            "description": "Horário no formato HH:MM",
+            "example": "10:00"
+          }
+        },
+        "type": "object",
+        "required": [
+          "time"
+        ],
+        "title": "TradingTime",
+        "description": "Horário único."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Horários de Operação",
+      "description": "Abertura e fechamento lidos do Redis num único `MGET`, com cache local de até 1 hora como fallback."
+    },
+    {
+      "name": "Dias de Negociação",
+      "description": "Dias de negociação segundo o calendário BVMF do `exchange_calendars`, numa janela móvel consultável em `/v1/calendar-info`."
+    },
+    {
+      "name": "Health Check",
+      "description": "Estado da API e das dependências. `unhealthy` responde **503**, o que o `HEALTHCHECK` do Docker e as probes do Kubernetes detectam."
+    },
+    {
+      "name": "Informações da API",
+      "description": "Metadados, links (já com o prefixo do proxy) e forma de autenticação."
+    }
+  ],
+  "externalDocs": {
+    "description": "README, guia de migração e CHANGELOG",
+    "url": "https://github.com/rlquilez/b3datetime#readme"
+  },
+  "servers": [
+    {
+      "url": "/b3datetime"
+    }
+  ]
+}

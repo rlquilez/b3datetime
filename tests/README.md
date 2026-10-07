@@ -45,6 +45,7 @@ flowchart LR
         pipaudit["SCA · pip-audit"]:::estatica
         trivyfs["SCA · Trivy (filesystem)"]:::estatica
         depreview["SCA · dependency-review<br/><i>só em PR</i>"]:::estatica
+        contract["Contrato · oasdiff<br/><i>breaking × SemVer</i>"]:::estatica
     end
 
     subgraph E2["② Testes em processo"]
@@ -102,6 +103,9 @@ Não executa a aplicação; por isso roda primeiro e em paralelo.
 | SAST · zizmor | auditoria dedicada de GitHub Actions: injeção de template, permissões excessivas, `persist-credentials`, pin por SHA, cache envenenável, gatilhos perigosos, actions com vulnerabilidade conhecida | limpo até no perfil `pedantic`; o que só o perfil `auditor` aponta (secrets fora de *environment*) exigiria configuração no repositório e está registrado como decisão |
 | Segredos · gitleaks | o histórico **inteiro** do git | um segredo removido do código continua no histórico |
 | SCA · pip-audit / Trivy fs / dependency-review | CVEs nas dependências pinadas, no filesystem (inclui misconfig do `Dockerfile`) e nas dependências que um PR introduz | `CRITICAL`/`HIGH` reprovam |
+| Contrato · oasdiff | `tests/contract/openapi.json` contra o snapshot da última release | breaking change no contrato só passa com bump de MAJOR — e como todo push vai para produção, a quebra e o bump chegam juntos |
+
+**O contrato é um artefato versionado.** `tests/contract/openapi.json` é o `/openapi.json` que a API serve atrás do Kong, gerado em processo por `scripts/gerar_openapi.py`. Um teste do bloco de componente exige que ele esteja em dia: mudar o contrato sem regenerar reprova, e regenerar faz a mudança aparecer no diff do commit. A sabotagem de referência — remover o campo obrigatório `close` de `/v1/hours` — é barrada pelo oasdiff como `response-required-property-removed`.
 
 **Semgrep foi avaliado e não adotado:** seria o quarto motor de SAST para Python, ao lado de CodeQL `security-extended`, Sonar e bandit (mais as regras `S` do ruff), com custo de triagem e sem regra exclusiva relevante para este código.
 

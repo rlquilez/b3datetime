@@ -305,6 +305,89 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: zizmor .github/
 
+  contract:
+    name: Contrato · oasdiff (breaking × SemVer)
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    env:
+      URL_PRODUCAO: https://api.quilez.cloud/b3datetime/openapi.json
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0 # as tags de release são a base da comparação
+
+      # Base = o snapshot do contrato na última release (tag vX.Y.Z). Breaking change só
+      # passa se o MAJOR do api_version subiu em relação a ela: todo push na main vai para
+      # produção, então a quebra e o bump precisam chegar juntos. Releases anteriores ao
+      # snapshot (até a v2.0.4) não têm o arquivo; aí a base é o contrato servido em
+      # produção, que é o que os clientes consomem.
+      - name: Base de comparação
+        id: base
+        run: |
+          set -euo pipefail
+          TAG="$(git tag --list 'v[0-9]*' --sort=-v:refname | head -1)"
+          if [ -n "$TAG" ] && git cat-file -e "$TAG:tests/contract/openapi.json" 2>/dev/null; then
+            git show "$TAG:tests/contract/openapi.json" > base-openapi.json
+            ORIGEM="snapshot da release $TAG"
+          else
+            curl -fsS --retry 3 --max-time 30 "$URL_PRODUCAO" > base-openapi.json
+            ORIGEM="contrato servido em produção (a release ${TAG:-—} não tem snapshot)"
+          fi
+          BASE_V="$(jq -r .info.version base-openapi.json)"
+          NOVA_V="$(jq -r .info.version tests/contract/openapi.json)"
+          if [ "${NOVA_V%%.*}" -gt "${BASE_V%%.*}" ]; then MAJOR=true; else MAJOR=false; fi
+          {
+            echo "major_subiu=$MAJOR"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "## Contrato OpenAPI"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Base | $ORIGEM — versão \`$BASE_V\` |"
+            echo "| Nova | \`tests/contract/openapi.json\` — versão \`$NOVA_V\` |"
+            echo "| MAJOR subiu? | $MAJOR (breaking change $( [ "$MAJOR" = true ] && echo permitida || echo "**reprova**")) |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Breaking changes (bloqueante — o MAJOR não subiu)
+        if: steps.base.outputs.major_subiu == 'false'
+        uses: oasdiff/oasdiff-action/breaking@b9325c9e0a27ab65b0da3b766522cedec6be81dc # v0.1.18
+        with:
+          base: base-openapi.json
+          revision: tests/contract/openapi.json
+          fail-on: ERR
+          # Nada sai do CI: sem upload para oasdiff.com e sem comentário em PR.
+          review: false
+          github-token: ""
+
+      - name: Breaking changes (informativo — o MAJOR subiu)
+        if: steps.base.outputs.major_subiu == 'true'
+        uses: oasdiff/oasdiff-action/breaking@b9325c9e0a27ab65b0da3b766522cedec6be81dc # v0.1.18
+        with:
+          base: base-openapi.json
+          revision: tests/contract/openapi.json
+          review: false
+          github-token: ""
+
+      - name: Changelog do contrato
+        uses: oasdiff/oasdiff-action/changelog@b9325c9e0a27ab65b0da3b766522cedec6be81dc # v0.1.18
+        with:
+          base: base-openapi.json
+          revision: tests/contract/openapi.json
+          output-to-file: contrato-changelog.txt
+          review: false
+          github-token: ""
+      - name: Changelog no resumo do run
+        run: |
+          {
+            echo ""
+            echo "### Mudanças em relação à base"
+            echo '```'
+            if [ -s contrato-changelog.txt ]; then cat contrato-changelog.txt; else echo "nenhuma"; fi
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
   pip-audit:
     name: SCA · pip-audit
     timeout-minutes: 10
@@ -805,6 +888,7 @@ jobs:
       - pip-audit
       - dependency-review
       - secret-scan
+      - contract
       - codeql
       - trivy-fs
       - docker-verify
@@ -839,6 +923,7 @@ jobs:
               "codeql": "SAST · CodeQL (python e actions)",
               "zizmor": "SAST · zizmor (workflows)",
               "secret-scan": "Segredos · gitleaks",
+              "contract": "Contrato · oasdiff (breaking × SemVer)",
               "pip-audit": "SCA · pip-audit",
               "trivy-fs": "SCA · Trivy (filesystem)",
               "dependency-review": "SCA · dependency-review",

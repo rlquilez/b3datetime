@@ -878,12 +878,13 @@ flowchart LR
         codeql["CodeQL"]
         trivyfs["Trivy fs"]
         depreview["dependency-review (só PR)"]
+        contract["contrato (oasdiff × SemVer)"]
     end
     test --> cov["cobertura combinada<br/>≥ 90% · nenhum teste pulado"] --> sonar["SonarQube<br/>quality gate bloqueante"]
     lint & typecheck & cov --> dv["docker-verify<br/>build amd64 · smoke test · Trivy"]
     lint & typecheck & cov --> e2e["e2e<br/>100% dos endpoints · 4 ambientes"]
     pub --> rel["release (versão nova)<br/>tag vX.Y.Z · X · X.Y · X.Y.Z · GitHub Release"]
-    lint & typecheck & test & cov & sonar & bandit & pipaudit & gitleaks & codeql & trivyfs & dv & e2e & depreview --> ok["ci-ok<br/>agrega todos os blocos"]
+    lint & typecheck & test & cov & sonar & bandit & pipaudit & gitleaks & codeql & trivyfs & contract & dv & e2e & depreview --> ok["ci-ok<br/>agrega todos os blocos"]
     ok --> pub["docker-publish (push na main)<br/>latest · sha-abc1234"] --> sbom["SBOM"]
 ```
 
@@ -897,6 +898,7 @@ flowchart LR
 | SAST | bandit, CodeQL (Python e os próprios workflows), zizmor | zizmor audita os workflows: injeção de template, permissões, credencial persistida, action sem pin por SHA, cache envenenável, ações com vulnerabilidade conhecida |
 | CVEs em dependências | pip-audit, dependency-review | |
 | Segredos | gitleaks | histórico inteiro |
+| Contrato | oasdiff | `tests/contract/openapi.json` (snapshot do contrato, versionado) contra o da última release: breaking change sem bump de MAJOR reprova |
 | Filesystem e imagem | Trivy | `CRITICAL`/`HIGH` reprovam |
 | Smoke test | `scripts/smoke_image.sh` | container real, com e sem prefixo, Redis real e `HEALTHCHECK` |
 | E2E | `pytest -m e2e tests/e2e` contra a imagem | 100% das respostas documentadas das 8 operações, consultas e documentação; nenhum teste pode ser pulado |

@@ -26,6 +26,7 @@ from b3datetime.routers.openapi_examples import (
 )
 from b3datetime.services.calendar_service import TradingCalendar
 from b3datetime.services.redis_service import RedisService
+from scripts.gerar_openapi import SNAPSHOT, contrato_servido, serializar
 from tests.conftest import build_app
 
 HOURS_CODES = {"200", "404", "502", "503"}
@@ -175,3 +176,16 @@ async def test_schemas_tipados(client: httpx.AsyncClient) -> None:
         assert name in components, name
     for prop, spec in components["CalendarInfoResponse"]["properties"].items():
         assert spec.get("description"), f"{prop} sem description"
+
+
+async def test_snapshot_do_contrato_esta_em_dia() -> None:
+    """``tests/contract/openapi.json`` é o contrato servido, byte a byte.
+
+    Toda mudança de contrato aparece no diff do commit, e o job ``Contrato · oasdiff``
+    compara este arquivo com o da última release para barrar breaking change sem MAJOR.
+    Divergiu? ``PYTHONPATH=src python scripts/gerar_openapi.py`` e revise o diff.
+    """
+    atual = serializar(await contrato_servido())
+    assert SNAPSHOT.read_text(encoding="utf-8") == atual, (
+        "snapshot do contrato desatualizado: rode `PYTHONPATH=src python scripts/gerar_openapi.py`"
+    )
