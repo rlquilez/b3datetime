@@ -892,6 +892,7 @@ flowchart LR
     pub --> rel["release (versão nova)<br/>tag vX.Y.Z · X · X.Y · X.Y.Z · GitHub Release"]
     lint & typecheck & test & cov & sonar & bandit & pipaudit & gitleaks & codeql & trivyfs & contract & dv & e2e & dast & perf & depreview --> ok["ci-ok<br/>agrega todos os blocos"]
     ok --> pub["docker-publish (push na main)<br/>latest · sha-abc1234"] --> sbom["SBOM"]
+    pub --> pos["pós-deploy (produção)<br/>build = SHA · E2E de leitura · ZAP passivo · headers da borda"]
 ```
 
 | Etapa | Ferramenta | Observação |
@@ -916,6 +917,7 @@ flowchart LR
 | Qualidade | SonarQube | quality gate **bloqueante**: coverage, duplicação e issues em código novo |
 | Publicação | imagem multi-arch + SBOM | só em push na `main`, só com tudo verde |
 | Release | tag, retag da imagem e GitHub Release | automática quando a `api_version` do commit publicado ainda não tem Release |
+| Pós-deploy | `GET /` (`build`), E2E em modo URL, ZAP passivo, `scripts/cabecalhos_da_borda.py` | depois do pull automático: espera a produção servir o commit, roda a suíte de leitura e a varredura passiva contra a URL pública e confere os headers de segurança da borda; fora do `ci-ok` |
 
 - `ci-ok` é o único check agregador, e o `docker-publish` depende dele: nenhuma imagem é publicada sem **todos** os blocos aprovados — lint, tipagem, testes, SAST, SCA, segredos, smoke, E2E, DAST, performance, scan da imagem e quality gate. Em push, um bloco pulado também reprova; o resumo do run traz a tabela de blocos com o resultado de cada um.
 - Actions fixadas por SHA de commit (com a versão em comentário, atualizada pelo Dependabot), `persist-credentials: false` em todo checkout e `timeout-minutes` em todo job.
@@ -944,7 +946,7 @@ flowchart LR
 - **Sem autenticação na aplicação** por desenho: quem valida chaves é o gateway. `API_KEY_REQUIRED` só documenta.
 - Imagem mínima sobre `python:3.14-alpine` fixada por digest, com usuário sem privilégios, sem `pip`/`setuptools`/`wheel`, patches do sistema (`apk upgrade`) aplicados a cada build e varrida pelo Trivy a cada CI.
 - Assets da documentação versionados e servidos localmente (sem CDN, sem SRI para gerenciar); o diretório servido contém só os assets, nunca código Python. Como nenhum manifesto os declara, quem os vigia é o **DAST** (OWASP ZAP, regra *Vulnerable JS Library*): foi ele que apontou o DOMPurify vulnerável dentro do Swagger UI 5.17.14.
-- **Varredura dinâmica (DAST)** a cada push: o ZAP ataca a imagem verificada antes de qualquer publicação. Os headers de segurança da resposta (CSP, `X-Frame-Options`, HSTS, `Referrer-Policy`) são responsabilidade da borda (Cloudflare), não da aplicação.
+- **Varredura dinâmica (DAST)** a cada push: o ZAP ataca a imagem verificada antes de qualquer publicação. Os headers de segurança da resposta (CSP, `X-Frame-Options`, HSTS, `Referrer-Policy`) são responsabilidade da borda (Cloudflare), não da aplicação, e o job de pós-deploy confere os **valores** deles na produção a cada deploy.
 - CORS sem credenciais e só para métodos de leitura; redirecionamentos que expunham o host interno do upstream foram eliminados.
 - A URL do Redis é redigida nos logs (senha nunca aparece); dependências pinadas e auditadas por pip-audit, dependency-review e Dependabot; código analisado por bandit, CodeQL e SonarQube; segredos varridos por gitleaks.
 - Encontrou uma vulnerabilidade? Abra um [report privado](https://github.com/rlquilez/b3datetime/security/advisories/new) no GitHub em vez de uma issue pública.

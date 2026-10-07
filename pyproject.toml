@@ -353,3 +353,7 @@ pytest_add_cli_args_test_selection = [
 # (allow_credentials=False explícito no CORS — o default do Starlette — e
 # redirect_slashes=False trocado por None, que também é falso).
 mutation_min_score = 99.0
+# Headers de segurança da borda (Cloudflare) conferidos na produção pelo job de
+# pós-deploy (scripts/cabecalhos_da_borda.py). `false`: o que falta só gera aviso, até a
+# borda ser configurada; `true`: reprova — uma regra desfeita no Cloudflare quebra o job.
+edge_headers_required = false

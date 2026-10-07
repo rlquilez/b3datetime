@@ -239,5 +239,22 @@ def test_main_reprova_com_o_contrato_real_e_arvore_vazia(
     assert "::error::GET /b3datetime/v1/trading-days não foi alcançada" in capsys.readouterr().out
 
 
-def test_main_com_argumentos_errados() -> None:
-    assert main([]) == 2
+def test_resumo_com_titulo() -> None:
+    assert resumo([], [], [], "Produção · DAST passivo").startswith("## Produção · DAST passivo\n")
+    assert resumo([], [], []).startswith("## DAST · OWASP ZAP\n")
+
+
+def test_main_com_titulo(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    relatorio = tmp_path / "zap.json"
+    relatorio.write_text("{}")
+    arvore = tmp_path / "arvore.yaml"
+    arvore.write_text("[]")
+    contrato = tmp_path / "openapi.json"
+    contrato.write_text(json.dumps({"paths": {}}))
+    assert main([str(relatorio), str(arvore), str(contrato), "Produção"]) == 1
+    assert capsys.readouterr().out.startswith("## Produção\n")
+
+
+@pytest.mark.parametrize("quantos", [0, 2, 5])
+def test_main_com_argumentos_errados(quantos: int) -> None:
+    assert main(["x"] * quantos) == 2

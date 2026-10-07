@@ -1,0 +1,92 @@
+# Plano PASSIVO do OWASP ZAP contra a produção (job "Produção · pós-deploy").
+#
+# Só observa: importa o contrato (todas as operações são GET de leitura), percorre /docs
+# e /redoc com o spider e deixa a varredura passiva analisar as respostas. Nenhuma
+# requisição de ataque — a varredura ativa roda apenas contra o container do CI
+# (plano-imagem.yaml).
+#
+# O que só a produção mostra: a resposta como o cliente a recebe, depois do Kong e do
+# Cloudflare — cookies e headers da borda, redirecionamentos, páginas de desafio.
+env:
+  contexts:
+    - name: producao
+      urls:
+        - https://api.quilez.cloud/b3datetime/
+      includePaths:
+        - "https://api.quilez.cloud/b3datetime.*"
+  parameters:
+    failOnError: true
+    failOnWarning: false
+    progressToStdout: true
+
+jobs:
+  # Mesmos filtros e justificativas do plano da imagem (tests/dast/plano-imagem.yaml).
+  # Os headers de segurança continuam rebaixados a informativo aqui: quem os confere com
+  # precisão — valor, não só presença — é scripts/cabecalhos_da_borda.py, no mesmo job.
+  - type: alertFilter
+    alertFilters:
+      - ruleId: 10038 # Content Security Policy (CSP) Header Not Set
+        newRisk: Info
+      - ruleId: 10020 # Missing Anti-clickjacking Header
+        newRisk: Info
+      - ruleId: 10021 # X-Content-Type-Options Header Missing
+        newRisk: Info
+      - ruleId: 10035 # Strict-Transport-Security Header (ausente ou max-age=0)
+        newRisk: Info
+      - ruleId: 10096 # Timestamp Disclosure - Unix
+        newRisk: False Positive
+        url: "https://api.quilez.cloud/b3datetime/static/.*\\.js"
+        urlRegex: true
+      - ruleId: 2 # Private IP Disclosure
+        newRisk: False Positive
+        url: "https://api.quilez.cloud/b3datetime/static/redoc.standalone.js"
+
+  - type: openapi
+    parameters:
+      apiUrl: https://api.quilez.cloud/b3datetime/openapi.json
+      targetUrl: https://api.quilez.cloud/b3datetime
+      context: producao
+
+  - type: spider
+    name: spider-docs
+    parameters:
+      context: producao
+      url: https://api.quilez.cloud/b3datetime/docs
+      maxDuration: 1
+  - type: spider
+    name: spider-redoc
+    parameters:
+      context: producao
+      url: https://api.quilez.cloud/b3datetime/redoc
+      maxDuration: 1
+
+  - type: passiveScan-wait
+    parameters:
+      maxDuration: 2
+
+  - type: report
+    name: relatorio-html
+    parameters:
+      template: traditional-html
+      reportDir: /zap/wrk
+      reportFile: zap
+      reportTitle: DAST passivo · produção — b3datetime
+  - type: report
+    name: relatorio-json
+    parameters:
+      template: traditional-json
+      reportDir: /zap/wrk
+      reportFile: zap
+
+  - type: export
+    parameters:
+      context: producao
+      type: yaml
+      source: sitestree
+      fileName: /zap/wrk/arvore.yaml
+
+  - type: exitStatus
+    parameters:
+      errorLevel: Low
+      okExitValue: 0
+      errorExitValue: 1

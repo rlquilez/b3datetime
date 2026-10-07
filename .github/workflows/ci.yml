@@ -1137,6 +1137,86 @@ jobs:
           format: spdx-json
           artifact-name: sbom.spdx.json
 
+  pos-deploy:
+    name: Produção · pós-deploy
+    timeout-minutes: 30
+    # A produção puxa o `latest` sozinha, num mecanismo fora deste repositório. Este job
+    # confirma, de fora, o que só existe lá: (1) que o pull aconteceu — `GET /` informa o
+    # `build` (#66) —, (2) que a resposta como o cliente a recebe, depois do Kong e do
+    # Cloudflare, cumpre o contrato, (3) que a varredura passiva não aponta nada e (4) que
+    # os headers de segurança da borda têm os valores esperados.
+    # Fora do ci-ok: roda depois da publicação e não tem o que impedir; reprovar aqui
+    # sinaliza um problema na produção. Sem varredura ativa: só GETs de leitura.
+    needs: [docker-publish]
+    if: >-
+      !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+      needs.docker-publish.result == 'success'
+    runs-on: ubuntu-latest
+    env:
+      URL_PRODUCAO: https://api.quilez.cloud/b3datetime
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+
+      - name: Aguardar a produção servir este commit
+        id: aguardar
+        run: |
+          for tentativa in $(seq 1 60); do
+            BUILD="$(curl -fsS --max-time 10 "$URL_PRODUCAO/" \
+              | python -c 'import json, sys; print(json.load(sys.stdin).get("build", ""))' 2>/dev/null || true)"
+            if [ "$BUILD" = "$GITHUB_SHA" ]; then
+              echo "A produção serve $BUILD (tentativa $tentativa)."
+              exit 0
+            fi
+            echo "Tentativa $tentativa/60: a produção serve '${BUILD:-?}'; aguardando $GITHUB_SHA."
+            sleep 15
+          done
+          echo "::error::em 15 min a produção não passou a servir $GITHUB_SHA (último build visto: '${BUILD:-?}'). O pull automático do latest parou?"
+          exit 1
+
+      # Só o que lê: os casos que exigem containers ou controle do Redis pulam, por
+      # desenho do modo URL — por isso não há tripwire de skip aqui.
+      - name: E2E contra a produção (só leitura)
+        env:
+          E2E_BUILD: ${{ github.sha }}
+        run: E2E_BASE_URL="$URL_PRODUCAO" python -m pytest -m e2e tests/e2e --no-cov --junitxml=pos-deploy-junit.xml
+
+      - name: Construir a imagem do ZAP
+        if: ${{ !cancelled() && steps.aguardar.outcome == 'success' }}
+        run: docker build -t b3datetime-zap tests/dast
+      - name: DAST passivo (ZAP)
+        id: zap
+        if: ${{ !cancelled() && steps.aguardar.outcome == 'success' }}
+        run: |
+          mkdir -p zap && chmod 777 zap
+          docker run --rm -v "$PWD/tests/dast:/zap/plano:ro" -v "$PWD/zap:/zap/wrk:rw" \
+            b3datetime-zap zap.sh -cmd -autorun /zap/plano/plano-producao.yaml
+      - name: Tripwire de cobertura e resumo (DAST passivo)
+        if: ${{ !cancelled() && hashFiles('zap/zap.json') != '' }}
+        run: python scripts/dast_resumo.py zap/zap.json zap/arvore.yaml tests/contract/openapi.json "Produção · DAST passivo"
+
+      # Valor, não só presença (um HSTS com max-age=0 existe e desliga a proteção). O modo
+      # vem de [tool.b3datetime.quality] edge_headers_required: false avisa, true reprova.
+      - name: Headers de segurança da borda
+        if: ${{ !cancelled() && steps.aguardar.outcome == 'success' }}
+        run: python scripts/cabecalhos_da_borda.py "$URL_PRODUCAO"
+
+      - name: Publicar relatórios do pós-deploy
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pos-deploy-report
+          path: |
+            zap/
+            pos-deploy-junit.xml
+          if-no-files-found: ignore
+
   ci-ok:
     name: CI OK
     timeout-minutes: 5

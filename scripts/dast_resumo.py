@@ -12,7 +12,8 @@ Este script cobre o que ele não enxerga:
   aqui também, para que um ``exitStatus`` removido do plano não desligue o gate;
 * o **resumo** do run, com os alertas por risco e as operações alcançadas.
 
-Uso: ``python scripts/dast_resumo.py zap.json arvore.yaml tests/contract/openapi.json``
+Uso: ``python scripts/dast_resumo.py zap.json arvore.yaml tests/contract/openapi.json [título]``
+— o título distingue o resumo do plano passivo de produção (``tests/dast/plano-producao.yaml``).
 """
 
 from __future__ import annotations
@@ -29,7 +30,8 @@ from urllib.parse import urlsplit
 
 import yaml
 
-ARGUMENTOS = 3  # relatório, árvore e contrato
+ARGUMENTOS = (3, 4)  # relatório, árvore, contrato e, opcional, o título do resumo
+TITULO = "DAST · OWASP ZAP"
 METODOS = frozenset({"get", "put", "post", "delete", "options", "head", "patch", "trace"})
 # No traditional-json do ZAP, confiança "0" é falso positivo (alertFilter com
 # `newRisk: False Positive`): o alerta continua no relatório, mas não conta.
@@ -144,10 +146,10 @@ def problemas(ops: list[Operacao], arvore: list[No], lista: list[Alerta]) -> lis
     return erros
 
 
-def resumo(ops: list[Operacao], arvore: list[No], lista: list[Alerta]) -> str:
+def resumo(ops: list[Operacao], arvore: list[No], lista: list[Alerta], titulo: str = TITULO) -> str:
     faltando = set(nao_alcancadas(ops, arvore))
     linhas = [
-        "## DAST · OWASP ZAP",
+        f"## {titulo}",
         "",
         (
             f"**{len(ops) - len(faltando)} de {len(ops)} operações do contrato alcançadas"
@@ -170,15 +172,15 @@ def resumo(ops: list[Operacao], arvore: list[No], lista: list[Alerta]) -> str:
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) != ARGUMENTOS:
-        print("uso: dast_resumo.py zap.json arvore.yaml openapi.json", file=sys.stderr)
+    if len(argv) not in ARGUMENTOS:
+        print("uso: dast_resumo.py zap.json arvore.yaml openapi.json [título]", file=sys.stderr)
         return 2
     relatorio = json.loads(Path(argv[0]).read_text(encoding="utf-8"))
     arvore = nos(yaml.safe_load(Path(argv[1]).read_text(encoding="utf-8")))
     ops = operacoes(json.loads(Path(argv[2]).read_text(encoding="utf-8")))
     lista = alertas(relatorio)
 
-    texto = resumo(ops, arvore, lista)
+    texto = resumo(ops, arvore, lista, *argv[3:])
     print(texto)
     destino = os.environ.get("GITHUB_STEP_SUMMARY")
     if destino:

@@ -36,6 +36,7 @@ flowchart LR
     classDef imagem fill:#f3e8fb,stroke:#5319e7,color:#2d0c80
     classDef gate fill:#ffffff,stroke:#24292f,color:#24292f,stroke-width:2px
     classDef entrega fill:#fdecea,stroke:#d93f0b,color:#7a1f05
+    classDef producao fill:#e6f6f4,stroke:#0f766e,color:#134e4a
 
     subgraph E1["① Análise estática"]
         direction TB
@@ -81,11 +82,12 @@ flowchart LR
     pub["Entrega · publicar imagem"]:::entrega
     rel["Entrega · release"]:::entrega
     sbom["Entrega · SBOM"]:::entrega
+    pos["Produção · pós-deploy<br/><i>build = SHA · E2E de leitura<br/>ZAP passivo · headers da borda</i>"]:::producao
 
     unit & comp & integ & prop & arq --> cov --> sonar
     unit & comp & integ & prop --> mut
     lint & mypy & cov --> dv --> e2e & dast & perf
-    E1 & E2 & E3 & E4 --> ok --> pub --> rel & sbom
+    E1 & E2 & E3 & E4 --> ok --> pub --> rel & sbom & pos
 ```
 
 | Estágio | Por que nesta posição |
@@ -95,6 +97,7 @@ flowchart LR
 | ③ Consolidação | A cobertura só faz sentido somada: o gate de 90% é aplicado **uma vez**, sobre os blocos combinados. O Sonar consome o resultado. |
 | ④ Imagem | Só se constrói e se testa a imagem depois de o código passar em processo — testar a imagem de um código que já falhou é desperdício. E2E, DAST e performance carregam o artefato do `docker-verify` e exercitam, em paralelo, exatamente os bits que passaram no smoke e no Trivy. |
 | Gate e entrega | `CI OK` decide; `docker-publish` só roda com ele verde. `release` e `SBOM` vêm depois da publicação. |
+| Produção | Só depois do pull automático do `latest` existe o que este estágio confere: a resposta depois do Kong e do Cloudflare. Fica fora do `CI OK` — não há mais o que impedir; reprovar aqui é um alarme sobre a produção. |
 
 ## Blocos
 
@@ -357,6 +360,51 @@ flowchart LR
 
 O k6 (2.3.0) fica fixado por digest em `tests/load/Dockerfile`, no mesmo padrão do ZAP, com Dependabot em `/tests/load`. Os actions `grafana/setup-k6-action` e `run-k6-action` seriam dois actions a mais para pinar e auditar. O script fica fora do Sonar (`sonar.test.exclusions`): é JavaScript do runtime do k6, com globais como `__ENV`, e quem o valida é o próprio k6 a cada run.
 
+### Produção — pós-deploy
+
+A produção puxa o `latest` sozinha, num mecanismo fora deste repositório. O job **Produção · pós-deploy** confere, de fora e sem nenhum secret, o que só existe depois disso:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant CI as Produção · pós-deploy
+    participant CF as Cloudflare + Kong
+    participant API as b3datetime (produção)
+    CI->>CF: GET /b3datetime/ (a cada 15 s, até 15 min)
+    CF->>API: GET /
+    API-->>CI: build (SHA do commit em execução)
+    Note over CI: segue quando build == GITHUB_SHA<br/>(o pull automático aconteceu)
+    CI->>CF: E2E de leitura (E2E_BASE_URL, E2E_BUILD)
+    CF-->>CI: contrato, consultas, documentação
+    CI->>CF: ZAP passivo: contrato (GETs) + spider em /docs e /redoc
+    CF-->>CI: respostas como o cliente as recebe
+    Note over CI: 8 de 8 operações com 2xx<br/>nenhum alerta Low ou acima
+    CI->>CF: GET /, /v1/health, /docs, /redoc
+    CF-->>CI: headers de segurança da borda
+    Note over CI: valores conferidos<br/>(aviso ou reprovação, conforme o modo)
+```
+
+| Passo | O que pega |
+|---|---|
+| Aguardar `build == GITHUB_SHA` | o pull automático parou, e a imagem nova nunca chegou |
+| E2E em modo URL | contrato, consultas e documentação quebrados **depois** do Kong e do Cloudflare (prefixo, `strip_path`, assets) |
+| ZAP passivo (`tests/dast/plano-producao.yaml`) | o que a borda acrescenta ou estraga: cookies, headers, páginas de desafio, divulgação de informação. Os filtros e justificativas são os do plano da imagem |
+| Headers da borda (`scripts/cabecalhos_da_borda.py`) | HSTS desligado ou curto, ausência de CSP, `X-Frame-Options` ou `Referrer-Policy` |
+
+**Valor, não só presença.** Hoje a produção responde `Strict-Transport-Security: max-age=0; includeSubDomains; preload`: o header existe e o HSTS está **desligado**. O script exige:
+
+- `max-age` ≥ 180 dias;
+- `X-Content-Type-Options: nosniff`;
+- `X-Frame-Options: DENY`;
+- `Referrer-Policy` restritiva;
+- CSP com `frame-ancestors 'none'`, mais `default-src 'none'` nas respostas JSON.
+
+Também detecta o desafio do Cloudflare (`cf-mitigated`) e orienta a criar uma regra de skip no WAF.
+
+**Modo de aviso até a borda ser configurada.** Com `[tool.b3datetime.quality] edge_headers_required = false`, o que falta vira `::warning::` e aparece no resumo do run. Depois da configuração no Cloudflare, o valor passa a `true`, e uma regra desfeita na borda quebra o job em vez de passar despercebida. A CSP sugerida para `/docs` e `/redoc` foi validada num proxy local sobre a imagem: as duas páginas renderizam, sem nenhuma violação.
+
+**Nunca varredura ativa em produção.** O plano de produção é só passivo (~250 GETs de leitura, ~25 s). A ativa, com milhares de requisições hostis, roda apenas contra o container efêmero do CI.
+
 ## Tripwires: provar que o teste rodou
 
 Um teste que deixa de rodar sem ninguém perceber é pior do que um teste que falha. Por isso:
@@ -370,6 +418,7 @@ Um teste que deixa de rodar sem ninguém perceber é pior do que um teste que fa
 | Pares cobertos = pares documentados | `tests/e2e/test_contrato.py` | rota ou código novo sem caso E2E |
 | `ci-ok` só aceita pulo onde ele é o desenho | `CI OK` | um bloco pulado liberar a publicação |
 | Toda operação do contrato alcançada com **2xx** pela varredura | `DAST · OWASP ZAP` (`scripts/dast_resumo.py`) | o ZAP "passar" sem ter atacado a lógica — como no `422` de `/v1/trading-days` |
+| A produção serve o commit publicado (`build == GITHUB_SHA`) | `Produção · pós-deploy` | o pull automático do `latest` parar em silêncio |
 | Todo endpoint do contrato com cenário **e** com amostras na carga | `Performance · k6` (`scripts/k6_resumo.py`) e `tests/unit/test_scripts_k6_resumo.py` | um limiar de p95 passar sobre um endpoint que nunca foi chamado |
 | Todo arquivo do repositório lido pelos testes está no sandbox da mutação | `tests/architecture/test_convencoes.py` | a execução limpa do mutmut reprovar e derrubar o job antes de avaliar mutante algum (o push de #67) |
 | Toda imagem base fixada por digest e acompanhada pelo Dependabot | `tests/unit/test_imagens_fixadas.py` | uma tag mutável trocar a imagem sem commit, ou um digest fixo congelar as correções de segurança |
