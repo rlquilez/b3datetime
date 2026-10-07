@@ -7,6 +7,7 @@ teste que fixasse "2026" apodreceria quando 2026 saísse da cobertura.
 
 from __future__ import annotations
 
+import os
 from datetime import date, timedelta
 from typing import Any
 
@@ -166,6 +167,9 @@ def test_raiz_anuncia_exatamente_o_que_esta_publicado(
         "openapi": f"{p}/openapi.json",
     }
     assert raiz["version"] == contrato.documento["info"]["version"]
+    # O build em execução: o CI passa o commit esperado (E2E_BUILD); sem ele, basta existir.
+    esperado = os.environ.get("E2E_BUILD")
+    assert raiz["build"] == esperado if esperado else raiz["build"]
     # Sem autenticação: nem GET / nem o schema podem prometer um header.
     assert raiz["authentication"]["required"] is ("security" in contrato.documento)
 

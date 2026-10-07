@@ -112,6 +112,8 @@ if curl -sS "$BASE/openapi.json" | grep -q securitySchemes; then
 fi
 expect GET / 200 application/json "\"swagger\":\"$PREFIX/docs\""
 expect GET / 200 application/json '"required":false'
+# O commit do build (ARG BUILD_SHA → APP_BUILD), que o pós-deploy compara com o do CI.
+expect GET / 200 application/json "\"build\":\"${BUILD_SHA:-local}\""
 expect GET /docs 200 text/html './static/swagger-ui-bundle.js'
 expect GET /docs 200 text/html "url: './openapi.json'"
 expect GET /redoc 200 text/html 'spec-url="./openapi.json"'

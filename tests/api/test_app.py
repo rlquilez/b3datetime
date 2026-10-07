@@ -5,7 +5,10 @@ from __future__ import annotations
 import httpx
 
 from b3datetime.config import Settings
+from b3datetime.services.calendar_service import TradingCalendar
+from b3datetime.services.redis_service import RedisService
 from b3datetime.static import REDOC_JS, SWAGGER_CSS, SWAGGER_JS
+from tests.conftest import build_app
 
 
 async def test_root(client: httpx.AsyncClient, settings: Settings) -> None:
@@ -16,7 +19,26 @@ async def test_root(client: httpx.AsyncClient, settings: Settings) -> None:
     assert body["version"] == settings.api_version
     assert body["endpoints"]["health"] == "/v1/health"
     assert body["endpoints"]["dates"]["calendar_info"] == "/v1/calendar-info"
-    assert set(body) == {"name", "version", "description", "docs", "endpoints", "authentication"}
+    assert body["build"] == "local"  # fora da imagem publicada
+    assert set(body) == {
+        "name",
+        "version",
+        "build",
+        "description",
+        "docs",
+        "endpoints",
+        "authentication",
+    }
+
+
+async def test_root_informa_o_build_da_imagem(
+    redis_service: RedisService, test_calendar: TradingCalendar, make_client: object
+) -> None:
+    """``APP_BUILD`` (gravado na imagem pelo CI a partir do commit) aparece em ``GET /``: é
+    como o pós-deploy confirma, de fora, que a produção já serve o build novo."""
+    app = build_app(Settings(_env_file=None, app_build="4277699f"), redis_service, test_calendar)
+    async with make_client(app) as c:  # type: ignore[operator]
+        assert (await c.get("/")).json()["build"] == "4277699f"
 
 
 async def test_root_sem_prefixo_usa_caminhos_absolutos(client: httpx.AsyncClient) -> None:

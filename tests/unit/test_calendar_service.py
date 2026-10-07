@@ -130,6 +130,7 @@ def test_len(test_calendar: TradingCalendar) -> None:
     assert len(test_calendar) > 240  # ~252 pregões num ano
 
 
+@pytest.mark.tempo
 def test_custo_do_complemento_nao_escala_com_o_numero_de_sessoes() -> None:
     """Regressão de performance: a checagem era O(dias x sessoes) sobre uma lista.
 

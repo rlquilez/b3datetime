@@ -26,6 +26,7 @@ MANAGED_BY = "Kong Gateway"
 ROOT_EXAMPLE = {
     "name": Settings.model_fields["api_title"].default,
     "version": Settings.model_fields["api_version"].default,
+    "build": "4277699f1c2e9b3d5a7c6e8f0a1b2c3d4e5f6a7b",
     "description": DESCRIPTION,
     "docs": {"swagger": "/docs", "redoc": "/redoc", "openapi": "/openapi.json"},
     "endpoints": {
@@ -121,6 +122,13 @@ class RootResponse(BaseModel):
 
     name: str = Field(..., description="Nome da API")
     version: str = Field(..., description="Versão publicada (SemVer)")
+    build: str = Field(
+        ...,
+        description=(
+            "Commit (SHA) do build em execução; `local` fora da imagem publicada. Muda a cada "
+            "deploy, enquanto `version` só muda nas releases."
+        ),
+    )
     description: str = Field(..., description="Resumo do que a API faz")
     docs: DocsLinks
     endpoints: EndpointLinks
@@ -155,6 +163,7 @@ def _metadados(settings: Settings, prefix: str) -> RootResponse:
     return RootResponse(
         name=settings.api_title,
         version=settings.api_version,
+        build=settings.app_build,
         description=DESCRIPTION,
         docs=DocsLinks(
             swagger=f"{prefix}/docs",

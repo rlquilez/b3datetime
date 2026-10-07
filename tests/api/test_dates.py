@@ -137,6 +137,7 @@ async def test_end_antes_de_start_e_400(client: httpx.AsyncClient) -> None:
     assert "maior ou igual" in r.json()["detail"]["message"]
 
 
+@pytest.mark.tempo
 async def test_span_acima_do_limite_e_400_imediato(client: httpx.AsyncClient) -> None:
     """Regressão: `?start=2006-01-01&end=9999-12-31&exclude=true` consumia ~77 s de
     CPU, ~117 MB e devolvia ~38 MB — congelando o worker inteiro."""

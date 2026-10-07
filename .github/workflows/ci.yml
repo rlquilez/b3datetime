@@ -237,16 +237,6 @@ jobs:
     # nada. Bloqueante — entra no ci-ok, e o publish depende do ci-ok.
     needs: [tests]
     runs-on: ubuntu-latest
-    services:
-      # A seleção inclui tests/integration (Redis real, db 15).
-      redis:
-        image: redis:7.4-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
-        ports: ["6379:6379"]
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -682,7 +672,10 @@ jobs:
           load: true
           push: false
           tags: b3datetime:ci
-          build-args: APK_REFRESH=${{ steps.refresh.outputs.value }}
+          # BUILD_SHA vira o campo `build` de GET /: o pós-deploy o compara com o commit.
+          build-args: |
+            APK_REFRESH=${{ steps.refresh.outputs.value }}
+            BUILD_SHA=${{ github.sha }}
           cache-from: type=gha,scope=verify
           cache-to: type=gha,mode=max,scope=verify
 
@@ -691,7 +684,10 @@ jobs:
       # as páginas, assets e endpoints, barra final, casos negativos e o HEALTHCHECK.
       # O mesmo script roda localmente: IMAGE=b3datetime:ci scripts/smoke_image.sh
       - name: Smoke test da imagem (sem Redis; Redis real + prefixo; HEALTHCHECK)
-        run: IMAGE=b3datetime:ci bash scripts/smoke_image.sh
+        env:
+          IMAGE: b3datetime:ci
+          BUILD_SHA: ${{ github.sha }}
+        run: bash scripts/smoke_image.sh
 
       - name: Limpeza dos containers do smoke test
         if: always()
@@ -749,7 +745,9 @@ jobs:
           load: true
           push: false
           tags: b3datetime:e2e
-          build-args: APK_REFRESH=${{ github.run_id }}-${{ github.run_attempt }}
+          build-args: |
+            APK_REFRESH=${{ github.run_id }}-${{ github.run_attempt }}
+            BUILD_SHA=${{ github.sha }}
           cache-from: type=gha,scope=verify
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -761,6 +759,7 @@ jobs:
       - name: E2E contra a imagem
         env:
           E2E_IMAGE: b3datetime:e2e
+          E2E_BUILD: ${{ github.sha }}
         run: python -m pytest -m e2e tests/e2e --no-cov --junitxml=e2e-junit.xml
 
       # Tripwire: em containers, todos os ambientes existem e o Redis é controlável —
@@ -855,7 +854,9 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: APK_REFRESH=${{ needs.docker-verify.outputs.apk-refresh }}
+          build-args: |
+            APK_REFRESH=${{ needs.docker-verify.outputs.apk-refresh }}
+            BUILD_SHA=${{ github.sha }}
           cache-from: |
             type=gha,scope=verify
             type=gha,scope=publish

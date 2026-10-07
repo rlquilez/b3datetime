@@ -134,6 +134,10 @@ class Settings(BaseSettings):
     # `GET /` informa que o header `apikey` é obrigatório. Quem valida a chave é o Kong;
     # a aplicação não tem — e não deve ganhar — código de autenticação.
     api_key_required: bool = False
+    # Commit (SHA) do build em execução, gravado na imagem pelo CI (`ARG BUILD_SHA` →
+    # `APP_BUILD`). É o que permite verificar, de fora, qual build a produção serve —
+    # a versão só muda nas releases. Fora da imagem publicada, "local".
+    app_build: str = "local"
 
     @property
     def tz(self) -> ZoneInfo:

@@ -568,6 +568,7 @@
                 "example": {
                   "name": "B3 DateTime API",
                   "version": "2.0.4",
+                  "build": "4277699f1c2e9b3d5a7c6e8f0a1b2c3d4e5f6a7b",
                   "description": "API para consultar horários e dias de operação da B3",
                   "docs": {
                     "swagger": "/docs",
@@ -996,6 +997,11 @@
             "title": "Version",
             "description": "Versão publicada (SemVer)"
           },
+          "build": {
+            "type": "string",
+            "title": "Build",
+            "description": "Commit (SHA) do build em execução; `local` fora da imagem publicada. Muda a cada deploy, enquanto `version` só muda nas releases."
+          },
           "description": {
             "type": "string",
             "title": "Description",
@@ -1015,6 +1021,7 @@
         "required": [
           "name",
           "version",
+          "build",
           "description",
           "docs",
           "endpoints",

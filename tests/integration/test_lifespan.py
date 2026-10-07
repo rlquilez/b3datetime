@@ -63,6 +63,7 @@ async def test_app_sobe_com_redis_fora(settings: Settings, monkeypatch: pytest.M
 
 
 @pytest.mark.slow
+@pytest.mark.tempo
 def test_import_nao_faz_io() -> None:
     """Regressão: o import conectava no Redis e construía dez anos de calendário.
 

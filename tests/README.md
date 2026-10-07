@@ -227,10 +227,10 @@ Cobertura diz que uma linha **rodou**; mutação diz se algum teste **perceberia
 
 | | Antes (#65) | Depois |
 |---|---|---|
-| Mutantes | 644 | 731 |
-| Mortos | 525 | 729 |
-| Sobreviventes | 119 | 2 (equivalentes documentados) |
-| **Score** | **81,5%** | **99,73%** |
+| Mutantes | 644 | 733 |
+| Mortos | 525 | 730 |
+| Sobreviventes | 119 | 3 (equivalentes documentados) |
+| **Score** | **81,5%** | **99,59%** |
 
 O job **Mutação · mutmut** é bloqueante: o score (`detectados / avaliados`) não pode ficar abaixo de `[tool.b3datetime.quality] mutation_min_score` (99%, e só sobe). O gate também reprova um run que não avaliou ou não detectou mutante nenhum — o sintoma de uma configuração quebrada.
 
@@ -240,7 +240,9 @@ O que tornou o resultado confiável:
 - **`--no-cov` na execução da mutação.** Com a cobertura ligada, cada execução parcial reprovaria no `fail_under` e *todo* mutante contaria como morto — um 100% falso;
 - **o mutmut não muta funções decoradas.** A lógica dos handlers (`@router.get`) foi extraída para funções comuns (`_dias_do_periodo`, `_montar_health`, `_metadados`…), que a mutação alcança;
 - **perfil `mutation` do Hypothesis**, determinístico: o mesmo mutante é julgado sempre do mesmo jeito;
-- **fora da seleção:** o E2E (imagem), o fuzzing da API inteira (`api_fuzz`, exercita todas as rotas a cada exemplo) e a arquitetura (lê o código-fonte, que no diretório da mutação tem os trampolins do mutmut).
+- **fora da seleção, para o veredito depender só do comportamento:** o E2E (imagem); o fuzzing da API inteira (`api_fuzz`, exercita todas as rotas a cada exemplo); a arquitetura (lê o código-fonte, que no diretório da mutação tem os trampolins do mutmut); os testes com asserção de tempo (marcador `tempo`), que estouram com vários processos em paralelo; e a **integração**, porque os processos paralelos dividem o mesmo Redis (db 15) e o `flushdb` de um apagava os dados do outro. Esses dois últimos produziram "mortes" aleatórias — o mesmo mutante morria no Mac e sobrevivia no CI. O que a integração exercitava em `src/` ganhou teste determinístico (o lifespan com dublês, o início da janela móvel com um `exchange_calendars` falso), e dois runs seguidos dão exatamente o mesmo resultado.
+
+Os 3 sobreviventes são equivalentes, mantidos de propósito: `allow_credentials=False` explícito no CORS (é o default do Starlette; trocar por `None` ou omitir dá no mesmo) e `redirect_slashes=False` trocado por `None` (também falso).
 
 **Como os 117 sobreviventes foram tratados.** Cada um foi lido. A maioria revelou testes que só conferiam *trechos* de mensagem — `tests/api/test_respostas_exatas.py` passou a conferir o envelope de erro inteiro — e fronteiras sem teste (idade do cache **igual** ao TTL, reconexão **exatamente** no intervalo). Outros mostraram lógica presa em handlers ou código redundante (um fallback de cobertura que o `TradingCalendar` já fazia, um `setdefault` defensivo), que foi removido. Os **equivalentes** — mudanças que não alteram comportamento observável, como `"utf-8"` → `"UTF-8"` — recebem `# pragma: no mutate` **com a justificativa na mesma linha** (o pragma do mutmut só vale em linha de *statement*, por isso algumas expressões foram reescritas numa linha só). `_example`, que monta os exemplos do health **no import**, fica inteira fora (`no mutate block`): o mutmut ativa o mutante depois do import, e quem verifica o que ela produz é o snapshot do contrato.
 

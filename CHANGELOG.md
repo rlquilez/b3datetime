@@ -7,6 +7,10 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ## [Não publicado]
 
+### Adicionado
+
+- `GET /` informa em `build` o commit (SHA) da imagem em execução. A versão só muda nas releases; o `build` muda a cada deploy, e é por ele que o pipeline confirma que a produção já serve a imagem recém-publicada. Fora da imagem publicada, o valor é `local`. (#66)
+
 ### Alterado
 
 - O código passa a seguir o layout `src/` padrão do Python: o pacote se chama `b3datetime` (`src/b3datetime/`). (#52)

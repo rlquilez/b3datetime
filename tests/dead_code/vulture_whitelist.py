@@ -52,6 +52,7 @@ CAMPOS_DE_RESPOSTA = (
     root.AuthInfo.managed_by,
     root.RootResponse.name,
     root.RootResponse.version,
+    root.RootResponse.build,
     root.RootResponse.docs,
     root.RootResponse.endpoints,
     root.RootResponse.authentication,

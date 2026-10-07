@@ -160,12 +160,24 @@ class _CalendarioFalso:
 def chamadas(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
     registradas: list[dict[str, Any]] = []
 
-    def get_calendar(_nome: str, **kwargs: Any) -> _CalendarioFalso:
-        registradas.append(kwargs)
+    def get_calendar(nome: str, **kwargs: Any) -> _CalendarioFalso:
+        registradas.append({"nome": nome, **kwargs})
         return _CalendarioFalso(["2024-01-02", "2024-12-30"])
 
     monkeypatch.setattr(xcals, "get_calendar", get_calendar)
     return registradas
+
+
+def test_janela_movel_comeca_n_anos_atras_na_bolsa_configurada(
+    chamadas: list[dict[str, Any]],
+) -> None:
+    settings = Settings(_env_file=None, exchange_name="XBSP", calendar_start_offset_years=10)
+    build_bvmf_calendar(settings)
+    assert chamadas[0]["nome"] == "XBSP"
+    inicio = pd.Timestamp(chamadas[0]["start"]).date()
+    hoje = datetime.now(settings.tz).date()
+    assert hoje.year - inicio.year == 10
+    assert abs((inicio.replace(year=hoje.year) - hoje).days) <= 1
 
 
 def test_sem_fim_explicito_a_cobertura_termina_na_ultima_sessao(
@@ -285,7 +297,8 @@ def test_montar_health(test_calendar: TradingCalendar) -> None:
 
 
 def test_metadados_com_prefixo() -> None:
-    corpo = _metadados(Settings(_env_file=None), "/b3datetime").model_dump()
+    corpo = _metadados(Settings(_env_file=None, app_build="abc123"), "/b3datetime").model_dump()
+    assert corpo["build"] == "abc123"
     assert corpo["docs"] == {
         "swagger": "/b3datetime/docs",
         "redoc": "/b3datetime/redoc",
@@ -374,3 +387,46 @@ def test_redact_url_preserva_parametros_vazios_ao_redigir() -> None:
     assert redact_url("redis://h/0?password=x&client_name=") == (
         "redis://h/0?password=***&client_name="
     )
+
+
+async def test_middleware_repassa_o_receive_e_o_send_originais() -> None:
+    from b3datetime.middleware import RootPathPrefixMiddleware
+
+    recebidos: list[Any] = []
+
+    async def app(_scope: Any, receive: Any, send: Any) -> None:
+        recebidos.extend([receive, send])
+
+    async def receive() -> Any:
+        return {"type": "http.request"}
+
+    async def send(_message: Any) -> None:
+        return None
+
+    scope = {"type": "http", "root_path": "/p", "path": "/x", "raw_path": b"/x"}
+    await RootPathPrefixMiddleware(app)(scope, receive, send)
+    assert recebidos == [receive, send]
+
+
+async def test_lifespan_da_app_popula_o_estado_sem_io(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """O lifespan está ligado à app e preenche ``app.state`` — aqui sem I/O nenhum (o
+    calendário e a conexão são dublês); o lifespan com tudo real fica na integração."""
+    from asgi_lifespan import LifespanManager
+
+    import b3datetime.main as main_mod
+    from b3datetime.main import create_app
+    from tests.factories import make_calendar
+
+    calendario = make_calendar()
+
+    async def sem_conexao(_self: RedisService) -> None:
+        return None
+
+    monkeypatch.setattr(main_mod, "build_bvmf_calendar", lambda _s: calendario)
+    monkeypatch.setattr(RedisService, "connect", sem_conexao)
+    app = create_app(settings)
+    async with LifespanManager(app):
+        assert app.state.calendar is calendario
+        assert isinstance(app.state.redis_service, RedisService)

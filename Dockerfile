@@ -68,6 +68,12 @@ ENV PATH=/home/app/.local/bin:$PATH \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
+# Commit do build, exposto em `GET /` (campo `build`): é como o CI confirma, de fora,
+# que a produção já serve a imagem que ele acabou de publicar. Depois do último RUN,
+# para não invalidar camada nenhuma: muda a cada commit e só custa esta linha.
+ARG BUILD_SHA=local
+ENV APP_BUILD=${BUILD_SHA}
+
 # UID:GID numéricos, e não o nome: o Kubernetes só consegue verificar `runAsNonRoot`
 # com um UID numérico (hadolint DL3066). São os do usuário `app` criado acima.
 USER 1001:1001

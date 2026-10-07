@@ -33,6 +33,7 @@ markers = [
     "integration: depende de recurso real — Redis em localhost:6379 (db 15), calendário BVMF real ou lifespan real",
     "slow: constrói calendários reais do exchange_calendars",
     "api_fuzz: fuzzing da API inteira pelo contrato (Schemathesis); fica fora da mutação",
+    "tempo: asserção sobre tempo de execução; fica fora da mutação (com N processos em paralelo, estoura e \"mata\" mutante por engano)",
     "e2e: ponta a ponta contra a imagem (E2E_IMAGE) ou uma URL (E2E_BASE_URL); fora da execução padrão, rode com -m e2e",
 ]
 # Warnings viram erro: é o que impede deprecações do pydantic de voltarem.
@@ -330,11 +331,15 @@ do_not_mutate_patterns = ['logger\.(debug|info|warning|error|exception)\(']
 # mutante conta como "morto" — um score falso de 100%. -p no:randomly: a mesma ordem
 # em toda execução, para o veredito de um mutante não depender de sorteio.
 pytest_add_cli_args = ["--no-cov", "-p", "no:randomly", "-p", "no:cacheprovider"]
-# Fora: E2E (imagem), o fuzzing da API inteira (exercita todas as rotas a cada exemplo) e
-# a arquitetura (lê o código-fonte, e o código mutado tem os trampolins do mutmut).
+# Fora, para o veredito de cada mutante depender só do comportamento:
+# - E2E (imagem) e o fuzzing da API inteira (`api_fuzz`: todas as rotas a cada exemplo);
+# - arquitetura (lê o código-fonte, e o código mutado tem os trampolins do mutmut);
+# - testes com asserção de tempo (`tempo`): com N processos em paralelo eles estouram;
+# - integração: os N processos dividem o mesmo Redis (db 15), e o flushdb de um apaga os
+#   dados do outro — "mortes" aleatórias. O que ela toca de src/ tem teste determinístico.
 pytest_add_cli_args_test_selection = [
-    "-m", "not e2e and not api_fuzz",
-    "tests/unit", "tests/api", "tests/integration", "tests/property",
+    "-m", "not e2e and not api_fuzz and not tempo and not integration",
+    "tests/unit", "tests/api", "tests/property",
 ]
 
 # --------------------------------------------------------------------------- #
@@ -342,6 +347,7 @@ pytest_add_cli_args_test_selection = [
 # --------------------------------------------------------------------------- #
 [tool.b3datetime.quality]
 # Score mínimo do teste de mutação (scripts/mutation_gate.py). Ratchet: só sobe.
-# Medido em #65: 99,73% (729 de 731); os 2 sobreviventes são equivalentes documentados
-# (allow_credentials=False explícito no CORS, que é o default do Starlette).
+# Medido em #65/#66: 99,59% (730 de 733), idêntico em runs repetidos; os 3 sobreviventes são equivalentes documentados
+# (allow_credentials=False explícito no CORS — o default do Starlette — e
+# redirect_slashes=False trocado por None, que também é falso).
 mutation_min_score = 99.0

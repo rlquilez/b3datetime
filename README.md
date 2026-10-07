@@ -454,7 +454,7 @@ print(resp.status_code, saude["status"], "| redis:", saude["redis_status"])
 
 ### `GET /`
 
-Metadados, links para a documentação e para cada endpoint, e a forma de autenticação em vigor. Atrás do gateway os links já vêm com o prefixo.
+Metadados, links para a documentação e para cada endpoint, e a forma de autenticação em vigor. Atrás do gateway os links já vêm com o prefixo. O campo `build` é o commit da imagem em execução: muda a cada deploy, enquanto `version` só muda nas releases.
 
 ```bash
 curl https://api.quilez.cloud/b3datetime/
@@ -464,6 +464,7 @@ curl https://api.quilez.cloud/b3datetime/
 {
   "name": "B3 DateTime API",
   "version": "2.0.4",
+  "build": "4277699f1c2e9b3d5a7c6e8f0a1b2c3d4e5f6a7b",
   "description": "API para consultar horários e dias de operação da B3",
   "docs": {
     "swagger": "/b3datetime/docs",
@@ -893,7 +894,7 @@ flowchart LR
 |-------|-----------|------------|
 | Lint e formatação | ruff | famílias do pyflakes/pycodestyle ao pylint, mccabe (complexidade ≤ 10), FastAPI, código comentado e `banned-api`: todo "agora" passa por `get_current_datetime()` |
 | Arquitetura | import-linter + `tests/architecture` | camadas, routers independentes, domínio sem framework web, dependências confinadas, sem ciclos; import sem I/O provado por audit hook; convenções do projeto sobre a AST |
-| Mutação | mutmut | score ≥ 99% (hoje 99,73%, 729 de 731 mutantes mortos); bloqueante |
+| Mutação | mutmut | score ≥ 99% (hoje 99,59%: 730 de 733 mutantes mortos; os 3 restantes são equivalentes documentados); bloqueante |
 | Código morto | vulture, deptry, pytest-deadfixtures | funções/atributos sem uso, dependências sem uso ou não declaradas, fixtures órfãs |
 | Lint de infraestrutura | actionlint, hadolint, shellcheck | workflows (inclusive o shell de cada `run:`), Dockerfiles e scripts |
 | Tipagem | mypy **strict** + plugin do pydantic | em `src/`, `scripts/` e `tests/` |
