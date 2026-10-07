@@ -139,6 +139,38 @@ def test_redact_url_remove_credenciais(url: str, esperado: str) -> None:
     assert "senha" not in redigida
 
 
+@pytest.mark.parametrize(
+    ("url", "esperado"),
+    [
+        # Sem host: válidas para o redis-py, e eram devolvidas inteiras — com a senha.
+        ("redis://:secret@/0", "redis://***@/0"),
+        ("unix://:secret@/run/redis.sock", "unix://***@/run/redis.sock"),
+        # Credencial na query: o redis-py a aceita como kwarg.
+        ("redis://h:6379/0?password=secret&db=2", "redis://h:6379/0?password=***&db=2"),
+        # Porta inválida levantava ValueError fora do try e derrubava o lifespan.
+        ("redis://u:secret@h:abc", "redis://***@h:abc"),
+        ("redis://u:secret@h:99999", "redis://***@h:99999"),
+        # Porta 0 era descartada (truthiness); IPv6 perdia os colchetes; host ia para minúsculas.
+        ("redis://u:secret@MyHost:0", "redis://***@MyHost:0"),
+        ("redis://u:secret@[::1]:6379/0", "redis://***@[::1]:6379/0"),
+        # Senha com "@" não codificado: o host é o que vem depois do último "@".
+        ("redis://u:se@cret@host:6379", "redis://***@host:6379"),
+    ],
+)
+def test_redact_url_regressoes_do_b1(url: str, esperado: str) -> None:
+    """Regressão (#58): cada forma em que a redação vazava a senha ou levantava."""
+    redigida = redact_url(url)
+    assert redigida == esperado
+    assert "secret" not in redigida
+    assert "cret" not in redigida
+
+
+def test_redact_url_mantem_query_sem_credencial_byte_a_byte() -> None:
+    """Sem parâmetro sensível, a query não é re-codificada: nada muda na URL logada."""
+    url = "redis://h:6379/0?db=2&ssl_cert_reqs=none&socket_timeout=1.5"
+    assert redact_url(url) == url
+
+
 def test_redis_url_safe_nao_vaza_senha() -> None:
     s = Settings(_env_file=None, REDIS_URL_ENV="redis://admin:hunter2@redis-prod:6379")
     assert "hunter2" not in s.redis_url_safe

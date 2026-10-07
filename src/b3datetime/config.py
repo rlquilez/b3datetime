@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from functools import lru_cache
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from zoneinfo import ZoneInfo
 
 from pydantic import AliasChoices, Field
@@ -42,24 +42,43 @@ As URLs canônicas não têm barra final (`/docs/` responde 404). Código, guia 
 CHANGELOG: [github.com/rlquilez/b3datetime](https://github.com/rlquilez/b3datetime)."""
 
 
+# Parâmetros de query que o redis-py aceita como credencial (``redis://h?password=x``
+# vira o kwarg ``password``), mais os nomes usuais de segredo. Comparados sem caixa.
+_QUERY_SENSIVEL = frozenset({"password", "pass", "pwd", "username", "user", "token", "secret"})
+_REDIGIDO = "***"
+
+
 def redact_url(url: str) -> str:
-    """Remove usuário e senha de uma URL, preservando esquema, host, porta e path.
+    """Remove as credenciais de uma URL, preservando todo o resto.
 
     Logar a URL do Redis crua escreve a senha em texto puro no stdout e em qualquer
-    agregador de logs que colete o container.
+    agregador de logs que colete o container. Garantias (``tests/property``):
+
+    * **nunca levanta** — a URL é logada no lifespan; uma porta inválida (``:abc``)
+      derrubava o arranque;
+    * o userinfo vira ``***`` **com ou sem host** (``redis://:senha@/0`` e
+      ``unix://:senha@/sock`` são válidas para o redis-py e vazavam inteiras);
+    * credenciais na query (``?password=``) viram ``***``;
+    * o resto fica intacto: host com a caixa e os colchetes do IPv6, porta (inclusive
+      ``0`` e valores inválidos), path, demais parâmetros e fragmento.
     """
     try:
         parts = urlsplit(url)
     except ValueError:
         return "<url inválida>"
-    if not parts.hostname:
-        return url
-    netloc = parts.hostname
-    if parts.port:
-        netloc = f"{netloc}:{parts.port}"
-    if parts.username or parts.password:
-        netloc = f"***@{netloc}"
-    return urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
+    netloc = parts.netloc
+    if "@" in netloc:
+        # O host é o que vem depois do ÚLTIMO "@": uma senha não codificada pode conter "@".
+        netloc = f"{_REDIGIDO}@{netloc.rsplit('@', 1)[1]}"
+    query = parts.query
+    if query:
+        pares = parse_qsl(query, keep_blank_values=True)
+        if any(chave.lower() in _QUERY_SENSIVEL for chave, _ in pares):
+            query = urlencode(
+                [(k, _REDIGIDO if k.lower() in _QUERY_SENSIVEL else v) for k, v in pares],
+                safe="*",
+            )
+    return urlunsplit((parts.scheme, netloc, parts.path, query, parts.fragment))
 
 
 class Settings(BaseSettings):

@@ -110,6 +110,9 @@ jobs:
           - bloco: integration
             nome: Testes · integração (Redis e calendário reais)
             dir: tests/integration
+          - bloco: property
+            nome: Testes · property-based (Hypothesis)
+            dir: tests/property
     services:
       # Só a integração usa; nos outros blocos o service fica ocioso. É a única defesa
       # contra drift do fakeredis exatamente na semântica que corrigimos (string vazia
@@ -137,12 +140,18 @@ jobs:
       # --cov-fail-under=0: a cobertura de um bloco sozinho é parcial; o gate é o da soma.
       # Sem -m na linha de comando: o `-m "not e2e"` do addopts continua valendo (um -m
       # aqui o substituiria).
+      # Semente = id do run, para a ordem (pytest-randomly) e para o Hypothesis: um re-run
+      # reproduz exatamente o mesmo resultado, e cada push explora entradas novas. O perfil
+      # `ci` do Hypothesis (tests/conftest.py) gera 500 exemplos por propriedade.
       - name: pytest
         env:
           COVERAGE_FILE: coverage-${{ matrix.bloco }}.dat
           DIRETORIO: ${{ matrix.dir }}
           JUNIT: junit-${{ matrix.bloco }}.xml
-        run: python -m pytest "$DIRETORIO" --cov-fail-under=0 --junitxml="$JUNIT"
+          HYPOTHESIS_PROFILE: ci
+        run: >-
+          python -m pytest "$DIRETORIO" --cov-fail-under=0 --junitxml="$JUNIT"
+          --randomly-seed="$GITHUB_RUN_ID" --hypothesis-seed="$GITHUB_RUN_ID"
 
       - name: Publicar relatórios do bloco
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -927,7 +936,7 @@ jobs:
               "pip-audit": "SCA · pip-audit",
               "trivy-fs": "SCA · Trivy (filesystem)",
               "dependency-review": "SCA · dependency-review",
-              "tests": "Testes · unitários, componente e integração",
+              "tests": "Testes · unitários, componente, integração e property-based",
               "coverage": "Cobertura · combinada (≥ 90%)",
               "sonar": "Qualidade · SonarQube",
               "docker-verify": "Imagem · build, smoke e Trivy",

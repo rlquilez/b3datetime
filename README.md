@@ -807,6 +807,7 @@ A suíte cobre 100% das linhas de `src/b3datetime/` e é organizada em **blocos*
 | `tests/unit/` | Testes · unitários | `Settings`, `RedisService`/`RedisCache`, `TradingCalendar`, middleware, tabela-verdade do health, validação de período, scripts de gate | `fakeredis`, relógio injetado (`now_fn`), calendário sintético; sem I/O |
 | `tests/api/` | Testes · componente | Todos os endpoints e páginas, cada código documentado, contrato do OpenAPI, os três modos de proxy, CORS | `httpx.ASGITransport` sobre a app real, sem lifespan e sem I/O |
 | `tests/integration/` | Testes · integração | Redis real, calendário BVMF real (2017–2025 contra as regras da B3), lifespan real e a app inteira com tudo real | Redis em `localhost:6379`, **db 15** |
+| `tests/property/` | Testes · property-based | Propriedades sobre entradas geradas: a redação da URL do Redis nunca levanta, nunca vaza credencial, é idempotente | Hypothesis, 500 exemplos por propriedade no CI |
 | `tests/e2e/` | E2E · contrato 100% | **100% dos endpoints publicados**, contra a imagem real: toda resposta documentada de toda operação, as consultas e a documentação | containers com Redis real e o calendário BVMF real; fora da execução padrão (`-m e2e`) |
 
 A cobertura de cada bloco é parcial; o job **Cobertura · combinada** soma os blocos, aplica o gate de 90% e reprova se qualquer teste tiver sido pulado.
@@ -871,7 +872,7 @@ flowchart LR
     subgraph paralelo["Sem dependências"]
         lint["lint (ruff)"]
         typecheck["tipagem (mypy)"]
-        test["testes por bloco<br/>unitários · componente · integração"]
+        test["testes por bloco<br/>unitários · componente · integração · property-based"]
         bandit["bandit"]
         pipaudit["pip-audit"]
         gitleaks["gitleaks"]

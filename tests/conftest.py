@@ -7,10 +7,21 @@ Duas armadilhas que motivam o desenho abaixo:
   referência é capturada na construção. Por isso o relógio é injetado, não remendado.
 * **`.env` local.** ``Settings(_env_file=None)`` é obrigatório: sem isso, um ``.env``
   na máquina do desenvolvedor muda o resultado da suíte.
+
+Também registra os perfis do Hypothesis (``tests/property``), escolhidos por
+``HYPOTHESIS_PROFILE``:
+
+* ``dev`` (padrão): 100 exemplos — rápido no ciclo local;
+* ``ci``: 500 exemplos, sem ``deadline`` (runner compartilhado tem latência variável) e
+  com o ``@reproduce_failure`` impresso; a semente vem de ``--hypothesis-seed`` no CI, então
+  um re-run reproduz o mesmo resultado e cada commit explora entradas novas;
+* ``mutation``: 25 exemplos, determinístico e sem banco de exemplos — na mutação o
+  mesmo mutante precisa ser julgado sempre da mesma forma.
 """
 
 from __future__ import annotations
 
+import os
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -22,12 +33,20 @@ import httpx
 import pytest
 import redis.asyncio as aioredis
 from fastapi import FastAPI
+from hypothesis import settings as hipotese
 
 from b3datetime.config import Settings
 from b3datetime.main import create_app
 from b3datetime.services.calendar_service import TradingCalendar
 from b3datetime.services.redis_service import RedisService
 from tests.factories import make_calendar
+
+hipotese.register_profile("dev", max_examples=100)
+hipotese.register_profile("ci", max_examples=500, deadline=None, print_blob=True)
+hipotese.register_profile(
+    "mutation", max_examples=25, derandomize=True, database=None, deadline=None
+)
+hipotese.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "dev"))
 
 TZ = ZoneInfo("America/Sao_Paulo")
 

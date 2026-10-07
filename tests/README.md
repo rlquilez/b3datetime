@@ -20,6 +20,7 @@ Cada bloco de teste é **um diretório** em `tests/` e **um job** no [`ci.yml`](
 | `tests/unit/` | **Unitários** | regras de cada peça isolada: serviços, calendário, cache, middleware, configuração, os scripts de gate | nenhuma — sem I/O, relógio injetado, `fakeredis`, calendário sintético |
 | `tests/api/` | **Componente** | a aplicação ASGI inteira, em processo: cada endpoint, cada código documentado, contrato OpenAPI, proxy, CORS, estáticos | nenhuma — `httpx.ASGITransport`, sem lifespan |
 | `tests/integration/` | **Integração** | o encontro com o mundo real: Redis real, calendário BVMF real, lifespan real, a app inteira com tudo real | Redis em `localhost:6379` (db 15) |
+| `tests/property/` | **Property-based** | propriedades que valem para **toda** entrada gerada, não só para os exemplos escolhidos: nunca levanta, nunca vaza, é idempotente, preserva o resto | nenhuma — Hypothesis |
 | `tests/e2e/` | **E2E** | a **imagem Docker** publicável, caixa-preta: 100% das respostas documentadas, consultas de domínio, documentação, resiliência | Docker (4 ambientes de containers) |
 
 ## O pipeline, bloco a bloco
@@ -53,6 +54,7 @@ flowchart LR
         unit["Testes · unitários"]:::processo
         comp["Testes · componente"]:::processo
         integ["Testes · integração<br/><i>Redis + calendário reais</i>"]:::processo
+        prop["Testes · property-based<br/><i>Hypothesis · 500 exemplos</i>"]:::processo
     end
 
     subgraph E3["③ Consolidação"]
@@ -72,7 +74,7 @@ flowchart LR
     rel["Entrega · release"]:::entrega
     sbom["Entrega · SBOM"]:::entrega
 
-    unit & comp & integ --> cov --> sonar
+    unit & comp & integ & prop --> cov --> sonar
     lint & mypy & cov --> dv
     lint & mypy & cov --> e2e
     E1 & E2 & E3 & E4 --> ok --> pub --> rel & sbom
@@ -139,6 +141,18 @@ Onde a suíte encontra o mundo real, ainda em processo (a falha aponta a linha e
 
 O calendário real é sempre construído com `start`/`end` explícitos: a janela de produção anda todo dia, e um teste preso a ela apodreceria.
 
+### Property-based — `tests/property/`
+
+Testes por exemplo verificam os casos que alguém lembrou de escrever. Testes por propriedade descrevem o que tem de valer para **qualquer** entrada e deixam o [Hypothesis](https://hypothesis.readthedocs.io/) procurar o contraexemplo — e, quando acha, encolhê-lo até o menor caso que ainda falha.
+
+| Perfil (`HYPOTHESIS_PROFILE`) | Exemplos | Uso |
+|---|---|---|
+| `dev` (padrão) | 100 | ciclo local |
+| `ci` | 500, sem `deadline`, `print_blob` | o job do CI, com `--hypothesis-seed=$GITHUB_RUN_ID`: um re-run reproduz o resultado, cada push explora entradas novas |
+| `mutation` | 25, determinístico, sem banco | o teste de mutação: o mesmo mutante é julgado sempre da mesma forma |
+
+**O primeiro bloco já pagou o investimento.** Escrito antes da correção, `test_redact_url.py` reprovou quatro das cinco propriedades da redação da URL do Redis (#58): a função levantava com porta inválida — derrubando o lifespan, que loga a URL — e devolvia **inteiras, com a senha**, as URLs sem host (`redis://:senha@/0`) e com credencial na query (`?password=`). Os doze exemplos que a suíte tinha passavam todos.
+
 ### E2E — `tests/e2e/`
 
 Contra a **imagem real**, em quatro ambientes (`principal`, `sem_redis`, `sem_calendario`, `redis_tardio`). Cada par (operação, código) do `/openapi.json` servido tem um caso, e um teste exige que o conjunto coberto seja **igual** ao documentado. As regras do calendário da B3 que servem de oráculo vivem em `tests/e2e/calendario_b3.py` — importáveis sem arrastar o marcador `e2e`, e testadas por si só no bloco unitário.
@@ -173,6 +187,7 @@ Com um 3.14 (por exemplo, `uv venv --python 3.14 .venv`):
 python -m pytest                      # unitários + componente + integração, com o gate de 90%
 python -m pytest tests/unit           # um bloco só (a cobertura parcial reprova o gate: use --cov-fail-under=0)
 python -m pytest tests/integration    # precisa de Redis em localhost:6379 (db 15) para não pular
+HYPOTHESIS_PROFILE=ci python -m pytest tests/property --cov-fail-under=0   # como no CI (500 exemplos)
 docker run -d --rm -p 6379:6379 redis:7.4-alpine   # um Redis descartável para a integração
 
 docker build -t b3datetime:e2e . && E2E_IMAGE=b3datetime:e2e python -m pytest -m e2e tests/e2e --no-cov
