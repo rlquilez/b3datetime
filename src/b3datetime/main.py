@@ -21,7 +21,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import ValidationError
 
 from b3datetime.config import Settings, get_settings
 from b3datetime.middleware import RootPathPrefixMiddleware
@@ -34,7 +33,12 @@ from b3datetime.routers.openapi_examples import (
     auth_description,
 )
 from b3datetime.services.calendar_service import CalendarUnavailableError, build_bvmf_calendar
-from b3datetime.services.redis_service import KeyNotFoundError, RedisService, RedisUnavailableError
+from b3datetime.services.redis_service import (
+    InvalidUpstreamValueError,
+    KeyNotFoundError,
+    RedisService,
+    RedisUnavailableError,
+)
 from b3datetime.static import REDOC_JS, STATIC_DIR, SWAGGER_CSS, SWAGGER_JS
 
 logger = logging.getLogger(__name__)
@@ -122,12 +126,13 @@ def _register_exception_handlers(app: FastAPI) -> None:
             },
         )
 
-    @app.exception_handler(ValidationError)
-    async def _invalid_upstream(_: Request, exc: ValidationError) -> JSONResponse:
-        # Chega aqui quando o valor lido do Redis não satisfaz o contrato da resposta
-        # (ex.: "25:00" onde se promete HH:MM). 502, porque a falha é do upstream, não
-        # do cliente. Antes, a exceção escapava e virava um 500 sem explicação.
-        logger.error("Valor inválido lido do Redis: %s", exc.errors())
+    @app.exception_handler(InvalidUpstreamValueError)
+    async def _invalid_upstream(_: Request, exc: InvalidUpstreamValueError) -> JSONResponse:
+        # O valor lido do Redis não satisfaz o contrato da resposta ("25:00" onde se
+        # promete HH:MM, bytes que não são UTF-8). 502, porque a falha é do upstream.
+        # Só esta exceção vira 502: antes era qualquer pydantic.ValidationError, e um
+        # bug interno aparecia como "valor inválido no Redis".
+        logger.error("Valor inválido lido do Redis: %s", exc, exc_info=exc.__cause__)
         return JSONResponse(
             status_code=502,
             content={"detail": {"error": "Bad Gateway", "message": BAD_GATEWAY_MESSAGE}},

@@ -70,3 +70,19 @@ async def test_chave_apagada_no_redis_real_vira_404(
     r = await cliente_real.get("/v1/hours/close")
     assert r.status_code == 404
     assert r.json()["detail"]["error"] == "Not Found"
+
+
+async def test_bytes_invalidos_no_redis_real_viram_502(cliente_real: httpx.AsyncClient) -> None:
+    """Com o Redis real e ``decode_responses=True``, é o redis-py que levanta ao decodificar.
+
+    Regressão: o ``UnicodeDecodeError`` escapava e virava 500. O contrato promete 502 para
+    qualquer valor fora de HH:MM.
+    """
+    bruto = aioredis.from_url(REDIS_TEST_URL)  # sem decode_responses: grava bytes crus
+    try:
+        await bruto.set(Settings(_env_file=None).redis_key_open, b"\xff\xfe")
+    finally:
+        await bruto.aclose()
+    r = await cliente_real.get("/v1/hours")
+    assert r.status_code == 502
+    assert r.json()["detail"]["error"] == "Bad Gateway"

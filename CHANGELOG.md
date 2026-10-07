@@ -11,6 +11,12 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 - O código passa a seguir o layout `src/` padrão do Python: o pacote se chama `b3datetime` (`src/b3datetime/`) e a aplicação ASGI é `b3datetime.main:app`. Só afeta quem sobrescreve o comando do container — o `CMD` da imagem já usa o caminho novo. (#52)
 
+### Corrigido
+
+- `/v1/hours`, `/v1/hours/open` e `/v1/hours/close` deixam de servir como `200` um horário com dígitos não-ASCII vindo do Redis (ex.: `1٠:00`, com o zero arábico-índico): o padrão `HH:MM` do contrato publicado sempre foi ASCII, e agora a validação também. A resposta é o `502` documentado para valor inválido. O texto do `pattern` no OpenAPI passa de `\d` para `[0-9]`, com o mesmo significado. (#59)
+- Um valor no Redis que não é UTF-8 deixa de produzir `500`: é um valor inválido do upstream e responde o `502` documentado. (#59)
+- O `502` ("valor inválido no Redis") deixa de ser usado para erros internos de validação, que agora são `500`. (#59)
+
 ### Segurança
 
 - A URL do Redis deixa de vazar credenciais no log em formas que a redação não cobria: sem host (`redis://:senha@/0`, `unix://:senha@/caminho.sock`) e com a senha na query (`?password=`). Uma porta inválida em `REDIS_URL_ENV` (`:abc`, `:99999`) também deixa de derrubar o arranque. (#58)

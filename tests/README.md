@@ -153,6 +153,8 @@ Testes por exemplo verificam os casos que alguém lembrou de escrever. Testes po
 
 **O primeiro bloco já pagou o investimento.** Escrito antes da correção, `test_redact_url.py` reprovou quatro das cinco propriedades da redação da URL do Redis (#58): a função levantava com porta inválida — derrubando o lifespan, que loga a URL — e devolvia **inteiras, com a senha**, as URLs sem host (`redis://:senha@/0`) e com credencial na query (`?password=`). Os doze exemplos que a suíte tinha passavam todos.
 
+`test_horarios.py` trava o padrão `HH:MM`: aceito **se e somente se** está entre os 1440 horários ASCII — gerando quase-horários com dígitos arábico-índicos, devanágari e de largura total, que o `\d` Unicode do pydantic-core deixava passar (#59). Também prova que `_as_str` é a identidade sobre `str`, o inverso de `encode` sobre UTF-8, e que qualquer byte inválido vira o 502 documentado, nunca um 500.
+
 ### E2E — `tests/e2e/`
 
 Contra a **imagem real**, em quatro ambientes (`principal`, `sem_redis`, `sem_calendario`, `redis_tardio`). Cada par (operação, código) do `/openapi.json` servido tem um caso, e um teste exige que o conjunto coberto seja **igual** ao documentado. As regras do calendário da B3 que servem de oráculo vivem em `tests/e2e/calendario_b3.py` — importáveis sem arrastar o marcador `e2e`, e testadas por si só no bloco unitário.

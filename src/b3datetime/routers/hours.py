@@ -3,17 +3,20 @@
 from __future__ import annotations
 
 from fastapi import APIRouter
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from b3datetime.dependencies import RedisDep
 from b3datetime.routers.openapi_examples import RESPONSES_HOURS_ERRORS, TAG_HOURS, success_response
+from b3datetime.services.redis_service import InvalidUpstreamValueError
 
 router = APIRouter(prefix="/v1/hours", tags=[TAG_HOURS])
 
 # Os horários vêm do Redis, que aceita qualquer string. Sem validação, um valor
 # inválido gravado por engano era servido como 200 apesar de a documentação prometer
 # HH:MM. O pattern faz a resposta falhar de forma visível em vez de propagar lixo.
-TIME_PATTERN = r"^([01]\d|2[0-3]):[0-5]\d$"
+# `[0-9]`, e não `\d`: no regex do pydantic-core `\d` é Unicode e aceitava "1\u0660:00"
+# (o zero arábico-índico); no JSON Schema publicado (ECMA-262), `\d` sempre foi ASCII.
+TIME_PATTERN = r"^([01][0-9]|2[0-3]):[0-5][0-9]$"
 
 _CACHE_NOTE = (
     "Os horários são obtidos do Redis e mantidos em cache local por até 1 hora. "
@@ -51,6 +54,22 @@ class TradingTime(BaseModel):
     )
 
 
+def _horarios(open_time: str, close_time: str) -> TradingHours:
+    """Monta a resposta; um valor fora de HH:MM é falha do upstream (502), não do cliente."""
+    try:
+        return TradingHours(open=open_time, close=close_time)
+    except ValidationError as exc:
+        raise InvalidUpstreamValueError("horário fora do formato HH:MM") from exc
+
+
+def _horario(time: str) -> TradingTime:
+    """Como ``_horarios``, para um horário só."""
+    try:
+        return TradingTime(time=time)
+    except ValidationError as exc:
+        raise InvalidUpstreamValueError("horário fora do formato HH:MM") from exc
+
+
 @router.get(
     "",
     summary="Obter horários de abertura e fechamento",
@@ -68,7 +87,7 @@ combina um horário de abertura antigo com um de fechamento novo.""",
 async def get_trading_hours(redis: RedisDep) -> TradingHours:
     """Horários de abertura e fechamento, num único MGET."""
     open_time, close_time = await redis.get_trading_hours()
-    return TradingHours(open=open_time, close=close_time)
+    return _horarios(open_time, close_time)
 
 
 @router.get(
@@ -84,7 +103,7 @@ async def get_trading_hours(redis: RedisDep) -> TradingHours:
 )
 async def get_open_time(redis: RedisDep) -> TradingTime:
     """Horário de abertura."""
-    return TradingTime(time=await redis.get_open_time())
+    return _horario(await redis.get_open_time())
 
 
 @router.get(
@@ -100,4 +119,4 @@ async def get_open_time(redis: RedisDep) -> TradingTime:
 )
 async def get_close_time(redis: RedisDep) -> TradingTime:
     """Horário de fechamento."""
-    return TradingTime(time=await redis.get_close_time())
+    return _horario(await redis.get_close_time())

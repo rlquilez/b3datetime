@@ -136,7 +136,19 @@ async def test_degradado_serve_do_cache(
     assert r.json() == {"open": "10:00", "close": "18:00"}
 
 
-@pytest.mark.parametrize("valor", ["25:00", "abc", "10:60", "1000"])
+@pytest.mark.parametrize(
+    "valor",
+    [
+        "25:00",
+        "abc",
+        "10:60",
+        "1000",
+        # Dígitos não-ASCII: o `\d` do regex do pydantic-core é Unicode e aceitava
+        # "1\u0660:00" (zero arábico-índico) como HH:MM. O contrato publicado (ECMA) é ASCII.
+        "1\u0660:00",
+        "0\u0669:3\u0660",
+    ],
+)
 async def test_valor_invalido_no_redis_nao_e_servido_como_200(
     settings: Settings,
     fake_redis: fakeredis.aioredis.FakeRedis,
@@ -194,3 +206,33 @@ async def test_503_quando_o_servico_nao_foi_inicializado(
     async with make_client(app) as c:  # type: ignore[operator]
         r = await c.get("/v1/hours")
     assert r.status_code == 503
+
+
+async def test_valor_nao_utf8_no_redis_e_502_e_nao_500(
+    settings: Settings, clock: FakeClock, test_calendar: TradingCalendar, make_client: object
+) -> None:
+    """Regressão: bytes que não são UTF-8 levantavam UnicodeDecodeError e viravam 500.
+
+    O contrato promete 502 para qualquer valor fora do formato HH:MM.
+    """
+
+    class ClienteComLixo:
+        async def ping(self) -> bool:
+            return True
+
+        async def mget(self, _keys: list[str]) -> list[bytes | None]:
+            return [b"\xff\xfe", b"18:00"]
+
+        async def aclose(self) -> None:
+            return None
+
+    app = create_app(settings)
+    app.state.redis_service = RedisService(
+        settings, client_factory=lambda: as_redis(ClienteComLixo()), now_fn=clock
+    )
+    app.state.calendar = test_calendar
+
+    async with make_client(app) as c:  # type: ignore[operator]
+        r = await c.get("/v1/hours")
+    assert r.status_code == 502
+    assert r.json()["detail"]["error"] == "Bad Gateway"

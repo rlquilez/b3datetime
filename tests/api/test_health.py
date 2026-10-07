@@ -10,12 +10,13 @@ from __future__ import annotations
 import fakeredis
 import fakeredis.aioredis
 import httpx
+import pytest
 
 from b3datetime.config import Settings
 from b3datetime.main import create_app
 from b3datetime.services.calendar_service import TradingCalendar
 from b3datetime.services.redis_service import RedisService
-from tests.conftest import FakeClock
+from tests.conftest import FakeClock, build_app
 
 
 async def test_healthy(client: httpx.AsyncClient) -> None:
@@ -176,3 +177,25 @@ async def test_calendario_do_health_reporta_sessoes_e_nao_a_janela(
 async def test_timestamp_com_fuso_de_sao_paulo(client: httpx.AsyncClient) -> None:
     ts = (await client.get("/v1/health")).json()["timestamp"]
     assert ts.endswith(("-03:00", "-02:00"))
+
+
+async def test_validationerror_que_nao_vem_do_redis_nao_vira_502(
+    settings: Settings,
+    redis_service: RedisService,
+    test_calendar: TradingCalendar,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regressão: o handler de ``ValidationError`` respondia 502 "valor inválido no Redis"
+    para QUALQUER erro de validação. Um bug interno (aqui, um status de cache malformado)
+    é 500 — chamá-lo de falha do upstream mandaria o operador investigar o Redis à toa.
+    """
+
+    async def status_malformado(_self: RedisService) -> dict[str, object]:
+        return {"redis_connected": "talvez"}
+
+    monkeypatch.setattr(RedisService, "get_cache_status", status_malformado)
+    app = build_app(settings, redis_service, test_calendar)
+    transporte = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+    async with httpx.AsyncClient(transport=transporte, base_url="http://test") as c:
+        r = await c.get("/v1/health")
+    assert r.status_code == 500

@@ -10,6 +10,7 @@ import pytest
 
 from b3datetime.config import Settings
 from b3datetime.services.redis_service import (
+    InvalidUpstreamValueError,
     KeyNotFoundError,
     RedisService,
     RedisUnavailableError,
@@ -365,3 +366,54 @@ async def test_conexao_concorrente_conecta_uma_vez(settings: Settings, clock: Fa
     assert first is second
     assert created == 1
     assert SlowPingClient.pings == 1
+
+
+async def test_bytes_que_nao_sao_utf8_viram_valor_invalido(
+    settings: Settings, clock: FakeClock
+) -> None:
+    """Regressão: ``_as_str`` decodificava estrito e o ``UnicodeDecodeError`` virava 500."""
+
+    class ClienteComLixo:
+        async def ping(self) -> bool:
+            return True
+
+        async def mget(self, _keys: list[str]) -> list[bytes | None]:
+            return [b"10:00", b"\xff\xfe"]
+
+        async def aclose(self) -> None:
+            return None
+
+    service = RedisService(
+        settings, client_factory=lambda: as_redis(ClienteComLixo()), now_fn=clock
+    )
+    with pytest.raises(InvalidUpstreamValueError) as exc:
+        await service.get_trading_hours()
+    assert exc.value.key == settings.redis_key_close
+    assert isinstance(exc.value.__cause__, UnicodeDecodeError)
+
+
+async def test_decodificacao_do_proprio_redis_py_vira_valor_invalido(
+    settings: Settings, clock: FakeClock
+) -> None:
+    """Com ``decode_responses=True`` quem decodifica (e levanta) é o redis-py, dentro do MGET.
+
+    O Redis está no ar: não é 503 (indisponível) nem 404 (chave ausente), é valor inválido.
+    """
+    erro = UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
+
+    class ClienteQueFalhaAoDecodificar:
+        async def ping(self) -> bool:
+            return True
+
+        async def mget(self, _keys: list[str]) -> list[str | None]:
+            raise erro
+
+        async def aclose(self) -> None:
+            return None
+
+    service = RedisService(
+        settings, client_factory=lambda: as_redis(ClienteQueFalhaAoDecodificar()), now_fn=clock
+    )
+    with pytest.raises(InvalidUpstreamValueError) as exc:
+        await service.get_trading_hours()
+    assert exc.value.__cause__ is erro

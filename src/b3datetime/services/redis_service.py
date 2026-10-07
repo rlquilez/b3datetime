@@ -38,16 +38,20 @@ NowFn = Callable[[], datetime]
 ClientFactory = Callable[[], "aioredis.Redis"]
 
 
-def _as_str(value: bytes | str | None) -> str | None:
+def _as_str(value: bytes | str | None, key: str) -> str | None:
     """Normaliza um valor lido do Redis para ``str``.
 
     O cliente é criado com ``decode_responses=True``, então na prática já vem
     ``str`` — mas isso é uma opção de runtime que o tipo não expressa, e um cliente
     injetado (em teste ou por configuração) pode devolver ``bytes``. Decodificar
-    aqui evita que um ``bytes`` vaze para a resposta como ``b'10:00'``.
+    aqui evita que um ``bytes`` vaze para a resposta como ``b'10:00'``. Bytes que não
+    são UTF-8 são um valor inválido do upstream (502), não um erro interno (500).
     """
     if isinstance(value, bytes):
-        return value.decode("utf-8")
+        try:
+            return value.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise InvalidUpstreamValueError("valor não é UTF-8", key=key) from exc
     return value
 
 
@@ -57,6 +61,19 @@ class KeyNotFoundError(LookupError):
     def __init__(self, key: str) -> None:
         self.key = key
         super().__init__(f"Chave '{key}' não encontrada no Redis")
+
+
+class InvalidUpstreamValueError(ValueError):
+    """O Redis respondeu, mas com um valor fora do contrato (não é UTF-8, não é HH:MM).
+
+    É a única origem do 502: a falha é do upstream, não do cliente nem da API. Antes o
+    502 vinha de qualquer ``pydantic.ValidationError`` — inclusive de bugs internos.
+    """
+
+    def __init__(self, reason: str, *, key: str | None = None) -> None:
+        self.key = key
+        self.reason = reason
+        super().__init__(f"Valor inválido no Redis ({key or 'chave desconhecida'}): {reason}")
 
 
 class RedisUnavailableError(RuntimeError):
@@ -202,6 +219,10 @@ class RedisService:
             return None
         try:
             values = await client.mget(keys)
+        except UnicodeDecodeError as exc:
+            # Com decode_responses=True, é o próprio redis-py que decodifica e levanta:
+            # o Redis está no ar, mas guarda bytes que não são UTF-8.
+            raise InvalidUpstreamValueError("valor não é UTF-8") from exc
         except RedisError, OSError:
             logger.exception("Erro ao ler %s no Redis", keys)
             # O cliente é preservado: o pool do redis-py reconecta sozinho na próxima
@@ -210,7 +231,7 @@ class RedisService:
 
         decoded: list[str | None] = []
         for key, raw in zip(keys, values, strict=True):
-            value = _as_str(raw)
+            value = _as_str(raw, key)
             if value is not None:
                 self.local_cache.set(key, value)
             decoded.append(value)
