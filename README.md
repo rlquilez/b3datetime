@@ -880,9 +880,9 @@ flowchart LR
     test --> sonar["SonarQube<br/>quality gate bloqueante"]
     lint & typecheck & test --> dv["docker-verify<br/>build amd64 · smoke test · Trivy"]
     lint & typecheck & test --> e2e["e2e<br/>100% dos endpoints · 4 ambientes"]
-    dv & e2e & sonar --> pub["docker-publish (push na main)<br/>latest · sha-abc1234"] --> sbom["SBOM"]
     pub --> rel["release (versão nova)<br/>tag vX.Y.Z · X · X.Y · X.Y.Z · GitHub Release"]
-    lint & typecheck & test & sonar & bandit & pipaudit & gitleaks & codeql & trivyfs & dv & e2e & depreview --> ok["ci-ok"]
+    lint & typecheck & test & sonar & bandit & pipaudit & gitleaks & codeql & trivyfs & dv & e2e & depreview --> ok["ci-ok<br/>agrega todos os blocos"]
+    ok --> pub["docker-publish (push na main)<br/>latest · sha-abc1234"] --> sbom["SBOM"]
 ```
 
 | Etapa | Ferramenta | Observação |
@@ -900,7 +900,8 @@ flowchart LR
 | Publicação | imagem multi-arch + SBOM | só em push na `main`, só com tudo verde |
 | Release | tag, retag da imagem e GitHub Release | automática quando a `api_version` do commit publicado ainda não tem Release |
 
-- `ci-ok` é o único check agregador. Nenhuma imagem é publicada sem lint, tipagem, testes, smoke, E2E, scan da imagem e quality gate aprovados.
+- `ci-ok` é o único check agregador, e o `docker-publish` depende dele: nenhuma imagem é publicada sem **todos** os blocos aprovados — lint, tipagem, testes, SAST, SCA, segredos, smoke, E2E, scan da imagem e quality gate. Em push, um bloco pulado também reprova; o resumo do run traz a tabela de blocos com o resultado de cada um.
+- Actions fixadas por SHA de commit (com a versão em comentário, atualizada pelo Dependabot), `persist-credentials: false` em todo checkout e `timeout-minutes` em todo job.
 - É o **único workflow** do repositório: não há gatilho de tag. A release é um job do próprio `ci.yml` que roda depois da publicação (ver [Versionamento e Release](#️-versionamento-e-release)).
 - Em PRs do Dependabot o job do SonarQube é pulado (o PR não recebe os secrets); o restante roda normalmente.
 - **Secrets necessários:** `GIT_REGISTRY`, `GIT_OWNER`, `GIT_REGISTRY_USER`, `GIT_REGISTRY_PASSWORD`, `SONAR_TOKEN`, `SONAR_HOST_URL`.
