@@ -96,6 +96,7 @@ print("Hoje tem pregão" if today["is_trading_day"] else "Hoje não tem pregão"
 ### Visão de contexto
 
 ```mermaid
+%%{init: {"flowchart": {"wrappingWidth": 480}}}%%
 flowchart LR
     C["Cliente<br/>curl · Python · browser"] -->|"HTTPS"| K["Kong Gateway<br/>rota /b3datetime · strip_path · X-Forwarded-*"]
     subgraph app["Container b3datetime"]
@@ -123,6 +124,7 @@ flowchart LR
 ### Mapa de módulos
 
 ```mermaid
+%%{init: {"flowchart": {"wrappingWidth": 480}}}%%
 flowchart TB
     main["src/b3datetime/main.py<br/>create_app() · lifespan · handlers de exceção · B3DateTimeAPI"]
     cfg["src/b3datetime/config.py<br/>Settings · get_current_datetime · redact_url"]
@@ -641,6 +643,7 @@ Quando o Kong Gateway passar a exigir o header `apikey` (plugin key-auth), a API
 A API é publicada atrás do Kong Gateway sob o prefixo `/b3datetime`, informado à aplicação pela variável `ROOT_PATH`.
 
 ```mermaid
+%%{init: {"flowchart": {"wrappingWidth": 480}}}%%
 flowchart TD
     B["Browser: GET https://api.quilez.cloud/b3datetime/docs"] --> K{"Kong<br/>strip_path?"}
     K -->|"true (padrão)"| S1["path = /docs<br/>root_path = /b3datetime (ROOT_PATH)"]
@@ -872,36 +875,47 @@ E2E_BASE_URL=https://api.quilez.cloud/b3datetime python -m pytest -m e2e tests/e
 Pipeline em [`.github/workflows/ci.yml`](.github/workflows/ci.yml), disparado em push na `main`, em pull request e manualmente.
 
 ```mermaid
+%%{init: {"flowchart": {"wrappingWidth": 480}}}%%
 flowchart LR
-    subgraph s1["① Estática, em paralelo"]
-        direction TB
-        lint["lint (ruff) · lint de infra"]
-        tipos["tipagem (mypy strict)"]
-        arq["arquitetura · código morto"]
-        sast["SAST: bandit · CodeQL · zizmor"]
-        sca["SCA: pip-audit · Trivy fs · dependency-review (PR)"]
-        seg["segredos (gitleaks) · contrato (oasdiff × SemVer)"]
+    classDef estatica fill:#e8f1fb,stroke:#1d76db,color:#0b3d75
+    classDef processo fill:#e9f7ef,stroke:#0e8a16,color:#0b4d14
+    classDef consolida fill:#fff6e0,stroke:#d4a017,color:#5c4500
+    classDef imagem fill:#f3e8fb,stroke:#5319e7,color:#2d0c80
+    classDef gate fill:#ffffff,stroke:#24292f,color:#24292f,stroke-width:2px
+    classDef entrega fill:#fdecea,stroke:#d93f0b,color:#7a1f05
+    classDef producao fill:#e6f6f4,stroke:#0f766e,color:#134e4a
+
+    subgraph s1["① Estática"]
+        direction LR
+        lint["lint (ruff) · lint de infra"]:::estatica
+        tipos["tipagem (mypy strict)"]:::estatica
+        arq["arquitetura · código morto"]:::estatica
+        sast["SAST: bandit · CodeQL · zizmor"]:::estatica
+        sca["SCA: pip-audit · Trivy fs<br/>dependency-review (PR)"]:::estatica
+        seg["segredos (gitleaks)<br/>contrato (oasdiff × SemVer)"]:::estatica
     end
     subgraph s2["② Testes em processo"]
-        direction TB
-        blocos["unitários · componente<br/>integração · property-based"]
+        direction LR
+        blocos["unitários · componente<br/>integração · property-based"]:::processo
     end
     subgraph s3["③ Consolidação"]
-        direction TB
-        cov["cobertura combinada ≥ 90%"] --> sonar["SonarQube<br/>quality gate"]
-        mut["mutação (mutmut) ≥ 99%"]
+        direction LR
+        cov["cobertura combinada ≥ 90%"]:::consolida --> sonar["SonarQube<br/>quality gate"]:::consolida
+        mut["mutação (mutmut) ≥ 99%"]:::consolida
     end
-    subgraph s4["④ A imagem (mesmo artefato)"]
-        direction TB
-        dv["build · smoke · Trivy"] --> e2e["E2E · 100% do contrato"]
-        dv --> dast["DAST (ZAP, ativo)"]
-        dv --> perf["performance (k6)"]
+    subgraph s4["④ A imagem"]
+        direction LR
+        dv["build · smoke · Trivy"]:::imagem --> e2e["E2E · 100% do contrato"]:::imagem
+        dv --> dast["DAST (ZAP, ativo)"]:::imagem
+        dv --> perf["performance (k6)"]:::imagem
     end
-    blocos --> cov & mut
-    lint & tipos & cov --> dv
-    s1 & s2 & s3 & s4 --> ok{{"ci-ok"}}
-    ok --> pub["docker-publish (push na main)<br/>latest · sha-abc1234"]
-    pub --> rel["release (versão nova)"] & sbom["SBOM"] & pos["pós-deploy (produção)<br/>build = SHA · E2E de leitura · ZAP passivo · headers da borda"]
+    ok{{"ci-ok"}}:::gate
+    pub["docker-publish (push na main)<br/>latest · sha-abc1234"]:::entrega
+    rel["release (versão nova)"]:::entrega
+    sbom["SBOM"]:::entrega
+    pos["pós-deploy (produção)<br/>build = SHA · E2E de leitura<br/>ZAP passivo · headers da borda"]:::producao
+
+    s1 & s2 --> s3 --> s4 --> ok --> pub --> rel & sbom & pos
 ```
 
 | Etapa | Ferramenta | Observação |
@@ -941,6 +955,7 @@ O projeto segue [SemVer](https://semver.org/lang/pt-BR/) e [Keep a Changelog](ht
 A versão vive em `src/b3datetime/config.py` (`api_version`) e é copiada em três lugares que precisam concordar: `pyproject.toml`, o cabeçalho deste README e a seção do `CHANGELOG.md`. Os testes de `tests/unit/test_config.py` impõem a sincronia e exigem que a seção do CHANGELOG da versão não esteja vazia — no job `test`, antes de qualquer publicação.
 
 ```mermaid
+%%{init: {"flowchart": {"wrappingWidth": 480}}}%%
 flowchart LR
     v["1. Sincronizar a versão<br/>config.py · pyproject.toml · README · CHANGELOG"] --> c["2. chore(release): vX.Y.Z"] --> p["3. push na main"]
     p --> pub["ci.yml: testes · scan · docker-publish"] --> rel["job release: versão sem Release?"]

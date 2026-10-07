@@ -36,6 +36,7 @@ Cada bloco de teste é **um diretório** em `tests/` e **um job** no [`ci.yml`](
 A pirâmide clássica (muitos unitários, poucos E2E) continua valendo na **quantidade**: 310 unitários contra 61 E2E. Mas cada camada aqui existe porque **enxerga algo que as de baixo não enxergam**, e cada uma pegou ao menos um defeito real que as outras deixavam passar.
 
 ```mermaid
+%%{init: {"flowchart": {"wrappingWidth": 480}}}%%
 flowchart TB
     classDef estatica fill:#e8f1fb,stroke:#1d76db,color:#0b3d75
     classDef processo fill:#e9f7ef,stroke:#0e8a16,color:#0b4d14
@@ -68,6 +69,7 @@ flowchart TB
 ## O pipeline, bloco a bloco
 
 ```mermaid
+%%{init: {"flowchart": {"wrappingWidth": 480}}}%%
 flowchart LR
     classDef estatica fill:#e8f1fb,stroke:#1d76db,color:#0b3d75
     classDef processo fill:#e9f7ef,stroke:#0e8a16,color:#0b4d14
@@ -77,25 +79,19 @@ flowchart LR
     classDef entrega fill:#fdecea,stroke:#d93f0b,color:#7a1f05
     classDef producao fill:#e6f6f4,stroke:#0f766e,color:#134e4a
 
-    subgraph E1["① Análise estática"]
-        direction TB
-        lint["Lint · ruff"]:::estatica
-        infra["Lint · infra<br/><i>actionlint · hadolint · shellcheck</i>"]:::estatica
+    subgraph E1["① Análise estática · 13 jobs"]
+        direction LR
+        lint["Lint · ruff<br/>Lint · infra<br/><i>actionlint · hadolint · shellcheck</i>"]:::estatica
         mypy["Tipagem · mypy strict"]:::estatica
-        arq["Arquitetura<br/><i>import-linter + regras</i>"]:::estatica
-        morto["Código morto<br/><i>vulture · deptry · fixtures</i>"]:::estatica
-        bandit["SAST · bandit"]:::estatica
-        codeql["SAST · CodeQL<br/><i>python · actions</i>"]:::estatica
-        zizmor["SAST · zizmor<br/><i>workflows</i>"]:::estatica
-        gitleaks["Segredos · gitleaks"]:::estatica
-        pipaudit["SCA · pip-audit"]:::estatica
-        trivyfs["SCA · Trivy (filesystem)"]:::estatica
-        depreview["SCA · dependency-review<br/><i>só em PR</i>"]:::estatica
+        arq["Arquitetura · import-linter + regras<br/>Código morto · vulture · deptry · fixtures"]:::estatica
+        sast["SAST · bandit<br/>SAST · CodeQL <i>python · actions</i><br/>SAST · zizmor <i>workflows</i>"]:::estatica
+        sca["SCA · pip-audit<br/>SCA · Trivy (filesystem)<br/>SCA · dependency-review <i>só em PR</i>"]:::estatica
+        seg["Segredos · gitleaks"]:::estatica
         contract["Contrato · oasdiff<br/><i>breaking × SemVer</i>"]:::estatica
     end
 
     subgraph E2["② Testes em processo"]
-        direction TB
+        direction LR
         unit["Testes · unitários"]:::processo
         comp["Testes · componente"]:::processo
         integ["Testes · integração<br/><i>Redis + calendário reais</i>"]:::processo
@@ -103,14 +99,14 @@ flowchart LR
     end
 
     subgraph E3["③ Consolidação"]
-        direction TB
+        direction LR
         cov["Cobertura · combinada<br/>≥ 90% + tripwires"]:::consolida
         sonar["Qualidade · SonarQube<br/>quality gate"]:::consolida
         mut["Mutação · mutmut<br/>score ≥ 99%"]:::consolida
     end
 
     subgraph E4["④ Imagem"]
-        direction TB
+        direction LR
         dv["Imagem · build, smoke e Trivy"]:::imagem
         e2e["E2E · contrato 100%"]:::imagem
         dast["DAST · OWASP ZAP<br/><i>varredura ativa</i>"]:::imagem
@@ -123,15 +119,14 @@ flowchart LR
     sbom["Entrega · SBOM"]:::entrega
     pos["Produção · pós-deploy<br/><i>build = SHA · E2E de leitura<br/>ZAP passivo · headers da borda</i>"]:::producao
 
-    unit & comp & integ & prop & arq --> cov --> sonar
-    unit & comp & integ & prop --> mut
-    lint & mypy & cov --> dv --> e2e & dast & perf
-    E1 & E2 & E3 & E4 --> ok --> pub --> rel & sbom & pos
+    cov --> sonar
+    dv --> e2e & dast & perf
+    E1 & E2 --> E3 --> E4 --> ok --> pub --> rel & sbom & pos
 ```
 
 | Estágio | Por que nesta posição |
 |---|---|
-| ① Estática | Não executa nada da aplicação: é o mais barato e falha mais cedo. Roda em paralelo, sem dependências. |
+| ① Estática | Não executa nada da aplicação: é o mais barato e falha mais cedo. Roda em paralelo com ②, sem dependências. |
 | ② Em processo | Testes rápidos, sem container. Cada bloco publica a sua cobertura parcial e o seu `junit`. |
 | ③ Consolidação | A cobertura só faz sentido somada: o gate de 90% é aplicado **uma vez**, sobre os blocos combinados. O Sonar consome o resultado. |
 | ④ Imagem | Só se constrói e se testa a imagem depois de o código passar em processo — testar a imagem de um código que já falhou é desperdício. E2E, DAST e performance carregam o artefato do `docker-verify` e exercitam, em paralelo, exatamente os bits que passaram no smoke e no Trivy. |
@@ -167,6 +162,7 @@ O desenho da aplicação, verificado em vez de descrito. Duas camadas:
 **Contratos de dependência** (import-linter, `lint-imports`), sobre o grafo de imports:
 
 ```mermaid
+%%{init: {"flowchart": {"wrappingWidth": 480}}}%%
 flowchart TB
     classDef camada fill:#e8f1fb,stroke:#1d76db,color:#0b3d75
     classDef folha fill:#f6f8fa,stroke:#8c959f,color:#24292f
@@ -309,6 +305,7 @@ SAST e SCA leem código e manifestos; o DAST **ataca a aplicação rodando**. É
 **Já pagou o investimento na primeira varredura.** O Swagger UI 5.17.14 servido em `/docs` embutia o **DOMPurify 3.1.4**, com 19 CVEs de XSS conhecidos. O ZAP o apontou pela regra 10003 (*Vulnerable JS Library*, base do retire.js), e os assets foram atualizados para Swagger UI 5.33.0 e ReDoc 2.5.4 (#69).
 
 ```mermaid
+%%{init: {"flowchart": {"wrappingWidth": 480}}}%%
 flowchart LR
     classDef ci fill:#f3e8fb,stroke:#5319e7,color:#2d0c80
     classDef zap fill:#fdecea,stroke:#d93f0b,color:#7a1f05
@@ -361,6 +358,7 @@ O teste de escala em processo (`tests/unit/test_calendar_service.py::test_custo_
 O [k6](https://grafana.com/docs/k6/) roda `tests/load/smoke.js` contra a imagem verificada, na rede de `tests/stack/compose.yaml`:
 
 ```mermaid
+%%{init: {"flowchart": {"wrappingWidth": 480}}}%%
 flowchart LR
     classDef prep fill:#f6f8fa,stroke:#8c959f,color:#24292f
     classDef carga fill:#f3e8fb,stroke:#5319e7,color:#2d0c80
