@@ -21,6 +21,7 @@ Cada bloco de teste é **um diretório** em `tests/` e **um job** no [`ci.yml`](
 | `tests/api/` | **Componente** | a aplicação ASGI inteira, em processo: cada endpoint, cada código documentado, contrato OpenAPI, proxy, CORS, estáticos | nenhuma — `httpx.ASGITransport`, sem lifespan |
 | `tests/integration/` | **Integração** | o encontro com o mundo real: Redis real, calendário BVMF real, lifespan real, a app inteira com tudo real | Redis em `localhost:6379` (db 15) |
 | `tests/property/` | **Property-based** | propriedades que valem para **toda** entrada gerada, não só para os exemplos escolhidos: nunca levanta, nunca vaza, é idempotente, preserva o resto | nenhuma — Hypothesis |
+| `tests/architecture/` | **Arquitetura** | as regras de desenho: camadas e dependências entre módulos (import-linter), import sem I/O (audit hook) e as convenções do CLAUDE.md sobre a AST | nenhuma |
 | `tests/e2e/` | **E2E** | a **imagem Docker** publicável, caixa-preta: 100% das respostas documentadas, consultas de domínio, documentação, resiliência | Docker (4 ambientes de containers) |
 
 ## O pipeline, bloco a bloco
@@ -39,6 +40,7 @@ flowchart LR
         lint["Lint · ruff"]:::estatica
         infra["Lint · infra<br/><i>actionlint · hadolint · shellcheck</i>"]:::estatica
         mypy["Tipagem · mypy strict"]:::estatica
+        arq["Arquitetura<br/><i>import-linter + regras</i>"]:::estatica
         bandit["SAST · bandit"]:::estatica
         codeql["SAST · CodeQL<br/><i>python · actions</i>"]:::estatica
         zizmor["SAST · zizmor<br/><i>workflows</i>"]:::estatica
@@ -74,7 +76,7 @@ flowchart LR
     rel["Entrega · release"]:::entrega
     sbom["Entrega · SBOM"]:::entrega
 
-    unit & comp & integ & prop --> cov --> sonar
+    unit & comp & integ & prop & arq --> cov --> sonar
     lint & mypy & cov --> dv
     lint & mypy & cov --> e2e
     E1 & E2 & E3 & E4 --> ok --> pub --> rel & sbom
@@ -110,6 +112,40 @@ Não executa a aplicação; por isso roda primeiro e em paralelo.
 **O contrato é um artefato versionado.** `tests/contract/openapi.json` é o `/openapi.json` que a API serve atrás do Kong, gerado em processo por `scripts/gerar_openapi.py`. Um teste do bloco de componente exige que ele esteja em dia: mudar o contrato sem regenerar reprova, e regenerar faz a mudança aparecer no diff do commit. A sabotagem de referência — remover o campo obrigatório `close` de `/v1/hours` — é barrada pelo oasdiff como `response-required-property-removed`.
 
 **Semgrep foi avaliado e não adotado:** seria o quarto motor de SAST para Python, ao lado de CodeQL `security-extended`, Sonar e bandit (mais as regras `S` do ruff), com custo de triagem e sem regra exclusiva relevante para este código.
+
+### Arquitetura — `tests/architecture/` + `[tool.importlinter]`
+
+O desenho da aplicação, verificado em vez de descrito. Duas camadas:
+
+**Contratos de dependência** (import-linter, `lint-imports`), sobre o grafo de imports:
+
+```mermaid
+flowchart TB
+    classDef camada fill:#e8f1fb,stroke:#1d76db,color:#0b3d75
+    classDef folha fill:#f6f8fa,stroke:#8c959f,color:#24292f
+    entry["__main__"]:::camada --> main["main<br/><i>composição: lifespan, handlers</i>"]:::camada
+    main --> routers["routers<br/><i>hours · dates · health · root (independentes)</i>"]:::camada
+    routers --> deps["dependencies"]:::camada --> services["services<br/><i>redis_service · calendar_service</i>"]:::camada --> config["config"]:::camada
+    main -.-> mw["middleware"]:::folha
+    main -.-> static["static"]:::folha
+    routers -.-> ex["openapi_examples"]:::folha
+```
+
+| Contrato | Regra |
+|---|---|
+| camadas | `__main__` > `main` > `routers` > `dependencies` > `services` > `config` — só se importa para baixo |
+| routers independentes | `hours`, `dates`, `health` e `root` não se importam entre si |
+| domínio sem web | `services` e `config` não importam `fastapi`, `starlette` nem `uvicorn` |
+| confinamento | `redis` só em `redis_service`; `exchange_calendars`/`pandas` só em `calendar_service`; `uvicorn` só em `__main__` |
+| folhas | `middleware`, `static`, `openapi_examples` e `config` não importam nada do pacote |
+| sem ciclos | entre módulos irmãos de `b3datetime`, `routers` e `services` |
+
+**Regras que o grafo de imports não alcança** (pytest, `tests/architecture/`):
+
+- `test_import_sem_io.py` — o `import b3datetime.main` roda num subprocesso com `sys.addaudithook`, num diretório com um `.env` plantado: nenhum socket, nenhum subprocesso, nenhum arquivo lido no diretório de trabalho. Prova a invariante "nada faz I/O no import" sem depender de cronômetro;
+- `test_convencoes.py` — sobre a AST: nada instancia `Settings`/`create_app` em nível de módulo; nenhum `Depends(get_settings)`; `RedisService` e `build_bvmf_calendar` só são construídos no `lifespan`; modelos de resposta só no router que os declara; todo router está publicado.
+
+Sabotagens de referência: um `import fastapi` em `services` quebra o contrato "domínio sem web"; um `get_settings()` em nível de módulo faz o audit hook apontar a leitura do `.env`.
 
 ### Unitários — `tests/unit/`
 

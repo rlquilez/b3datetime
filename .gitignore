@@ -224,3 +224,6 @@ junit.xml
 # Relatórios por bloco de teste (CI: um job por bloco, consolidados no job de cobertura)
 coverage-*.dat
 junit-*.xml
+
+# import-linter
+.import_linter_cache/

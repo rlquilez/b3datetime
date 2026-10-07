@@ -181,3 +181,118 @@ ignore_missing_imports = true
 # --------------------------------------------------------------------------- #
 [tool.bandit]
 exclude_dirs = ["tests", ".history", ".venv", "venv"]
+
+# --------------------------------------------------------------------------- #
+# import-linter — arquitetura como contrato (job "Arquitetura")
+# --------------------------------------------------------------------------- #
+# Camadas, de cima para baixo: entrypoint → composição (main) → routers → dependências →
+# serviços → configuração. Uma camada só importa as de baixo. Os módulos-folha
+# (middleware, static, openapi_examples) não importam nada do pacote.
+[tool.importlinter]
+root_packages = ["b3datetime"]
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+id = "camadas"
+name = "Camadas: __main__ > main > routers > dependencies > services > config"
+type = "layers"
+layers = [
+    "b3datetime.__main__",
+    "b3datetime.main",
+    "b3datetime.routers",
+    "b3datetime.dependencies",
+    "b3datetime.services",
+    "b3datetime.config",
+]
+
+[[tool.importlinter.contracts]]
+id = "routers-independentes"
+name = "Os routers não se importam entre si (só compartilham openapi_examples)"
+type = "independence"
+modules = [
+    "b3datetime.routers.hours",
+    "b3datetime.routers.dates",
+    "b3datetime.routers.health",
+    "b3datetime.routers.root",
+]
+
+[[tool.importlinter.contracts]]
+id = "dominio-sem-web"
+name = "Serviços e configuração não dependem do framework web"
+type = "forbidden"
+source_modules = ["b3datetime.services", "b3datetime.config"]
+forbidden_modules = ["fastapi", "starlette", "uvicorn"]
+
+[[tool.importlinter.contracts]]
+id = "redis-so-no-servico"
+name = "Só o serviço de Redis importa redis"
+type = "forbidden"
+source_modules = [
+    "b3datetime.main",
+    "b3datetime.routers",
+    "b3datetime.dependencies",
+    "b3datetime.services.calendar_service",
+    "b3datetime.config",
+    "b3datetime.middleware",
+]
+forbidden_modules = ["redis"]
+# Direto, não transitivo: routers chegam ao redis_service pela injeção de dependência,
+# e isso é o desenho, não uma violação.
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+id = "calendario-so-no-servico"
+name = "Só o serviço de calendário importa exchange_calendars e pandas"
+type = "forbidden"
+source_modules = [
+    "b3datetime.main",
+    "b3datetime.routers",
+    "b3datetime.dependencies",
+    "b3datetime.services.redis_service",
+    "b3datetime.config",
+    "b3datetime.middleware",
+]
+forbidden_modules = ["exchange_calendars", "pandas"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+id = "uvicorn-so-no-entrypoint"
+name = "Só o entrypoint de desenvolvimento importa uvicorn"
+type = "forbidden"
+source_modules = [
+    "b3datetime.main",
+    "b3datetime.routers",
+    "b3datetime.dependencies",
+    "b3datetime.services",
+    "b3datetime.config",
+    "b3datetime.middleware",
+    "b3datetime.static",
+]
+forbidden_modules = ["uvicorn"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+id = "folhas"
+name = "Módulos-folha não importam nada do pacote"
+type = "forbidden"
+source_modules = [
+    "b3datetime.middleware",
+    "b3datetime.static",
+    "b3datetime.routers.openapi_examples",
+    "b3datetime.config",
+]
+forbidden_modules = [
+    "b3datetime.main",
+    "b3datetime.routers.hours",
+    "b3datetime.routers.dates",
+    "b3datetime.routers.health",
+    "b3datetime.routers.root",
+    "b3datetime.dependencies",
+    "b3datetime.services",
+]
+
+[[tool.importlinter.contracts]]
+id = "acyclic"
+name = "Nenhum ciclo entre módulos irmãos"
+type = "acyclic_siblings"
+ancestors = ["b3datetime", "b3datetime.routers", "b3datetime.services"]

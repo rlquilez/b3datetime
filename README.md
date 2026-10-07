@@ -892,6 +892,7 @@ flowchart LR
 | Etapa | Ferramenta | Observação |
 |-------|-----------|------------|
 | Lint e formatação | ruff | famílias do pyflakes/pycodestyle ao pylint, mccabe (complexidade ≤ 10), FastAPI, código comentado e `banned-api`: todo "agora" passa por `get_current_datetime()` |
+| Arquitetura | import-linter + `tests/architecture` | camadas, routers independentes, domínio sem framework web, dependências confinadas, sem ciclos; import sem I/O provado por audit hook; convenções do projeto sobre a AST |
 | Lint de infraestrutura | actionlint, hadolint, shellcheck | workflows (inclusive o shell de cada `run:`), Dockerfiles e scripts |
 | Tipagem | mypy **strict** + plugin do pydantic | em `src/`, `scripts/` e `tests/` |
 | Testes por bloco | pytest em Python 3.14 (o runtime da imagem): unitários, componente e integração (com Redis real), um job cada | ver [`tests/README.md`](tests/README.md) |

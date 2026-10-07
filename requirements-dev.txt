@@ -23,6 +23,8 @@ python-dateutil==2.9.0.post0
 
 # --- qualidade ---
 ruff==0.16.10
+# Contratos de arquitetura (dependências entre módulos) — [tool.importlinter] no pyproject.
+import-linter==2.15
 mypy==2.4.0
 # Stubs do typeshed: os testes também passam no mypy strict.
 types-jsonschema==4.26.0.20261006

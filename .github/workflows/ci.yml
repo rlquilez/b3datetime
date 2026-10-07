@@ -71,6 +71,45 @@ jobs:
           shellcheck --version | head -2
           shellcheck -S style scripts/*.sh
 
+  architecture:
+    name: Arquitetura · import-linter + regras
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+
+      # Contratos de dependência entre módulos ([tool.importlinter] no pyproject):
+      # camadas, routers independentes, domínio sem framework web, redis/pandas/uvicorn
+      # confinados ao seu módulo, folhas e ausência de ciclos.
+      - name: import-linter (contratos de dependência)
+        env:
+          PYTHONPATH: src
+        run: lint-imports --no-logo
+
+      # O que a análise de imports não alcança: o import sem I/O provado por audit hook
+      # e as convenções do CLAUDE.md, sobre a AST. Publica cobertura e junit como os
+      # demais blocos, para entrar na consolidação (e no tripwire de "nenhum pulo").
+      - name: pytest tests/architecture
+        env:
+          COVERAGE_FILE: coverage-architecture.dat
+        run: python -m pytest tests/architecture --cov-fail-under=0 --junitxml=junit-architecture.xml
+
+      - name: Publicar relatórios do bloco
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: testes-architecture
+          path: |
+            coverage-architecture.dat
+            junit-architecture.xml
+          if-no-files-found: error
+
   typecheck:
     name: Tipagem · mypy
     timeout-minutes: 10
@@ -165,7 +204,7 @@ jobs:
   coverage:
     name: Cobertura · combinada (≥ 90%)
     timeout-minutes: 10
-    needs: [tests]
+    needs: [tests, architecture]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -889,6 +928,7 @@ jobs:
       - lint
       - lint-infra
       - typecheck
+      - architecture
       - tests
       - coverage
       - sonar
@@ -928,6 +968,7 @@ jobs:
               "lint": "Lint · ruff",
               "lint-infra": "Lint · infra (actionlint, hadolint, shellcheck)",
               "typecheck": "Tipagem · mypy",
+              "architecture": "Arquitetura · import-linter + regras",
               "bandit": "SAST · bandit",
               "codeql": "SAST · CodeQL (python e actions)",
               "zizmor": "SAST · zizmor (workflows)",
