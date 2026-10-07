@@ -719,6 +719,17 @@ jobs:
           ignore-unfixed: true
           exit-code: "1"
 
+      # A imagem que passou no smoke e no Trivy, para os jobs que testam contra ela
+      # (E2E, DAST, performance): eles carregam estes bits, em vez de reconstruir.
+      - name: Exportar a imagem verificada
+        run: docker save b3datetime:ci | gzip -1 > imagem.tar.gz
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: imagem
+          path: imagem.tar.gz
+          retention-days: 1
+          if-no-files-found: error
+
   e2e:
     name: E2E · contrato 100%
     timeout-minutes: 30
@@ -726,29 +737,22 @@ jobs:
     # em quatro ambientes (principal, sem Redis, sem calendário, Redis que sobe depois).
     # Toda resposta documentada de toda operação do /openapi.json servido tem caso, e
     # um teste exige que os dois conjuntos sejam iguais (#47).
-    # Roda em paralelo ao docker-verify, a partir do mesmo Dockerfile e da mesma chave
-    # APK_REFRESH. Lê o cache do escopo verify e não grava nenhum, para não disputar o
-    # índice com ele.
-    needs: [lint, typecheck, coverage]
+    # Contra a imagem que o docker-verify construiu, passou no smoke e no Trivy: o
+    # artefato `imagem` (docker save), carregado aqui. Antes este job reconstruía o
+    # Dockerfile a partir do cache — os mesmos passos, mas não necessariamente os mesmos
+    # bits que foram escaneados.
+    needs: [docker-verify]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
-      - name: Build local (amd64)
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          context: .
-          platforms: linux/amd64
-          load: true
-          push: false
-          tags: b3datetime:e2e
-          build-args: |
-            APK_REFRESH=${{ github.run_id }}-${{ github.run_attempt }}
-            BUILD_SHA=${{ github.sha }}
-          cache-from: type=gha,scope=verify
+          name: imagem
+      - name: Carregar a imagem verificada
+        run: gunzip -c imagem.tar.gz | docker load
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -758,7 +762,7 @@ jobs:
 
       - name: E2E contra a imagem
         env:
-          E2E_IMAGE: b3datetime:e2e
+          E2E_IMAGE: b3datetime:ci
           E2E_BUILD: ${{ github.sha }}
         run: python -m pytest -m e2e tests/e2e --no-cov --junitxml=e2e-junit.xml
 

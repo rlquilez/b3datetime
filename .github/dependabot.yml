@@ -41,6 +41,18 @@ updates:
   # de serem adotados. Trocar de Python (3.15) é decisão deliberada — mexe na matriz
   # do CI, em sonar.python.version e na documentação —, por isso minor e major são
   # ignorados.
+  # Imagem do Redis dos testes: fonte única em tests/stack/compose.yaml (o service do CI,
+  # o smoke e o E2E seguem — tests/unit/test_imagens_fixadas.py confere).
+  - package-ecosystem: "docker-compose"
+    directory: "/tests/stack"
+    schedule:
+      interval: "weekly"
+    labels: ["dependencies"]
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: "chore"
+
   - package-ecosystem: "docker"
     directory: "/"
     schedule:

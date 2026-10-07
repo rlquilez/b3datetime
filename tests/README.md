@@ -250,6 +250,8 @@ Os 3 sobreviventes são equivalentes, mantidos de propósito: `allow_credentials
 
 Contra a **imagem real**, em quatro ambientes (`principal`, `sem_redis`, `sem_calendario`, `redis_tardio`). Cada par (operação, código) do `/openapi.json` servido tem um caso, e um teste exige que o conjunto coberto seja **igual** ao documentado. As regras do calendário da B3 que servem de oráculo vivem em `tests/e2e/calendario_b3.py` — importáveis sem arrastar o marcador `e2e`, e testadas por si só no bloco unitário.
 
+Roda contra **os bits exatos** que passaram no smoke e no Trivy: o `docker-verify` exporta a imagem como artefato e o E2E a carrega. Inclui `test_exemplos_do_readme.py`, que **executa cada exemplo do README** — os `curl` e os programas Python — trocando só a URL pública pela do ambiente: a documentação não pode mentir sobre como usar a API.
+
 Com `E2E_BASE_URL`, a mesma suíte roda contra uma API já no ar, só com o que lê.
 
 ## Tripwires: provar que o teste rodou

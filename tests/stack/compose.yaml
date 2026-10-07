@@ -1,0 +1,56 @@
+# Stack mínima da API para os testes que precisam dela de pé: DAST (OWASP ZAP) e
+# performance (k6). App (a imagem sob teste) + Redis semeado, com ROOT_PATH como em
+# produção atrás do Kong.
+#
+#   IMAGE=b3datetime:ci docker compose -f tests/stack/compose.yaml -p b3stack up -d --wait
+#
+# É também a FONTE ÚNICA da imagem do Redis usada nos testes: o Dependabot atualiza o
+# digest aqui, e tests/unit/test_imagens_fixadas.py exige que o service do CI, o smoke
+# test e o E2E usem exatamente o mesmo.
+name: b3stack
+
+services:
+  redis:
+    image: redis:7.4-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  # Grava os horários e sai: a API responde 200 em /v1/hours desde a primeira requisição.
+  seed:
+    image: redis:7.4-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
+    depends_on:
+      redis:
+        condition: service_healthy
+    command:
+      - sh
+      - -c
+      - redis-cli -h redis SET b3:trading:hours:open 10:00 && redis-cli -h redis SET b3:trading:hours:close 17:00
+    restart: "no"
+
+  app:
+    image: ${IMAGE:?defina IMAGE com a imagem sob teste}
+    depends_on:
+      redis:
+        condition: service_healthy
+      seed:
+        condition: service_completed_successfully
+    environment:
+      REDIS_URL_ENV: redis://redis:6379
+      ROOT_PATH: /b3datetime
+    ports:
+      - "127.0.0.1:${PORTA:-8000}:8000"
+    # A própria imagem declara o HEALTHCHECK em /v1/health (503 se unhealthy); aqui só
+    # um intervalo menor, para o `up --wait` não esperar 30 s.
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://localhost:8000/v1/health')
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 5s

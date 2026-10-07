@@ -15,6 +15,7 @@ O marcador ``e2e`` fica fora da execução padrão do pytest (``-m "not e2e"`` n
 from __future__ import annotations
 
 import os
+import re
 import secrets
 import subprocess
 import sys
@@ -22,6 +23,7 @@ import time
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import date, datetime
+from pathlib import Path
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
@@ -32,7 +34,19 @@ import redis
 from tests.e2e.contrato import Contrato
 
 PREFIXO = "/b3datetime"
-IMAGEM_REDIS = "redis:7.4-alpine"
+
+
+def _imagem_do_redis() -> str:
+    """A imagem do Redis da fonte única (tests/stack/compose.yaml, atualizada pelo
+    Dependabot), fixada por digest."""
+    compose = (Path(__file__).resolve().parents[1] / "stack" / "compose.yaml").read_text()
+    achado = re.search(r"image: (redis:\S+)", compose)
+    if achado is None:
+        raise RuntimeError("tests/stack/compose.yaml sem a imagem do Redis")
+    return achado.group(1)
+
+
+IMAGEM_REDIS = _imagem_do_redis()
 CHAVE_ABERTURA = "b3:trading:hours:open"
 CHAVE_FECHAMENTO = "b3:trading:hours:close"
 HORARIOS = {"open": "10:00", "close": "17:00"}

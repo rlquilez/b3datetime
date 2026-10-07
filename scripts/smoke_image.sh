@@ -11,6 +11,8 @@
 set -euo pipefail
 
 IMAGE="${IMAGE:-b3datetime:ci}"
+# Redis da fonte única (tests/stack/compose.yaml), fixado por digest.
+REDIS_IMAGE="$(grep -oE 'image: redis:[^ ]+' "$(dirname "$0")/../tests/stack/compose.yaml" | head -1 | cut -d" " -f2)"
 PREFIX="${PREFIX:-/b3datetime}"
 PORT="${PORT:-8000}"
 NET="smoke-net-$$"
@@ -82,7 +84,7 @@ docker rm -f smoke-app >/dev/null
 
 log "== 2) Redis real + ROOT_PATH=$PREFIX =="
 docker network create "$NET" >/dev/null
-docker run -d --name smoke-redis --network "$NET" redis:7.4-alpine >/dev/null
+docker run -d --name smoke-redis --network "$NET" "$REDIS_IMAGE" >/dev/null
 for _ in $(seq 1 15); do
   if docker exec smoke-redis redis-cli ping 2>/dev/null | grep -q PONG; then break; fi
   sleep 1
