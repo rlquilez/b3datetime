@@ -16,12 +16,15 @@ pytest-randomly==5.0.0
 jsonschema==4.26.0
 # Testes baseados em propriedades (tests/property).
 hypothesis==6.168.5
+# Oráculo da Páscoa nos testes de propriedade (já vem com o pandas; declarado por ser importado direto).
+python-dateutil==2.9.0.post0
 
 # --- qualidade ---
 ruff==0.16.10
 mypy==2.4.0
 # Stubs do typeshed: os testes também passam no mypy strict.
 types-jsonschema==4.26.0.20261006
+types-python-dateutil==2.9.0.20260807
 
 # --- segurança ---
 # O formatter SARIF do bandit é um extra; sem ele `-f sarif` falha.

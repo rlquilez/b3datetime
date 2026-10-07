@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import fakeredis
 import fakeredis.aioredis
@@ -417,3 +419,36 @@ async def test_decodificacao_do_proprio_redis_py_vira_valor_invalido(
     with pytest.raises(InvalidUpstreamValueError) as exc:
         await service.get_trading_hours()
     assert exc.value.__cause__ is erro
+
+
+async def test_throttle_mede_tempo_real_atravessando_o_horario_de_verao(
+    fake_server: fakeredis.FakeServer,
+) -> None:
+    """Regressão: o throttle subtraía datetimes de mesma ZoneInfo (relógio de parede).
+
+    No fim do horário de verão de Nova York, 2 h reais pareciam 1 h: com um intervalo de
+    1 h 30 a reconexão ficava travada por mais tempo do que o configurado.
+    """
+    ny = ZoneInfo("America/New_York")
+    instantes = iter(
+        [
+            datetime(2024, 11, 3, 0, 30, tzinfo=ny),  # 04:30 UTC: primeira tentativa
+            datetime(2024, 11, 3, 1, 30, fold=1, tzinfo=ny),  # 06:30 UTC: 2 h reais depois
+        ]
+    )
+    settings = Settings(
+        _env_file=None, timezone="America/New_York", redis_reconnect_interval_seconds=5400
+    )
+    fake_server.connected = False
+    criados = 0
+
+    def factory() -> fakeredis.aioredis.FakeRedis:
+        nonlocal criados
+        criados += 1
+        return fakeredis.aioredis.FakeRedis(server=fake_server, decode_responses=True)
+
+    service = RedisService(settings, client_factory=factory, now_fn=lambda: next(instantes))
+    await service.connect()
+    assert criados == 1
+    assert not await service.is_connected()
+    assert criados == 2, "passadas 2 h reais, um intervalo de 1 h 30 já venceu"

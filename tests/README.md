@@ -153,6 +153,16 @@ Testes por exemplo verificam os casos que alguém lembrou de escrever. Testes po
 
 **O primeiro bloco já pagou o investimento.** Escrito antes da correção, `test_redact_url.py` reprovou quatro das cinco propriedades da redação da URL do Redis (#58): a função levantava com porta inválida — derrubando o lifespan, que loga a URL — e devolvia **inteiras, com a senha**, as URLs sem host (`redis://:senha@/0`) e com credencial na query (`?password=`). Os doze exemplos que a suíte tinha passavam todos.
 
+| Arquivo | Propriedades |
+|---|---|
+| `test_redact_url.py` | nunca levanta, nunca vaza (userinfo com e sem host, query), preserva o resto, idempotente |
+| `test_horarios.py` | aceito ⇔ `HH:MM` ASCII; `_as_str` identidade/inverso; bytes inválidos → 502 |
+| `test_calendario.py` | sessões ⊔ não-sessões = intervalo; `is_session` ⇔ `sessions_in_range`; oráculo de `_validate_range`; Páscoa = `dateutil.easter` |
+| `test_middleware.py` | o caminho sempre começa com o prefixo; idempotência; `raw_path` acompanha `path` |
+| `test_cache_estado.py` | **máquina de estados** (`RuleBasedStateMachine`): idade = tempo real em qualquer fuso; `0.0` ≠ ausente; expirado ⇔ idade > TTL |
+
+**Uma propriedade só vale o que a estratégia explora.** A primeira versão da máquina de estados sorteava fuso e instante ao acaso e **não pegou** a sabotagem "idade em relógio de parede" (o bug B3, #61): quase nenhuma sequência atravessava uma virada de horário de verão. A versão final começa perto de viradas **reais**, calculadas do tzdata (127, em 6 fusos), e reprova a sabotagem.
+
 `test_horarios.py` trava o padrão `HH:MM`: aceito **se e somente se** está entre os 1440 horários ASCII — gerando quase-horários com dígitos arábico-índicos, devanágari e de largura total, que o `\d` Unicode do pydantic-core deixava passar (#59). Também prova que `_as_str` é a identidade sobre `str`, o inverso de `encode` sobre UTF-8, e que qualquer byte inválido vira o 502 documentado, nunca um 500.
 
 ### E2E — `tests/e2e/`

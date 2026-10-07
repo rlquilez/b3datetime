@@ -24,7 +24,7 @@ from __future__ import annotations
 import os
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from zoneinfo import ZoneInfo
 
@@ -92,7 +92,10 @@ class FakeClock:
         return self._now
 
     def advance(self, seconds: float) -> None:
-        self._now += timedelta(seconds=seconds)
+        """Avança o tempo REAL: soma em UTC e volta ao fuso, para atravessar o horário de verão
+        como o relógio de verdade (somar direto no datetime local soma relógio de parede)."""
+        tz = self._now.tzinfo
+        self._now = (self._now.astimezone(UTC) + timedelta(seconds=seconds)).astimezone(tz)
 
 
 def as_redis(duble: object) -> aioredis.Redis:

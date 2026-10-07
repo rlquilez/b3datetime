@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 from b3datetime.services.redis_service import RedisCache
 from tests.conftest import FakeClock
 
@@ -89,3 +92,23 @@ def test_get_devolve_valor_e_timestamp(clock: FakeClock) -> None:
     assert entry is not None
     assert entry[0] == "v"
     assert entry[1] == clock.now()
+
+
+# Fim do horário de verão em Nova York, 03/11/2024: às 02:00 EDT o relógio volta para 01:00
+# EST. 00:30 EDT (04:30 UTC) e 01:30 EST (06:30 UTC) estão a 2 h reais de distância, mas a
+# 1 h de "relógio de parede". O fuso é configurável (TIMEZONE); São Paulo não tem horário de
+# verão desde 2019, mas a idade do cache não pode depender disso.
+NY = ZoneInfo("America/New_York")
+ANTES_DA_VIRADA = datetime(2024, 11, 3, 0, 30, tzinfo=NY)
+DEPOIS_DA_VIRADA = datetime(2024, 11, 3, 1, 30, fold=1, tzinfo=NY)
+
+
+def test_idade_atravessa_o_fim_do_horario_de_verao() -> None:
+    """Regressão: subtrair datetimes com a MESMA ZoneInfo dá a diferença de relógio de
+    parede. A idade saía 3600 s em vez de 7200 s, e um cache vencido (TTL de 1 h) seguia
+    sendo servido como válido."""
+    instantes = iter([ANTES_DA_VIRADA, DEPOIS_DA_VIRADA, DEPOIS_DA_VIRADA])
+    cache = RedisCache(now_fn=lambda: next(instantes))
+    cache.set("k", "v")
+    assert cache.get_age_seconds("k") == 7200
+    assert cache.is_expired("k", TTL)

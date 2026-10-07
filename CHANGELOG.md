@@ -17,6 +17,7 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 - `/v1/hours`, `/v1/hours/open` e `/v1/hours/close` deixam de servir como `200` um horário com dígitos não-ASCII vindo do Redis (ex.: `1٠:00`, com o zero arábico-índico): o padrão `HH:MM` do contrato publicado sempre foi ASCII, e agora a validação também. A resposta é o `502` documentado para valor inválido. O texto do `pattern` no OpenAPI passa de `\d` para `[0-9]`, com o mesmo significado. (#59)
 - Um valor no Redis que não é UTF-8 deixa de produzir `500`: é um valor inválido do upstream e responde o `502` documentado. (#59)
 - O `502` ("valor inválido no Redis") deixa de ser usado para erros internos de validação, que agora são `500`. (#59)
+- A idade do cache local (que decide entre servir o cache e responder `503`) e o intervalo de reconexão ao Redis passam a ser medidos em tempo real. Com um `TIMEZONE` que tem horário de verão, a volta do relógio fazia 2 h reais contarem como 1 h: um cache vencido seguia sendo servido e a reconexão demorava mais do que o configurado. (#61)
 
 ### Segurança
 

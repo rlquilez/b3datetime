@@ -21,7 +21,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Callable
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import redis.asyncio as aioredis
@@ -36,6 +36,16 @@ logger = logging.getLogger(__name__)
 
 NowFn = Callable[[], datetime]
 ClientFactory = Callable[[], "aioredis.Redis"]
+
+
+def _segundos_entre(inicio: datetime, fim: datetime) -> float:
+    """Tempo REAL decorrido entre dois instantes, em segundos.
+
+    Subtrair dois ``datetime`` com a mesma ``ZoneInfo`` dá a diferença de relógio de
+    parede: na volta do horário de verão, 2 h reais viram 1 h (e o contrário na ida).
+    Convertendo os dois para UTC a conta é feita sobre instantes, não sobre relógios.
+    """
+    return (fim.astimezone(UTC) - inicio.astimezone(UTC)).total_seconds()
 
 
 def _as_str(value: bytes | str | None, key: str) -> str | None:
@@ -114,7 +124,7 @@ class RedisCache:
         entry = self._entries.get(key)
         if entry is None:
             return None
-        return (self._now() - entry[1]).total_seconds()
+        return _segundos_entre(entry[1], self._now())
 
     def is_expired(self, key: str, ttl_seconds: int) -> bool:
         age = self.get_age_seconds(key)
@@ -185,7 +195,7 @@ class RedisService:
             now = self._now()
             interval = self._settings.redis_reconnect_interval_seconds
             if self._last_connect_attempt is not None:
-                elapsed = (now - self._last_connect_attempt).total_seconds()
+                elapsed = _segundos_entre(self._last_connect_attempt, now)
                 if elapsed < interval:
                     return None
             self._last_connect_attempt = now
