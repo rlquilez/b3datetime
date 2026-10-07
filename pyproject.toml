@@ -93,11 +93,41 @@ select = [
     "G",     # flake8-logging-format (G004: f-string em log)
     "TRY",   # tryceratops
     "DTZ",   # flake8-datetimez
+    "PL",    # pylint (convenções, refatoração, erros e avisos)
+    "C90",   # mccabe: complexidade ciclomática (ver max-complexity)
+    "FAST",  # FastAPI: response_model redundante (FAST001 = python:S8409 do Sonar), Depends sem Annotated
+    "ARG",   # argumentos não usados
+    "PTH",   # pathlib em vez de os.path
+    "ERA",   # código comentado (código morto que sobreviveu como comentário)
+    "PERF",  # anti-padrões de desempenho
+    "FURB",  # modernizações (refurb)
+    "RET",   # retornos inconsistentes ou redundantes
+    "PIE",   # construções desnecessárias
+    "BLE",   # except Exception cego
+    "T20",   # print esquecido
+    "PGH",   # type: ignore / noqa sem código
+    "TID",   # banned-api: o relógio passa por get_current_datetime()
+    "FLY",   # join estático → f-string
+    "ISC",   # concatenação implícita de strings
 ]
+# Avaliadas e deixadas de fora:
+# - TC (flake8-type-checking): com as anotações adiadas do 3.14, mover imports para
+#   `if TYPE_CHECKING:` quebra a resolução de anotações em runtime do FastAPI/pydantic.
+# - D (pydocstyle): só estilo; as docstrings são em pt-BR e o Sonar já cobre o essencial.
+# - FBT, EM, INP: estilo (booleans posicionais, mensagem de exceção em variável) ou
+#   intencional (tests/ e scripts/ não são pacotes: --import-mode=importlib).
 ignore = [
     "TRY003", # mensagens longas em raise: as mensagens em pt-BR são deliberadamente descritivas
     "E501",   # comprimento de linha: o formatter já cuida
 ]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"datetime.datetime.now".msg = "Use get_current_datetime() (b3datetime.config): todo 'agora' passa pelo timezone das settings."
+"datetime.date.today".msg = "Use get_current_datetime().date(): todo 'hoje' passa pelo timezone das settings."
+"time.time".msg = "Para medir duração use time.perf_counter(); para 'agora', get_current_datetime()."
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = [
@@ -105,8 +135,14 @@ ignore = [
     "S105",    # "senhas" hardcoded em fixtures
     "S106",
     "PLR2004", # números mágicos em asserts
+    "PLR0913", # fixtures do pytest chegam como argumentos: o limite de 5 não se aplica
+    "PLR0917",
+    "PLC0415", # import local para referenciar o módulo exato que o monkeypatch altera
+    "TID251",  # o relógio real é legítimo em testes (ex.: "hoje" do E2E contra a produção)
 ]
+"scripts/**" = ["T201"]  # scripts de CI: a saída no terminal é o propósito
 "src/b3datetime/main.py" = ["S104"]  # bind 0.0.0.0 é intencional em container
+"src/b3datetime/config.py" = ["TID251"]  # get_current_datetime() é o único dono do relógio
 
 [tool.ruff.lint.isort]
 known-first-party = ["b3datetime"]
@@ -120,20 +156,20 @@ indent-style = "space"
 # --------------------------------------------------------------------------- #
 [tool.mypy]
 python_version = "3.14"
-files = ["src"]
+# Strict em tudo — código, scripts de CI e testes: um teste mal tipado também é um
+# teste que pode estar testando a coisa errada.
+files = ["src", "scripts", "tests"]
 mypy_path = "src"
 explicit_package_bases = true
-strict = false
-warn_return_any = true
-warn_unused_configs = true
-warn_redundant_casts = true
-warn_unused_ignores = true
-disallow_untyped_defs = true
-disallow_incomplete_defs = true
-check_untyped_defs = true
-no_implicit_optional = true
+strict = true
+plugins = ["pydantic.mypy"]
+warn_unreachable = true
 show_error_codes = true
 pretty = true
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
 
 [[tool.mypy.overrides]]
 module = ["exchange_calendars.*", "pandas.*"]

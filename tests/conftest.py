@@ -14,12 +14,13 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, cast
 from zoneinfo import ZoneInfo
 
 import fakeredis.aioredis
 import httpx
 import pytest
+import redis.asyncio as aioredis
 from fastapi import FastAPI
 
 from b3datetime.config import Settings
@@ -75,6 +76,16 @@ class FakeClock:
         self._now += timedelta(seconds=seconds)
 
 
+def as_redis(duble: object) -> aioredis.Redis:
+    """Apresenta um dublê de teste como o cliente Redis que o ``RedisService`` espera.
+
+    O serviço só usa ``mget``/``get``/``ping``/``aclose``; os dublês implementam esse
+    subconjunto. O ``cast`` deixa isso explícito em um lugar, em vez de um
+    ``# type: ignore`` em cada teste.
+    """
+    return cast("aioredis.Redis", duble)
+
+
 class SpyRedis:
     """Encapsula um cliente fake contando as chamadas, para provar o MGET único."""
 
@@ -84,15 +95,15 @@ class SpyRedis:
 
     async def mget(self, keys: list[str]) -> list[str | None]:
         self.calls["mget"] += 1
-        return await self._inner.mget(keys)
+        return cast("list[str | None]", await self._inner.mget(keys))
 
     async def get(self, key: str) -> str | None:
         self.calls["get"] += 1
-        return await self._inner.get(key)
+        return cast("str | None", await self._inner.get(key))
 
     async def ping(self) -> bool:
         self.calls["ping"] += 1
-        return await self._inner.ping()
+        return bool(await self._inner.ping())
 
     async def aclose(self) -> None:
         await self._inner.aclose()

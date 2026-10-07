@@ -14,7 +14,7 @@ from b3datetime.services.redis_service import (
     RedisService,
     RedisUnavailableError,
 )
-from tests.conftest import FakeClock, SpyRedis
+from tests.conftest import FakeClock, SpyRedis, as_redis
 
 
 async def test_get_trading_hours(redis_service: RedisService) -> None:
@@ -30,7 +30,7 @@ async def test_horarios_lidos_em_um_unico_mget(
     `close` de hoje, além de dobrar a latência.
     """
     spy = SpyRedis(seeded_redis)
-    service = RedisService(settings, client_factory=lambda: spy, now_fn=clock)
+    service = RedisService(settings, client_factory=lambda: as_redis(spy), now_fn=clock)
 
     assert await service.get_trading_hours() == ("10:00", "18:00")
     assert spy.calls["mget"] == 1
@@ -288,9 +288,7 @@ async def test_connect_nao_propaga_falha(
     assert not await service.is_connected()
 
 
-async def test_aclose_tolera_erro_do_cliente(
-    settings: Settings, seeded_redis: fakeredis.aioredis.FakeRedis, clock: FakeClock
-) -> None:
+async def test_aclose_tolera_erro_do_cliente(settings: Settings, clock: FakeClock) -> None:
     """Erro ao fechar não deve propagar e atrapalhar o shutdown."""
 
     class ClienteQueFalhaAoFechar:
@@ -300,7 +298,9 @@ async def test_aclose_tolera_erro_do_cliente(
         async def aclose(self) -> None:
             raise OSError("socket já fechado")
 
-    service = RedisService(settings, client_factory=lambda: ClienteQueFalhaAoFechar(), now_fn=clock)  # type: ignore[arg-type,return-value]
+    service = RedisService(
+        settings, client_factory=lambda: as_redis(ClienteQueFalhaAoFechar()), now_fn=clock
+    )
     await service.connect()
     await service.aclose()  # não deve levantar
 
@@ -322,13 +322,15 @@ async def test_valores_em_bytes_sao_decodificados(settings: Settings, clock: Fak
         async def ping(self) -> bool:
             return True
 
-        async def mget(self, keys: list[str]) -> list[bytes | None]:
+        async def mget(self, _keys: list[str]) -> list[bytes | None]:
             return [b"10:00", b"18:00"]
 
         async def aclose(self) -> None:
             return None
 
-    service = RedisService(settings, client_factory=lambda: ClienteEmBytes(), now_fn=clock)  # type: ignore[arg-type,return-value]
+    service = RedisService(
+        settings, client_factory=lambda: as_redis(ClienteEmBytes()), now_fn=clock
+    )
     assert await service.get_trading_hours() == ("10:00", "18:00")
 
 

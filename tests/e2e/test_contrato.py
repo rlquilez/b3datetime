@@ -8,7 +8,7 @@ caso para um código que o contrato não documenta também.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from dataclasses import dataclass
 from datetime import date, timedelta
@@ -26,7 +26,7 @@ Params = dict[str, str] | Callable[[Ambiente], dict[str, str]]
 Verificacao = Callable[[httpx.Response, Ambiente], None]
 
 
-def _gravar(amb: Ambiente, valores: dict[str, str | None]) -> None:
+def _gravar(amb: Ambiente, valores: Mapping[str, bytes | str | None]) -> None:
     """Grava as chaves no Redis do ambiente; ``None`` apaga a chave."""
     assert amb.redis is not None
     for chave, valor in valores.items():

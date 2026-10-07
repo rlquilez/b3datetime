@@ -157,8 +157,11 @@ class RedisService:
             return self._client
 
         async with self._connect_lock:
+            # Double-checked: outra corrotina pode ter conectado enquanto esta esperava o
+            # lock. O mypy estreita `_client` para None pela checagem de cima e não sabe
+            # que o `await` do lock cede o controle.
             if self._client is not None:
-                return self._client
+                return self._client  # type: ignore[unreachable]
 
             # Throttle: sem isso, cada requisição com o Redis fora dispararia uma
             # tentativa de conexão, com o custo de socket_connect_timeout embutido.

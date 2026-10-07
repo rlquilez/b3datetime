@@ -77,10 +77,10 @@ def tabela(blocos: list[Bloco]) -> str:
         "| Bloco | Testes | Falhas | Erros | Pulados | Tempo (s) |",
         "|---|---:|---:|---:|---:|---:|",
     ]
-    for b in blocos:
-        linhas.append(
-            f"| {b.nome} | {b.testes} | {b.falhas} | {b.erros} | {b.pulados} | {b.segundos:.1f} |"
-        )
+    linhas.extend(
+        f"| {b.nome} | {b.testes} | {b.falhas} | {b.erros} | {b.pulados} | {b.segundos:.1f} |"
+        for b in blocos
+    )
     total = sum(b.testes for b in blocos)
     linhas.append(f"| **total** | **{total}** | | | | |")
     return "\n".join(linhas) + "\n"

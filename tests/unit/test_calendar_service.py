@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from datetime import date, timedelta
 
+import exchange_calendars as xcals
 import pandas as pd
 import pytest
 
@@ -169,26 +170,23 @@ def test_pertinencia_usa_container_com_hash() -> None:
 
 def test_build_bvmf_calendar_traduz_falha(monkeypatch: pytest.MonkeyPatch) -> None:
     """Falha de construção vira CalendarUnavailableError, não RuntimeError cru."""
-    import b3datetime.services.calendar_service as mod
 
     def boom(*_args: object, **_kwargs: object) -> None:
         raise ValueError("catálogo corrompido")
 
-    monkeypatch.setattr(mod.xcals, "get_calendar", boom)
+    monkeypatch.setattr(xcals, "get_calendar", boom)
     settings = Settings(_env_file=None)
     with pytest.raises(CalendarUnavailableError, match="BVMF"):
         build_bvmf_calendar(settings)
 
 
 def test_build_bvmf_calendar_preserva_a_causa(monkeypatch: pytest.MonkeyPatch) -> None:
-    import b3datetime.services.calendar_service as mod
-
     original = ValueError("causa original")
 
     def boom(*_args: object, **_kwargs: object) -> None:
         raise original
 
-    monkeypatch.setattr(mod.xcals, "get_calendar", boom)
+    monkeypatch.setattr(xcals, "get_calendar", boom)
     settings = Settings(_env_file=None)
     with pytest.raises(CalendarUnavailableError) as exc:
         build_bvmf_calendar(settings)

@@ -52,7 +52,7 @@ cp .env.example .env
 
 uvicorn --app-dir src b3datetime.main:app --reload --port 8000   # or: PYTHONPATH=src python -m b3datetime
 
-ruff check . && ruff format --check . && mypy src
+ruff check . && ruff format --check . && mypy   # mypy is strict over src, scripts and tests (targets come from pyproject)
 pytest                  # ~330 tests (`pytest --co -q | tail -1`; the e2e ones are deselected), coverage gate at 90% (currently ~99.8%)
 pytest tests/unit --cov-fail-under=0   # one block (each CI job runs one; a single block's coverage is partial)
 pytest -m "not slow"    # skips the tests that build the real BVMF calendar (all in tests/integration)
@@ -169,7 +169,8 @@ Black-box, against the **real image** with real Redis and the real BVMF calendar
 - Endpoints carry heavy OpenAPI metadata. Shared `responses` blocks live in `src/b3datetime/routers/openapi_examples.py` — that module is CPD-excluded, so put genuinely shared examples there rather than duplicating them.
 - Do **not** pass `response_model=` when the handler has a return annotation; FastAPI infers it and Sonar flags the duplication (`python:S8409`).
 - Response models are Pydantic classes declared in the router that uses them.
-- All "now" goes through `get_current_datetime()` with the settings timezone. Never bare `datetime.now()` — ruff's `DTZ` rules enforce this.
+- All "now" goes through `get_current_datetime()` with the settings timezone. Never bare `datetime.now()`/`date.today()`/`time.time()` in `src/` — ruff's `DTZ` rules and the `TID251` banned-api list in `pyproject.toml` enforce it (only `config.py` is exempt).
+- **Lint and typing are at their strictest on purpose.** ruff selects pylint, mccabe (`max-complexity = 10`), FastAPI (`FAST001` is Sonar's `S8409`), `ERA` (commented-out code), `ARG`, `PERF`, `BLE`, `PGH` and more; `TC` stays off because moving imports under `TYPE_CHECKING` breaks FastAPI/pydantic's runtime annotation resolution under 3.14's deferred annotations. mypy is `strict` with the pydantic plugin over `src`, `scripts` and `tests` — test doubles go through `tests.conftest.as_redis()` (a documented `cast`) instead of `# type: ignore`. The `Lint · infra` job runs actionlint, hadolint (every `Dockerfile`, threshold `info`) and shellcheck.
 - Both `requirements.txt` and `requirements-dev.txt` pin exact versions. `pandas` and `starlette` are pinned deliberately: `exchange-calendars` declares no pandas constraint, and FastAPI declares no starlette upper bound.
 - **Dependabot PRs are never merged.** Their bumps are consolidated into one commit on `main` (to the latest versions on PyPI, not just the PR's), and Dependabot closes the PRs itself ("up-to-date now" / "Superseded"). `dependabot.yml` groups pip minor+patch into one weekly PR (majors stay separate) and all actions into one: with one PR per package, the 5-PR `open-pull-requests-limit` filled up and updates silently stopped (#40).
 - `pytest` runs with `filterwarnings = ["error"]`. A new pydantic deprecation fails the suite at import — that is intentional.

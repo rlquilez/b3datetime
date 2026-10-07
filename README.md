@@ -776,7 +776,7 @@ Sem um Python 3.14 instalado, tudo roda em Docker, sobre a mesma base da imagem 
 
 ```bash
 docker run --rm -v "$PWD":/app -w /app python:3.14-alpine sh -c \
-  'pip install -q -r requirements-dev.txt && ruff check . && ruff format --check . && mypy src && python -m pytest'
+  'pip install -q -r requirements-dev.txt && ruff check . && ruff format --check . && mypy && python -m pytest'
 ```
 
 ### Preparando o Redis
@@ -791,9 +791,9 @@ Se as chaves não existirem, `/v1/hours` responde **404** (e não 503): o Redis 
 ### Qualidade
 
 ```bash
-ruff check .            # lint
+ruff check .            # lint (pyflakes, bugbear, bandit, pylint, complexidade, FastAPI, código comentado...)
 ruff format .           # formatação
-mypy src                # tipagem
+mypy                    # tipagem strict em src/, scripts/ e tests/ (alvos e modo vêm do pyproject)
 pytest                  # testes + coverage (mínimo de 90%)
 pytest -m "not slow"    # pula os testes que constroem o calendário real
 ```
@@ -889,8 +889,9 @@ flowchart LR
 
 | Etapa | Ferramenta | Observação |
 |-------|-----------|------------|
-| Lint e formatação | ruff | |
-| Tipagem | mypy | |
+| Lint e formatação | ruff | famílias do pyflakes/pycodestyle ao pylint, mccabe (complexidade ≤ 10), FastAPI, código comentado e `banned-api`: todo "agora" passa por `get_current_datetime()` |
+| Lint de infraestrutura | actionlint, hadolint, shellcheck | workflows (inclusive o shell de cada `run:`), Dockerfiles e scripts |
+| Tipagem | mypy **strict** + plugin do pydantic | em `src/`, `scripts/` e `tests/` |
 | Testes por bloco | pytest em Python 3.14 (o runtime da imagem): unitários, componente e integração (com Redis real), um job cada | ver [`tests/README.md`](tests/README.md) |
 | Cobertura combinada | `coverage combine` dos blocos | gate de 90% sobre a soma; tripwires: caminhos relativos no `coverage.xml` (senão o Sonar reporta 0%), nenhum teste pulado, nenhum bloco vazio |
 | SAST | bandit, CodeQL | |
@@ -967,7 +968,7 @@ A v2.0.0 corrige respostas que antes eram silenciosamente erradas. As mudanças 
 
 1. **Abra uma Issue** descrevendo contexto, objetivo e critérios de aceite antes de codar.
 2. **Commits** seguem [Conventional Commits](https://www.conventionalcommits.org/pt-br/) em português — `feat:`, `fix:`, `docs:`, `test:`, `ci:`, `chore:`, `refactor:`, `style:` — e referenciam a Issue com `Refs #N`.
-3. **Barra de qualidade**: `ruff check`, `ruff format --check`, `mypy src` e `pytest` verdes; nenhuma issue nova no SonarQube; toda correção de defeito vem com um teste de regressão nomeado.
+3. **Barra de qualidade**: `ruff check`, `ruff format --check`, `mypy` (strict) e `pytest` verdes; nenhuma issue nova no SonarQube; toda correção de defeito vem com um teste de regressão nomeado.
 4. **Idioma**: docstrings, comentários, textos do OpenAPI e mensagens de commit em pt-BR; identificadores em inglês.
 5. **Mudança de contrato** (código HTTP, campo removido ou renomeado) exige entrada `**BREAKING**` no CHANGELOG e guia de migração neste README.
 

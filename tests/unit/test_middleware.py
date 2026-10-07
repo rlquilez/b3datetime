@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from starlette.types import Message, Receive, Scope, Send
 
 from b3datetime.middleware import RootPathPrefixMiddleware
 
@@ -13,13 +14,13 @@ async def _run(scope: dict[str, Any]) -> dict[str, Any]:
     """Executa o middleware sobre um app fake e devolve o scope que ele recebeu."""
     seen: dict[str, Any] = {}
 
-    async def inner(sc: dict[str, Any], _receive: Any, _send: Any) -> None:
+    async def inner(sc: Scope, _receive: Receive, _send: Send) -> None:
         seen.update(sc)
 
-    async def receive() -> dict[str, Any]:
+    async def receive() -> Message:
         return {"type": "http.request"}
 
-    async def send(_message: dict[str, Any]) -> None:
+    async def send(_message: Message) -> None:
         return None
 
     await RootPathPrefixMiddleware(inner)(scope, receive, send)

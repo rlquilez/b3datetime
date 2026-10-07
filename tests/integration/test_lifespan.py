@@ -15,8 +15,10 @@ import pytest
 from asgi_lifespan import LifespanManager
 from fastapi import FastAPI
 
+import b3datetime.main as main_mod
 from b3datetime.config import Settings
 from b3datetime.main import create_app
+from b3datetime.services.calendar_service import CalendarUnavailableError
 from b3datetime.services.redis_service import RedisService
 
 pytestmark = pytest.mark.integration
@@ -35,8 +37,6 @@ async def test_app_sobe_com_calendario_quebrado(
 ) -> None:
     """Regressão: a falha do calendário levantava RuntimeError em tempo de import,
     antes de o uvicorn abrir a porta — sem health endpoint e em crash-loop."""
-    import b3datetime.main as main_mod
-    from b3datetime.services.calendar_service import CalendarUnavailableError
 
     def boom(*_a: object, **_k: object) -> None:
         raise CalendarUnavailableError("catálogo indisponível")
@@ -53,12 +53,10 @@ async def test_app_sobe_com_calendario_quebrado(
 
 
 async def test_app_sobe_com_redis_fora(settings: Settings, monkeypatch: pytest.MonkeyPatch) -> None:
-    import b3datetime.main as main_mod
-
-    async def falha(self: RedisService) -> None:
+    async def falha(_self: RedisService) -> None:
         return None
 
-    monkeypatch.setattr(main_mod.RedisService, "connect", falha)
+    monkeypatch.setattr(RedisService, "connect", falha)
     app = create_app(settings)
     async with LifespanManager(app, startup_timeout=180):
         assert app.state.redis_service is not None

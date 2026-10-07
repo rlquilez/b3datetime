@@ -39,6 +39,37 @@ jobs:
       - run: ruff check . --output-format=github
       - run: ruff format --check .
 
+  lint-infra:
+    name: Lint · infra (actionlint, hadolint, shellcheck)
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Workflows: sintaxe, expressões, tipos de contexto e, via shellcheck, o shell de
+      # cada `run:`. Versão fixa: o default da action é `latest`.
+      - name: actionlint (workflows)
+        uses: raven-actions/actionlint@3d39aea434753780c3b3d4a1a31c854b4dbf49d7 # v2.2.0
+        with:
+          version: 1.7.12
+
+      # Dockerfiles do repositório (o da imagem e os de apoio aos testes), no limiar
+      # mais estrito: qualquer achado, até `info`, reprova.
+      - name: hadolint (Dockerfiles)
+        uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
+        with:
+          # Com recursive, a action expande **/<dockerfile>: pega todo arquivo "Dockerfile".
+          dockerfile: Dockerfile
+          recursive: true
+          failure-threshold: info
+
+      - name: shellcheck (scripts)
+        run: |
+          shellcheck --version | head -2
+          shellcheck -S style scripts/*.sh
+
   typecheck:
     name: Tipagem · mypy
     timeout-minutes: 10
@@ -52,7 +83,8 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
       - run: pip install -r requirements-dev.txt
-      - run: mypy src
+      # Sem argumentos: os alvos (src, scripts e tests) e o modo strict vêm do pyproject.
+      - run: mypy
 
   tests:
     # Um job por bloco de teste em processo, cada um com o próprio nome no grafo do run
@@ -715,6 +747,7 @@ jobs:
     if: always()
     needs:
       - lint
+      - lint-infra
       - typecheck
       - tests
       - coverage
@@ -751,6 +784,7 @@ jobs:
           # Rótulo de cada bloco no resumo do run, na ordem do pipeline.
           blocos = {
               "lint": "Lint · ruff",
+              "lint-infra": "Lint · infra (actionlint, hadolint, shellcheck)",
               "typecheck": "Tipagem · mypy",
               "bandit": "SAST · bandit",
               "codeql": "SAST · CodeQL",

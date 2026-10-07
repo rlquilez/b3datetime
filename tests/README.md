@@ -36,7 +36,8 @@ flowchart LR
     subgraph E1["① Análise estática"]
         direction TB
         lint["Lint · ruff"]:::estatica
-        mypy["Tipagem · mypy"]:::estatica
+        infra["Lint · infra<br/><i>actionlint · hadolint · shellcheck</i>"]:::estatica
+        mypy["Tipagem · mypy strict"]:::estatica
         bandit["SAST · bandit"]:::estatica
         codeql["SAST · CodeQL"]:::estatica
         gitleaks["Segredos · gitleaks"]:::estatica
@@ -84,6 +85,18 @@ flowchart LR
 | Gate e entrega | `CI OK` decide; `docker-publish` só roda com ele verde. `release` e `SBOM` vêm depois da publicação. |
 
 ## Blocos
+
+### Análise estática
+
+Não executa a aplicação; por isso roda primeiro e em paralelo.
+
+| Job | O que verifica | Por que importa aqui |
+|---|---|---|
+| Lint · ruff | pyflakes, pycodestyle, bugbear, bandit (`S`), pylint (`PL`), complexidade (mccabe ≤ 10), FastAPI (`FAST`), código comentado (`ERA`), argumentos mortos (`ARG`), `except` cego (`BLE`), `banned-api` | `FAST001` é a mesma regra do Sonar `S8409`; o `banned-api` impede `datetime.now()`/`date.today()` fora de `get_current_datetime()`, que aplica o fuso das settings |
+| Lint · infra | actionlint (workflows e o shell de cada `run:`), hadolint (todo `Dockerfile`, limiar `info`), shellcheck (`scripts/*.sh`) | o pipeline e a imagem também são código |
+| Tipagem · mypy | `strict` + plugin do pydantic, em `src/`, `scripts/` **e** `tests/` | um teste mal tipado pode estar testando a coisa errada; dublês passam por `as_redis()` (um `cast` documentado), nunca por `# type: ignore` |
+
+Os demais jobs estáticos (SAST, SCA, segredos) estão no diagrama acima.
 
 ### Unitários — `tests/unit/`
 

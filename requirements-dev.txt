@@ -18,6 +18,8 @@ jsonschema==4.26.0
 # --- qualidade ---
 ruff==0.16.10
 mypy==2.4.0
+# Stubs do typeshed: os testes também passam no mypy strict.
+types-jsonschema==4.26.0.20261006
 
 # --- segurança ---
 # O formatter SARIF do bandit é um extra; sem ele `-f sarif` falha.

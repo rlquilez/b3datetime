@@ -12,7 +12,7 @@ from b3datetime.config import Settings
 from b3datetime.main import create_app
 from b3datetime.services.calendar_service import TradingCalendar
 from b3datetime.services.redis_service import RedisService
-from tests.conftest import FakeClock, SpyRedis
+from tests.conftest import FakeClock, SpyRedis, as_redis
 
 HOURS_PATHS = ["/v1/hours", "/v1/hours/open", "/v1/hours/close"]
 
@@ -32,7 +32,9 @@ async def test_hours_faz_um_unico_mget(
 ) -> None:
     spy = SpyRedis(seeded_redis)
     app = create_app(settings)
-    app.state.redis_service = RedisService(settings, client_factory=lambda: spy, now_fn=clock)
+    app.state.redis_service = RedisService(
+        settings, client_factory=lambda: as_redis(spy), now_fn=clock
+    )
     app.state.calendar = test_calendar
 
     async with make_client(app) as c:  # type: ignore[operator]
