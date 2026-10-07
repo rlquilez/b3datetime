@@ -16,6 +16,8 @@ pytest-randomly==5.0.0
 jsonschema==4.26.0
 # Testes baseados em propriedades (tests/property).
 hypothesis==6.168.5
+# Fuzzing da API inteira a partir do contrato OpenAPI (tests/property/test_api_schemathesis.py).
+schemathesis==4.29.4
 # Oráculo da Páscoa nos testes de propriedade (já vem com o pandas; declarado por ser importado direto).
 python-dateutil==2.9.0.post0
 

@@ -32,6 +32,7 @@ asyncio_mode = "auto"
 markers = [
     "integration: depende de recurso real — Redis em localhost:6379 (db 15), calendário BVMF real ou lifespan real",
     "slow: constrói calendários reais do exchange_calendars",
+    "api_fuzz: fuzzing da API inteira pelo contrato (Schemathesis); fica fora da mutação",
     "e2e: ponta a ponta contra a imagem (E2E_IMAGE) ou uma URL (E2E_BASE_URL); fora da execução padrão, rode com -m e2e",
 ]
 # Warnings viram erro: é o que impede deprecações do pydantic de voltarem.

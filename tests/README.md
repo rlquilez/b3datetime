@@ -159,7 +159,10 @@ Testes por exemplo verificam os casos que alguém lembrou de escrever. Testes po
 | `test_horarios.py` | aceito ⇔ `HH:MM` ASCII; `_as_str` identidade/inverso; bytes inválidos → 502 |
 | `test_calendario.py` | sessões ⊔ não-sessões = intervalo; `is_session` ⇔ `sessions_in_range`; oráculo de `_validate_range`; Páscoa = `dateutil.easter` |
 | `test_middleware.py` | o caminho sempre começa com o prefixo; idempotência; `raw_path` acompanha `path` |
+| `test_api_schemathesis.py` | **fuzzing da API inteira pelo contrato** (Schemathesis): para cada operação, requisições válidas e inválidas geradas do OpenAPI; nenhum 5xx, status/content-type/schema conformes, entrada inválida → 4xx, método não suportado → 405 com `Allow` |
 | `test_cache_estado.py` | **máquina de estados** (`RuleBasedStateMachine`): idade = tempo real em qualquer fuso; `0.0` ≠ ausente; expirado ⇔ idade > TTL |
+
+O Schemathesis roda em processo sobre a app real, com só o lifespan trocado por um que injeta os dublês. Num run do perfil `ci`, só `/v1/trading-days` recebe ~540 requisições geradas (≈ 165 × `200`, 230 × `400`, 140 × `422`), e toda operação é chamada também com métodos não suportados. A aceitação de dado "positivo" fica desligada em `trading-days`, que responde `400` documentado a períodos válidos pelo schema mas inválidos pelo domínio — regra provada à parte pelo oráculo de `_validate_range`. Marcado `api_fuzz`, fica fora da mutação.
 
 **Uma propriedade só vale o que a estratégia explora.** A primeira versão da máquina de estados sorteava fuso e instante ao acaso e **não pegou** a sabotagem "idade em relógio de parede" (o bug B3, #61): quase nenhuma sequência atravessava uma virada de horário de verão. A versão final começa perto de viradas **reais**, calculadas do tzdata (127, em 6 fusos), e reprova a sabotagem.
 
