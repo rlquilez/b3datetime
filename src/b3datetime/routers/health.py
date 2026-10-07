@@ -18,9 +18,9 @@ from typing import Any
 from fastapi import APIRouter, Request, Response, status
 from pydantic import BaseModel, Field
 
-from src.config import get_current_datetime
-from src.dependencies import RedisDep, SettingsDep
-from src.routers.openapi_examples import TAG_HEALTH, examples_response
+from b3datetime.config import get_current_datetime
+from b3datetime.dependencies import RedisDep, SettingsDep
+from b3datetime.routers.openapi_examples import TAG_HEALTH, examples_response
 
 router = APIRouter(prefix="/v1", tags=[TAG_HEALTH])
 

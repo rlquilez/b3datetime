@@ -11,7 +11,7 @@ arte-fonte para gerar favicons e ícones de aplicativo quando necessário.
 | `icon.svg` | Ícone completo (512×512 px). Arte-fonte; não é usado pela aplicação. |
 | `icon-simple.svg` | Ícone simplificado (256×256 px) para tamanhos pequenos. Arte-fonte. |
 
-O favicon servido pela API em `/static/favicon.png` está em `src/static/assets/favicon.png`,
+O favicon servido pela API em `/static/favicon.png` está em `src/b3datetime/static/assets/favicon.png`,
 junto com os demais assets da documentação (Swagger UI e ReDoc).
 
 ## 🎨 Como o README usa o logo

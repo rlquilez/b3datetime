@@ -6,7 +6,7 @@ starlette==1.7.0
 uvicorn[standard]==0.54.0
 redis==8.1.0
 exchange-calendars==4.13.2
-# Dependência direta (src/services/calendar_service.py, src/routers/dates.py).
+# Dependência direta (src/b3datetime/services/calendar_service.py, src/b3datetime/routers/dates.py).
 # exchange-calendars não impõe constraint, então o pin explícito é obrigatório.
 pandas==3.0.6
 pydantic==2.13.5

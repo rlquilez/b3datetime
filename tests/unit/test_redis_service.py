@@ -8,8 +8,8 @@ import fakeredis
 import fakeredis.aioredis
 import pytest
 
-from src.config import Settings
-from src.services.redis_service import (
+from b3datetime.config import Settings
+from b3datetime.services.redis_service import (
     KeyNotFoundError,
     RedisService,
     RedisUnavailableError,

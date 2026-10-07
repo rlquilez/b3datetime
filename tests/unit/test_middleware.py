@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from src.middleware import RootPathPrefixMiddleware
+from b3datetime.middleware import RootPathPrefixMiddleware
 
 
 async def _run(scope: dict[str, Any]) -> dict[str, Any]:

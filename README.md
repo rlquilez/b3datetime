@@ -124,23 +124,23 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-    main["src/main.py<br/>create_app() · lifespan · handlers de exceção · B3DateTimeAPI"]
-    cfg["src/config.py<br/>Settings · get_current_datetime · redact_url"]
-    mw["src/middleware.py<br/>RootPathPrefixMiddleware"]
-    dep["src/dependencies.py<br/>RedisDep · CalendarDep · SettingsDep"]
-    subgraph routers["src/routers"]
+    main["src/b3datetime/main.py<br/>create_app() · lifespan · handlers de exceção · B3DateTimeAPI"]
+    cfg["src/b3datetime/config.py<br/>Settings · get_current_datetime · redact_url"]
+    mw["src/b3datetime/middleware.py<br/>RootPathPrefixMiddleware"]
+    dep["src/b3datetime/dependencies.py<br/>RedisDep · CalendarDep · SettingsDep"]
+    subgraph routers["src/b3datetime/routers"]
         root["root.py · GET /"]
         hours["hours.py · /v1/hours · /open · /close"]
         dates["dates.py · /v1/is-trading-day · /v1/trading-days · /v1/calendar-info"]
         health["health.py · /v1/health"]
         ex["openapi_examples.py · tags · segurança · exemplos"]
     end
-    subgraph services["src/services"]
+    subgraph services["src/b3datetime/services"]
         redis["redis_service.py<br/>RedisService · RedisCache"]
         cal["calendar_service.py<br/>TradingCalendar · build_bvmf_calendar"]
     end
-    static["src/static/assets<br/>Swagger UI · ReDoc · favicon"]
-    entry["src/__main__.py<br/>python -m src"]
+    static["src/b3datetime/static/assets<br/>Swagger UI · ReDoc · favicon"]
+    entry["src/b3datetime/__main__.py<br/>PYTHONPATH=src python -m b3datetime"]
     main --> mw & routers & static & services & cfg
     routers --> dep --> services
     routers --> ex
@@ -630,7 +630,7 @@ Quando o Kong Gateway passar a exigir o header `apikey` (plugin key-auth), a API
 | ReDoc | https://api.quilez.cloud/b3datetime/redoc |
 | Schema OpenAPI 3.1 | https://api.quilez.cloud/b3datetime/openapi.json |
 
-- Os assets (Swagger UI 5.17.14, ReDoc 2.1.5, favicon) são **versionados em `src/static/assets/` e servidos pela própria API** — sem CDN, sem dependência de rede externa, sem risco de supply chain.
+- Os assets (Swagger UI 5.17.14, ReDoc 2.1.5, favicon) são **versionados em `src/b3datetime/static/assets/` e servidos pela própria API** — sem CDN, sem dependência de rede externa, sem risco de supply chain.
 - As páginas referenciam `./static/…` e `./openapi.json` por caminhos **relativos**: o browser os resolve contra a URL pública, o que funciona atrás de qualquer prefixo de gateway.
 - `openapi.json` traz `servers: [{"url": "/b3datetime"}]` quando `ROOT_PATH` está definido — é isso que faz o "Try it out" do Swagger chamar `/b3datetime/v1/...`.
 - As URLs canônicas não têm barra final: `/docs/` responde `404`, e não um redirect.
@@ -766,8 +766,8 @@ source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements-dev.txt
 cp .env.example .env
 
-uvicorn src.main:app --reload --port 8000
-# ou: python -m src
+uvicorn --app-dir src b3datetime.main:app --reload --port 8000
+# ou: PYTHONPATH=src python -m b3datetime
 ```
 
 Documentação local: http://localhost:8000/docs · http://localhost:8000/redoc · http://localhost:8000/openapi.json
@@ -800,7 +800,7 @@ pytest -m "not slow"    # pula os testes que constroem o calendário real
 
 ## 🧪 Testes
 
-A suíte tem cerca de 240 casos e cobre 100% das linhas de `src/`. Ela está organizada em quatro camadas:
+A suíte tem cerca de 240 casos e cobre 100% das linhas de `src/b3datetime/`. Ela está organizada em quatro camadas:
 
 | Diretório | O que cobre | Como |
 |-----------|-------------|------|
@@ -910,7 +910,7 @@ flowchart LR
 
 O projeto segue [SemVer](https://semver.org/lang/pt-BR/) e [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). A regra que decide o incremento é **"um cliente existente precisa mudar alguma coisa?"** — mudança de código HTTP é MAJOR mesmo quando o código antigo estava errado; endpoint ou campo novo é MINOR; correção sem mudança de contrato é PATCH.
 
-A versão vive em `src/config.py` (`api_version`) e é copiada em três lugares que precisam concordar: `pyproject.toml`, o cabeçalho deste README e a seção do `CHANGELOG.md`. Os testes de `tests/unit/test_config.py` impõem a sincronia e exigem que a seção do CHANGELOG da versão não esteja vazia — no job `test`, antes de qualquer publicação.
+A versão vive em `src/b3datetime/config.py` (`api_version`) e é copiada em três lugares que precisam concordar: `pyproject.toml`, o cabeçalho deste README e a seção do `CHANGELOG.md`. Os testes de `tests/unit/test_config.py` impõem a sincronia e exigem que a seção do CHANGELOG da versão não esteja vazia — no job `test`, antes de qualquer publicação.
 
 ```mermaid
 flowchart LR

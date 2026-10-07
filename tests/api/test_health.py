@@ -11,10 +11,10 @@ import fakeredis
 import fakeredis.aioredis
 import httpx
 
-from src.config import Settings
-from src.main import create_app
-from src.services.calendar_service import TradingCalendar
-from src.services.redis_service import RedisService
+from b3datetime.config import Settings
+from b3datetime.main import create_app
+from b3datetime.services.calendar_service import TradingCalendar
+from b3datetime.services.redis_service import RedisService
 from tests.conftest import FakeClock
 
 

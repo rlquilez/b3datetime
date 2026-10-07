@@ -16,7 +16,7 @@ from datetime import date, timedelta
 import exchange_calendars as xcals
 import pandas as pd
 
-from src.config import Settings
+from b3datetime.config import Settings
 
 logger = logging.getLogger(__name__)
 

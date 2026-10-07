@@ -6,7 +6,7 @@ from datetime import date
 
 import pandas as pd
 
-from src.services.calendar_service import TradingCalendar
+from b3datetime.services.calendar_service import TradingCalendar
 
 # Feriados da B3 em 2024 que caem em dia útil. Suficiente para exercitar a diferença
 # entre "fim de semana", "feriado" e "fora da janela" sem construir o calendário real.

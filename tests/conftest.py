@@ -3,7 +3,7 @@
 Duas armadilhas que motivam o desenho abaixo:
 
 * **Relógio.** ``RedisCache`` chama ``datetime.now`` através de uma função injetada.
-  Um monkeypatch em ``src.config.get_current_datetime`` passaria batido, porque a
+  Um monkeypatch em ``b3datetime.config.get_current_datetime`` passaria batido, porque a
   referência é capturada na construção. Por isso o relógio é injetado, não remendado.
 * **`.env` local.** ``Settings(_env_file=None)`` é obrigatório: sem isso, um ``.env``
   na máquina do desenvolvedor muda o resultado da suíte.
@@ -23,10 +23,10 @@ import pytest
 from asgi_lifespan import LifespanManager
 from fastapi import FastAPI
 
-from src.config import Settings
-from src.main import create_app
-from src.services.calendar_service import TradingCalendar
-from src.services.redis_service import RedisService
+from b3datetime.config import Settings
+from b3datetime.main import create_app
+from b3datetime.services.calendar_service import TradingCalendar
+from b3datetime.services.redis_service import RedisService
 from tests.factories import make_calendar
 
 TZ = ZoneInfo("America/Sao_Paulo")

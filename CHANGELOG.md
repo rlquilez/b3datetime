@@ -7,6 +7,10 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ## [Não publicado]
 
+### Alterado
+
+- O código passa a seguir o layout `src/` padrão do Python: o pacote se chama `b3datetime` (`src/b3datetime/`) e a aplicação ASGI é `b3datetime.main:app`. Só afeta quem sobrescreve o comando do container — o `CMD` da imagem já usa o caminho novo. (#52)
+
 ## [2.0.4] - 2026-09-26
 
 ### Adicionado

@@ -50,7 +50,7 @@ python3.14 -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
 cp .env.example .env
 
-uvicorn src.main:app --reload --port 8000   # or: python -m src
+uvicorn --app-dir src b3datetime.main:app --reload --port 8000   # or: PYTHONPATH=src python -m b3datetime
 
 ruff check . && ruff format --check . && mypy src
 pytest                  # ~240 tests (`pytest --co -q | tail -1`; the e2e ones are deselected), coverage gate at 90% (currently ~99.8%)
@@ -64,7 +64,7 @@ E2E_BASE_URL=https://api.quilez.cloud/b3datetime python -m pytest -m e2e tests/e
 
 The e2e suite talks to the containers through ports published on `127.0.0.1`, so it needs a Python 3.14 **on the host** — a container can't reach them. `uv` already has a managed CPython 3.14 here: `uv venv --python 3.14 <dir> && uv pip install --python <dir>/bin/python -r requirements-dev.txt`.
 
-Docs at `/docs`, `/redoc`, `/openapi.json` — all assets served locally from `src/static/assets/`, no CDN. The assets live in a subdirectory on purpose: mounting the package directory itself served `__init__.py` (`tests/api/test_static.py::test_static_nao_serve_o_pacote`).
+Docs at `/docs`, `/redoc`, `/openapi.json` — all assets served locally from `src/b3datetime/static/assets/`, no CDN. The assets live in a subdirectory on purpose: mounting the package directory itself served `__init__.py` (`tests/api/test_static.py::test_static_nao_serve_o_pacote`).
 
 Seed Redis so `/v1/hours` returns 200 rather than 404:
 
@@ -75,9 +75,11 @@ redis-cli SET b3:trading:hours:close "18:00"
 
 ## Architecture
 
+**src layout: the package is `b3datetime`, at `src/b3datetime/`** (imports are `b3datetime.*`; pytest has `pythonpath = ["src", "."]`; the image copies it to `/app/b3datetime`; uvicorn runs `b3datetime.main:app`). It used to be a package literally named `src`, which mutmut 3 refuses outright (`assert not name.startswith("src.")` in `stats.record_trampoline_hit`) and which other tools treat as a layout directory rather than a package (#52). Coverage paths still start with `src/`, so the `filename="src/` tripwire and `sonar.sources=src` are unchanged.
+
 The module map lives in the README (`Arquitetura → Mapa de módulos`, a Mermaid diagram) — keep it in sync when adding a module. Routers: `root.py` (`GET /`), `hours.py`, `dates.py`, `health.py`; shared OpenAPI metadata (tags, security scheme, examples) in `routers/openapi_examples.py`; `middleware.py` holds the proxy-prefix middleware.
 
-**Nothing does I/O at import time.** Services are built in `lifespan` (`main.py`) and stored on `app.state`; routers receive them via `Depends` (`src/dependencies.py`). This is load-bearing — see below.
+**Nothing does I/O at import time.** Services are built in `lifespan` (`main.py`) and stored on `app.state`; routers receive them via `Depends` (`src/b3datetime/dependencies.py`). This is load-bearing — see below.
 
 ### Invariants that exist because of specific bugs
 
@@ -90,7 +92,7 @@ Each of these has a named regression test. Reverting any of them makes a specifi
 - **Missing key and unavailable Redis are different.** 404 vs 503. Collapsing them made the API claim "Redis indisponível" when the fix was one `SET`.
 - **`/v1/health` returns 503 when `unhealthy`.** With 200 in every state, the Dockerfile `HEALTHCHECK` and k8s probes could never detect a failure.
 - **`/v1/trading-days` bounds the range.** `max_range_days` plus a hashed membership set. An unbounded range cost ~77 s of CPU and ~117 MB on the event loop.
-- **`scope["path"]` always starts with `scope["root_path"]`** (`src/middleware.py`, `RootPathPrefixMiddleware`). Kong strips the prefix (`strip_path: true`) while `ROOT_PATH` keeps it in `root_path`; Starlette ≥ 0.35 relies on the ASGI contract in `get_route_path()`, so plain routes still matched but `Mount("/static")` propagated a `root_path` that `StaticFiles` could not strip — every asset 404'd and the docs rendered blank in production while the suite stayed green. `tests/api/test_proxy_prefix.py::test_static_atras_do_kong_com_strip_path_true`.
+- **`scope["path"]` always starts with `scope["root_path"]`** (`src/b3datetime/middleware.py`, `RootPathPrefixMiddleware`). Kong strips the prefix (`strip_path: true`) while `ROOT_PATH` keeps it in `root_path`; Starlette ≥ 0.35 relies on the ASGI contract in `get_route_path()`, so plain routes still matched but `Mount("/static")` propagated a `root_path` that `StaticFiles` could not strip — every asset 404'd and the docs rendered blank in production while the suite stayed green. `tests/api/test_proxy_prefix.py::test_static_atras_do_kong_com_strip_path_true`.
 - **No trailing-slash redirects** (`redirect_slashes=False`). Starlette built the `Location` from `scope["path"]` (no prefix) and the incoming `Host` — behind Kong with `preserve_host: false`, the upstream's internal IP:port. `tests/api/test_proxy_prefix.py::test_barra_final_nao_redireciona_para_host_interno`.
 
 ### The calendar window
@@ -160,7 +162,7 @@ Black-box, against the **real image** with real Redis and the real BVMF calendar
 ## Conventions
 
 - Docstrings, comments, OpenAPI `description`/`summary` text, and commit messages are **pt-BR**. Identifiers are English.
-- Endpoints carry heavy OpenAPI metadata. Shared `responses` blocks live in `src/routers/openapi_examples.py` — that module is CPD-excluded, so put genuinely shared examples there rather than duplicating them.
+- Endpoints carry heavy OpenAPI metadata. Shared `responses` blocks live in `src/b3datetime/routers/openapi_examples.py` — that module is CPD-excluded, so put genuinely shared examples there rather than duplicating them.
 - Do **not** pass `response_model=` when the handler has a return annotation; FastAPI infers it and Sonar flags the duplication (`python:S8409`).
 - Response models are Pydantic classes declared in the router that uses them.
 - All "now" goes through `get_current_datetime()` with the settings timezone. Never bare `datetime.now()` — ruff's `DTZ` rules enforce this.
@@ -168,6 +170,6 @@ Black-box, against the **real image** with real Redis and the real BVMF calendar
 - **Dependabot PRs are never merged.** Their bumps are consolidated into one commit on `main` (to the latest versions on PyPI, not just the PR's), and Dependabot closes the PRs itself ("up-to-date now" / "Superseded"). `dependabot.yml` groups pip minor+patch into one weekly PR (majors stay separate) and all actions into one: with one PR per package, the 5-PR `open-pull-requests-limit` filled up and updates silently stopped (#40).
 - `pytest` runs with `filterwarnings = ["error"]`. A new pydantic deprecation fails the suite at import — that is intentional.
 - `.history/` is VS Code Local History noise — never read, edit, or grep it.
-- The version lives in `src/config.py` (`api_version`) and is duplicated in **`pyproject.toml`**, `README.md` (`Versão atual: X`) and `CHANGELOG.md`; `tests/unit/test_config.py` enforces all of them before any publish. **Never push a tag by hand**: the release commit on `main` is the whole release, and the CI's `release` job creates the tag, the image tags and the GitHub Release. See the `release` skill.
-- Tag names, the security scheme and shared examples live in `src/routers/openapi_examples.py`; the OpenAPI contract test derives the route set from `app.routes` (flattening FastAPI's `_IncludedRouter`), so a new router shows up there automatically and must get a row in `DOCUMENTED_CODES`.
+- The version lives in `src/b3datetime/config.py` (`api_version`) and is duplicated in **`pyproject.toml`**, `README.md` (`Versão atual: X`) and `CHANGELOG.md`; `tests/unit/test_config.py` enforces all of them before any publish. **Never push a tag by hand**: the release commit on `main` is the whole release, and the CI's `release` job creates the tag, the image tags and the GitHub Release. See the `release` skill.
+- Tag names, the security scheme and shared examples live in `src/b3datetime/routers/openapi_examples.py`; the OpenAPI contract test derives the route set from `app.routes` (flattening FastAPI's `_IncludedRouter`), so a new router shows up there automatically and must get a row in `DOCUMENTED_CODES`.
 - CHANGELOG sections follow the canonical order of the `release` skill: Adicionado, Alterado, Descontinuado, Removido, Corrigido, Segurança.

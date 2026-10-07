@@ -8,8 +8,8 @@ from datetime import date, timedelta
 import pandas as pd
 import pytest
 
-from src.config import Settings
-from src.services.calendar_service import (
+from b3datetime.config import Settings
+from b3datetime.services.calendar_service import (
     CalendarRangeOutOfBoundsError,
     CalendarUnavailableError,
     TradingCalendar,
@@ -169,7 +169,7 @@ def test_pertinencia_usa_container_com_hash() -> None:
 
 def test_build_bvmf_calendar_traduz_falha(monkeypatch: pytest.MonkeyPatch) -> None:
     """Falha de construção vira CalendarUnavailableError, não RuntimeError cru."""
-    import src.services.calendar_service as mod
+    import b3datetime.services.calendar_service as mod
 
     def boom(*_args: object, **_kwargs: object) -> None:
         raise ValueError("catálogo corrompido")
@@ -181,7 +181,7 @@ def test_build_bvmf_calendar_traduz_falha(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 def test_build_bvmf_calendar_preserva_a_causa(monkeypatch: pytest.MonkeyPatch) -> None:
-    import src.services.calendar_service as mod
+    import b3datetime.services.calendar_service as mod
 
     original = ValueError("causa original")
 

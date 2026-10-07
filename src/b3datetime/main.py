@@ -23,25 +23,25 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
-from src.config import Settings, get_settings
-from src.middleware import RootPathPrefixMiddleware
-from src.routers import dates, health, hours, root
-from src.routers.openapi_examples import (
+from b3datetime.config import Settings, get_settings
+from b3datetime.middleware import RootPathPrefixMiddleware
+from b3datetime.routers import dates, health, hours, root
+from b3datetime.routers.openapi_examples import (
     API_KEY_SCHEME,
     BAD_GATEWAY_MESSAGE,
     OPENAPI_TAGS,
     SECURITY_SCHEMES,
     auth_description,
 )
-from src.services.calendar_service import CalendarUnavailableError, build_bvmf_calendar
-from src.services.redis_service import KeyNotFoundError, RedisService, RedisUnavailableError
-from src.static import REDOC_JS, STATIC_DIR, SWAGGER_CSS, SWAGGER_JS
+from b3datetime.services.calendar_service import CalendarUnavailableError, build_bvmf_calendar
+from b3datetime.services.redis_service import KeyNotFoundError, RedisService, RedisUnavailableError
+from b3datetime.static import REDOC_JS, STATIC_DIR, SWAGGER_CSS, SWAGGER_JS
 
 logger = logging.getLogger(__name__)
 
 # Caminho relativo nas páginas HTML: o browser o resolve contra a URL pública, que é a
 # única coisa que funciona qualquer que seja a configuração do proxy. (No JSON de
-# `GET /` a regra é outra: caminhos absolutos com o prefixo — ver src/routers/root.py.)
+# `GET /` a regra é outra: caminhos absolutos com o prefixo — ver src/b3datetime/routers/root.py.)
 OPENAPI_RELATIVE_URL = "./openapi.json"
 
 EXTERNAL_DOCS = {
@@ -169,7 +169,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
 
     # Corrige o scope antes de qualquer coisa que leia `path` (router, Mount). Ver o
-    # docstring de src/middleware.py. Registrado ANTES do CORS: o CORS precisa ser a
+    # docstring de src/b3datetime/middleware.py. Registrado ANTES do CORS: o CORS precisa ser a
     # camada mais externa (Sonar python:S8414), e a ordem entre os dois é indiferente —
     # o CORS só olha método e headers.
     app.add_middleware(RootPathPrefixMiddleware)

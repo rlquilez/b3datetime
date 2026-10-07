@@ -5,8 +5,8 @@ from __future__ import annotations
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
-from src.dependencies import RedisDep
-from src.routers.openapi_examples import RESPONSES_HOURS_ERRORS, TAG_HOURS, success_response
+from b3datetime.dependencies import RedisDep
+from b3datetime.routers.openapi_examples import RESPONSES_HOURS_ERRORS, TAG_HOURS, success_response
 
 router = APIRouter(prefix="/v1/hours", tags=[TAG_HOURS])
 

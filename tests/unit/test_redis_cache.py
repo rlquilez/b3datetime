@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from src.services.redis_service import RedisCache
+from b3datetime.services.redis_service import RedisCache
 from tests.conftest import FakeClock
 
 TTL = 3600

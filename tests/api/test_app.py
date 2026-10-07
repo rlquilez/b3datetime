@@ -5,16 +5,20 @@ from __future__ import annotations
 import subprocess
 import sys
 import textwrap
+from pathlib import Path
 
 import httpx
 import pytest
 from asgi_lifespan import LifespanManager
 from fastapi import FastAPI
 
-from src.config import Settings
-from src.main import create_app
-from src.services.redis_service import RedisService
-from src.static import REDOC_JS, SWAGGER_CSS, SWAGGER_JS
+from b3datetime.config import Settings
+from b3datetime.main import create_app
+from b3datetime.services.redis_service import RedisService
+from b3datetime.static import REDOC_JS, SWAGGER_CSS, SWAGGER_JS
+
+# Layout src: o subprocesso precisa do diretório do pacote no sys.path.
+SRC_DIR = Path(__file__).resolve().parents[2] / "src"
 
 
 async def test_root(client: httpx.AsyncClient, settings: Settings) -> None:
@@ -100,8 +104,8 @@ async def test_app_sobe_com_calendario_quebrado(
 ) -> None:
     """Regressão: a falha do calendário levantava RuntimeError em tempo de import,
     antes de o uvicorn abrir a porta — sem health endpoint e em crash-loop."""
-    import src.main as main_mod
-    from src.services.calendar_service import CalendarUnavailableError
+    import b3datetime.main as main_mod
+    from b3datetime.services.calendar_service import CalendarUnavailableError
 
     def boom(*_a: object, **_k: object) -> None:
         raise CalendarUnavailableError("catálogo indisponível")
@@ -118,7 +122,7 @@ async def test_app_sobe_com_calendario_quebrado(
 
 
 async def test_app_sobe_com_redis_fora(settings: Settings, monkeypatch: pytest.MonkeyPatch) -> None:
-    import src.main as main_mod
+    import b3datetime.main as main_mod
 
     async def falha(self: RedisService) -> None:
         return None
@@ -139,14 +143,18 @@ def test_import_nao_faz_io() -> None:
     codigo = textwrap.dedent("""
         import time
         t = time.time()
-        import src.main
-        assert src.main.app is not None
+        import b3datetime.main
+        assert b3datetime.main.app is not None
         elapsed = time.time() - t
         assert elapsed < 3, f"import levou {elapsed:.2f}s; parece haver I/O"
     """)
     proc = subprocess.run(  # noqa: S603
         [sys.executable, "-c", codigo],
-        env={"REDIS_URL_ENV": "redis://127.0.0.1:1", "PATH": "/usr/bin:/bin"},
+        env={
+            "REDIS_URL_ENV": "redis://127.0.0.1:1",
+            "PATH": "/usr/bin:/bin",
+            "PYTHONPATH": str(SRC_DIR),
+        },
         capture_output=True,
         text=True,
         timeout=60,

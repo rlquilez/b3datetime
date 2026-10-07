@@ -5,7 +5,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from src.static import FAVICON, REDOC_JS, SWAGGER_CSS, SWAGGER_JS
+from b3datetime.static import FAVICON, REDOC_JS, SWAGGER_CSS, SWAGGER_JS
 
 # O mimetypes do Python >= 3.12 (o projeto só roda 3.14) usa text/javascript.
 JS_TYPES = {"text/javascript"}
@@ -39,7 +39,7 @@ async def test_asset_desconhecido_e_404(client: httpx.AsyncClient) -> None:
 
 
 async def test_static_nao_serve_o_pacote(client: httpx.AsyncClient) -> None:
-    """Regressão: o mount apontava para o diretório do pacote src/static e servia o
+    """Regressão: o mount apontava para o diretório do pacote b3datetime/static e servia o
     __init__.py como text/x-python."""
     assert (await client.get("/static/__init__.py")).status_code == 404
 

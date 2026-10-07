@@ -12,9 +12,9 @@ from __future__ import annotations
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
-from src.config import Settings
-from src.config import settings as default_settings
-from src.routers.openapi_examples import API_KEY_HEADER, TAG_ROOT, success_response
+from b3datetime.config import Settings
+from b3datetime.config import settings as default_settings
+from b3datetime.routers.openapi_examples import API_KEY_HEADER, TAG_ROOT, success_response
 
 router = APIRouter(tags=[TAG_ROOT])
 

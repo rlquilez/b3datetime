@@ -13,9 +13,9 @@ from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, status
 
-from src.config import Settings, get_settings
-from src.services.calendar_service import TradingCalendar
-from src.services.redis_service import RedisService
+from b3datetime.config import Settings, get_settings
+from b3datetime.services.calendar_service import TradingCalendar
+from b3datetime.services.redis_service import RedisService
 
 
 def get_redis_service(request: Request) -> RedisService:

@@ -5,7 +5,7 @@ não fixada e sem SRI — apesar do docstring afirmar "without CDN", e `/docs` c
 `cdn.jsdelivr.net` default do FastAPI. Além do risco de supply chain, as duas páginas
 renderizavam em branco em rede sem egress, atrás de proxy corporativo ou sob CSP.
 
-Os arquivos são versionados no repositório e copiados para a imagem junto com `src/`.
+Os arquivos são versionados no repositório e copiados para a imagem junto com o pacote.
 Para atualizar, baixe a nova versão, ajuste as constantes abaixo e valide as páginas.
 
 Ficam em ``assets/``, e não na raiz do pacote: o mount apontava para o diretório do

@@ -17,9 +17,9 @@ from typing import Annotated
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
-from src.config import get_current_datetime
-from src.dependencies import CalendarDep, SettingsDep
-from src.routers.openapi_examples import (
+from b3datetime.config import get_current_datetime
+from b3datetime.dependencies import CalendarDep, SettingsDep
+from b3datetime.routers.openapi_examples import (
     CALENDAR_INFO_EXAMPLE,
     RESPONSE_CALENDAR_UNAVAILABLE,
     RESPONSE_RANGE_INVALID,
@@ -27,7 +27,7 @@ from src.routers.openapi_examples import (
     examples_response,
     success_response,
 )
-from src.services.calendar_service import CalendarRangeOutOfBoundsError, TradingCalendar
+from b3datetime.services.calendar_service import CalendarRangeOutOfBoundsError, TradingCalendar
 
 router = APIRouter(prefix="/v1", tags=[TAG_DATES])
 

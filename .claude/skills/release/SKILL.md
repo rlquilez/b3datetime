@@ -26,11 +26,11 @@ Regras que evitam erro:
 
 ## 2. Fonte da verdade da versão
 
-`src/config.py` → `api_version`. É a única fonte; todos os outros lugares são cópias que precisam ser sincronizadas na mesma leva:
+`src/b3datetime/config.py` → `api_version`. É a única fonte; todos os outros lugares são cópias que precisam ser sincronizadas na mesma leva:
 
 | Lugar | O que atualizar |
 |---|---|
-| `src/config.py` | `api_version: str = "X.Y.Z"` |
+| `src/b3datetime/config.py` | `api_version: str = "X.Y.Z"` |
 | `pyproject.toml` | `version = "X.Y.Z"` em `[project]` |
 | `README.md` | a linha `<strong>Versão atual: X.Y.Z</strong>` do cabeçalho (é o que o teste de sincronia procura); o exemplo de `GET /` na seção de endpoints também cita a versão |
 | `CHANGELOG.md` | nova seção `## [X.Y.Z] - AAAA-MM-DD` e os links de comparação no rodapé |
@@ -88,7 +88,7 @@ Regras de escrita:
 ## 4. Passos
 
 ```bash
-# 1. Versão nova em src/config.py, pyproject.toml e README.md sincronizados
+# 1. Versão nova em src/b3datetime/config.py, pyproject.toml e README.md sincronizados
 # 2. Seção do CHANGELOG escrita, com a data de hoje, e links de comparação atualizados
 
 # 3. Commit e push da main — e só. Nenhuma tag à mão.

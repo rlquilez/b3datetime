@@ -16,7 +16,7 @@ from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # A seção de autenticação não está aqui: ela depende de API_KEY_REQUIRED e é anexada
-# por create_app() (ver src/routers/openapi_examples.py::auth_description).
+# por create_app() (ver src/b3datetime/routers/openapi_examples.py::auth_description).
 API_DESCRIPTION = """API para consultar horários de operação e dias de negociação da B3 (Bolsa de Valores de São Paulo).
 
 ## Características
@@ -72,7 +72,7 @@ class Settings(BaseSettings):
         # extra="ignore" é obrigatório: o default do pydantic-settings é "forbid", e o
         # DotEnvSettingsSource levanta erro para qualquer chave do .env que não seja
         # campo do modelo. Com "forbid", o `cp .env.example .env` documentado no README
-        # impedia o import de src.config.
+        # impedia o import de b3datetime.config.
         extra="ignore",
     )
 

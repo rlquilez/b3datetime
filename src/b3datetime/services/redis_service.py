@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING
 import redis.asyncio as aioredis
 from redis.exceptions import RedisError
 
-from src.config import Settings, get_current_datetime
+from b3datetime.config import Settings, get_current_datetime
 
 if TYPE_CHECKING:  # pragma: no cover
     from zoneinfo import ZoneInfo

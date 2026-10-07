@@ -19,10 +19,10 @@ from urllib.parse import urljoin, urlsplit
 import httpx
 import pytest
 
-from src.config import Settings
-from src.services.calendar_service import TradingCalendar
-from src.services.redis_service import RedisService
-from src.static import FAVICON, REDOC_JS, SWAGGER_CSS, SWAGGER_JS
+from b3datetime.config import Settings
+from b3datetime.services.calendar_service import TradingCalendar
+from b3datetime.services.redis_service import RedisService
+from b3datetime.static import FAVICON, REDOC_JS, SWAGGER_CSS, SWAGGER_JS
 from tests.conftest import PREFIX, ProxyMode, build_app
 
 ASSETS = [SWAGGER_JS, SWAGGER_CSS, REDOC_JS, FAVICON]

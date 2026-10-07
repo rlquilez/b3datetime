@@ -14,8 +14,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
 
-from src.config import Settings
-from src.routers.openapi_examples import (
+from b3datetime.config import Settings
+from b3datetime.routers.openapi_examples import (
     API_KEY_HEADER,
     API_KEY_SCHEME,
     OPENAPI_TAGS,
@@ -24,8 +24,8 @@ from src.routers.openapi_examples import (
     TAG_HOURS,
     TAG_ROOT,
 )
-from src.services.calendar_service import TradingCalendar
-from src.services.redis_service import RedisService
+from b3datetime.services.calendar_service import TradingCalendar
+from b3datetime.services.redis_service import RedisService
 from tests.conftest import build_app
 
 HOURS_CODES = {"200", "404", "502", "503"}

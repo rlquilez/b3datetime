@@ -8,10 +8,10 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
-from src.config import Settings
-from src.main import create_app
-from src.services.calendar_service import TradingCalendar
-from src.services.redis_service import RedisService
+from b3datetime.config import Settings
+from b3datetime.main import create_app
+from b3datetime.services.calendar_service import TradingCalendar
+from b3datetime.services.redis_service import RedisService
 from tests.conftest import FakeClock, SpyRedis
 
 HOURS_PATHS = ["/v1/hours", "/v1/hours/open", "/v1/hours/close"]

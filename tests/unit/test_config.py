@@ -8,13 +8,13 @@ from pathlib import Path
 
 import pytest
 
-from src.config import Settings, get_settings, redact_url
+from b3datetime.config import Settings, get_settings, redact_url
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_versao_sincronizada_com_pyproject() -> None:
-    """O job `release` do CI deriva a tag de `api_version` (src/config.py); este
+    """O job `release` do CI deriva a tag de `api_version` (src/b3datetime/config.py); este
     teste impede que a cópia do pyproject.toml fique para trás."""
     pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     assert pyproject["project"]["version"] == Settings(_env_file=None).api_version
@@ -109,7 +109,7 @@ def test_chave_desconhecida_no_env_nao_impede_o_boot(tmp_path: Path) -> None:
 
 
 def test_get_current_datetime_tem_fuso() -> None:
-    from src.config import get_current_datetime
+    from b3datetime.config import get_current_datetime
 
     now = get_current_datetime()
     assert now.tzinfo is not None
@@ -170,7 +170,7 @@ def test_redact_url_com_entrada_invalida() -> None:
 
 
 def test_configure_logging_e_idempotente() -> None:
-    from src.main import configure_logging
+    from b3datetime.main import configure_logging
 
     configure_logging()
     configure_logging()

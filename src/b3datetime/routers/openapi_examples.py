@@ -109,7 +109,7 @@ def success_response(description: str, example: dict[str, Any] | list[Any]) -> d
     }
 
 
-# Reutilizada pelo handler de 502 em src/main.py: o que a documentação promete é o que
+# Reutilizada pelo handler de 502 em src/b3datetime/main.py: o que a documentação promete é o que
 # a API responde.
 BAD_GATEWAY_MESSAGE = "O valor armazenado no Redis não está no formato esperado"
 

@@ -5,7 +5,8 @@ description = "API REST para consultar horários de operação e dias de negocia
 requires-python = ">=3.14"
 
 # NOTA: este projeto NÃO deve ser instalado como pacote (nem com `pip install -e .`).
-# Os testes importam `src.*` a partir da árvore de trabalho via `pythonpath = ["."]`.
+# Layout src: o pacote é `src/b3datetime/` e os testes o importam da árvore de trabalho
+# via `pythonpath = ["src", "."]` (o `.` é para `tests.*`).
 # Instalar faria o coverage registrar caminhos em site-packages, que não casam com
 # `sonar.sources=src`, e o SonarQube reportaria 0% de coverage.
 
@@ -15,7 +16,7 @@ requires-python = ">=3.14"
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
-pythonpath = ["."]
+pythonpath = ["src", "."]
 addopts = """
     -ra
     --strict-markers
@@ -43,12 +44,12 @@ filterwarnings = [
 # coverage
 # --------------------------------------------------------------------------- #
 [tool.coverage.run]
-include = ["src/*", "src/**/*"]
+include = ["src/b3datetime/*", "src/b3datetime/**/*"]
 branch = true
 # CRÍTICO: sem relative_files, os caminhos gravados no coverage.xml são absolutos
 # (/home/runner/work/...), não casam com sonar.sources e o SonarQube mostra 0%.
 relative_files = true
-omit = ["src/__main__.py"]
+omit = ["src/b3datetime/__main__.py"]
 
 [tool.coverage.report]
 fail_under = 90
@@ -105,10 +106,10 @@ ignore = [
     "S106",
     "PLR2004", # números mágicos em asserts
 ]
-"src/main.py" = ["S104"]  # bind 0.0.0.0 é intencional em container
+"src/b3datetime/main.py" = ["S104"]  # bind 0.0.0.0 é intencional em container
 
 [tool.ruff.lint.isort]
-known-first-party = ["src"]
+known-first-party = ["b3datetime"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -120,6 +121,8 @@ indent-style = "space"
 [tool.mypy]
 python_version = "3.14"
 files = ["src"]
+mypy_path = "src"
+explicit_package_bases = true
 strict = false
 warn_return_any = true
 warn_unused_configs = true

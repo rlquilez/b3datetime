@@ -8,9 +8,9 @@ import httpx
 import pytest
 from freezegun import freeze_time
 
-from src.config import Settings
-from src.main import create_app
-from src.services.redis_service import RedisService
+from b3datetime.config import Settings
+from b3datetime.main import create_app
+from b3datetime.services.redis_service import RedisService
 
 
 async def test_calendar_info(client: httpx.AsyncClient) -> None:
