@@ -188,7 +188,7 @@ jobs:
       redis:
         # Fixada por digest (zizmor: unpinned-images). O mesmo digest de tests/stack/compose.yaml,
         # que o Dependabot atualiza; um teste de consistência exige que os dois andem juntos.
-        image: redis:7.4-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
+        image: redis:8.10-alpine@sha256:3811787313eba226a2ef38658c6ccb91cd5e110edc89c37767de373120a0e5a0
         ports: ["6379:6379"]
         options: >-
           --health-cmd "redis-cli ping"
@@ -1068,7 +1068,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+      - uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
           path: .
           format: spdx-json

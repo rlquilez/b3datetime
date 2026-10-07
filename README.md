@@ -739,7 +739,7 @@ docker run -d \
 ```yaml
 services:
   redis:
-    image: redis:7.4-alpine
+    image: redis:8.10-alpine
     ports: ["6379:6379"]
 
   b3datetime:

@@ -340,7 +340,7 @@ python -m pytest tests/integration    # precisa de Redis em localhost:6379 (db 1
 HYPOTHESIS_PROFILE=ci python -m pytest tests/property --cov-fail-under=0   # como no CI (500 exemplos)
 HYPOTHESIS_PROFILE=mutation mutmut run && mutmut results   # mutação (sem Redis: a integração fica fora da seleção)
 mutmut export-cicd-stats && mutmut results > s.txt && python scripts/mutation_gate.py mutants/mutmut-cicd-stats.json s.txt
-docker run -d --rm -p 6379:6379 redis:7.4-alpine   # um Redis descartável para a integração
+docker run -d --rm -p 6379:6379 redis:8.10-alpine   # um Redis descartável para a integração
 
 docker build -t b3datetime:e2e . && E2E_IMAGE=b3datetime:e2e python -m pytest -m e2e tests/e2e --no-cov
 ```
