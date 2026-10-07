@@ -11,6 +11,7 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Mínimo por padrão: só leitura do código. Cada job que precisa de mais declara o seu.
 permissions:
   contents: read
 
@@ -114,7 +115,9 @@ jobs:
       # contra drift do fakeredis exatamente na semântica que corrigimos (string vazia
       # devolvida como "" e não None, decode_responses).
       redis:
-        image: redis:7.4-alpine
+        # Fixada por digest (zizmor: unpinned-images). O mesmo digest de tests/stack/compose.yaml,
+        # que o Dependabot atualiza; um teste de consistência exige que os dois andem juntos.
+        image: redis:7.4-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
         ports: ["6379:6379"]
         options: >-
           --health-cmd "redis-cli ping"
@@ -242,7 +245,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write
+      security-events: write # publicar o SARIF no code scanning
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -262,8 +265,45 @@ jobs:
         # bloqueante. Uma indisponibilidade do endpoint de code scanning do GitHub
         # não deve derrubar um scan que passou.
         continue-on-error: true
-      - name: Falhar em achado de severidade alta
+      # -ll = severidade média ou mais (-lll seria só alta).
+      - name: Falhar em achado de severidade média ou alta
         run: bandit -r src -c pyproject.toml -ll
+
+  zizmor:
+    name: SAST · zizmor (workflows)
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write # publicar o SARIF no code scanning
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+
+      # Auditoria de segurança dos workflows: injeção de template, permissões
+      # excessivas, credencial persistida no checkout, action sem pin por SHA, cache
+      # envenenável, gatilhos perigosos. Com o token, também consulta o GitHub
+      # (action com vulnerabilidade conhecida, commit impostor, ref ambígua).
+      - name: zizmor (SARIF)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: zizmor --format sarif --no-exit-codes .github/ > zizmor.sarif
+      - uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: zizmor.sarif
+          category: zizmor
+        # Caminho de relato, não de decisão: quem reprova é o passo seguinte.
+        continue-on-error: true
+      - name: zizmor (bloqueante)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: zizmor .github/
 
   pip-audit:
     name: SCA · pip-audit
@@ -278,7 +318,9 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
       - uses: pypa/gh-action-pip-audit@1220774d901786e6f652ae159f7b6bc8fea6d266 # v1.1.0
         with:
-          inputs: requirements.txt requirements-dev.txt
+          # O requirements-dev.txt inclui o requirements.txt por `-r`: auditar os dois
+          # era auditar o runtime duas vezes.
+          inputs: requirements-dev.txt
 
   dependency-review:
     name: SCA · dependency-review
@@ -287,7 +329,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: write
+      pull-requests: write # comentário de resumo da revisão no PR
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -302,7 +344,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write
+      security-events: write # publicar o SARIF no code scanning
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -313,25 +355,31 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   codeql:
-    name: SAST · CodeQL
+    name: SAST · CodeQL (${{ matrix.language }})
     timeout-minutes: 20
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write
-      actions: read
+      security-events: write # publicar os resultados no code scanning
+      actions: read # o CodeQL lê os metadados do run
+    # Python e os próprios workflows (linguagem `actions`: injeção de template,
+    # permissões, checkout de código não confiável). Um job por linguagem.
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [python, actions]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
-          languages: python
+          languages: ${{ matrix.language }}
           build-mode: none
           queries: security-extended
       - uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
-          category: "/language:python"
+          category: "/language:${{ matrix.language }}"
 
   trivy-fs:
     name: SCA · Trivy (filesystem)
@@ -339,7 +387,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write
+      security-events: write # publicar o SARIF no code scanning
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -382,7 +430,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write
+      security-events: write # SARIF do Trivy da imagem
     outputs:
       apk-refresh: ${{ steps.refresh.outputs.value }}
     steps:
@@ -614,7 +662,7 @@ jobs:
       needs.docker-publish.result == 'success'
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: write # criar a tag vX.Y.Z e a GitHub Release
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -753,6 +801,7 @@ jobs:
       - coverage
       - sonar
       - bandit
+      - zizmor
       - pip-audit
       - dependency-review
       - secret-scan
@@ -787,7 +836,8 @@ jobs:
               "lint-infra": "Lint · infra (actionlint, hadolint, shellcheck)",
               "typecheck": "Tipagem · mypy",
               "bandit": "SAST · bandit",
-              "codeql": "SAST · CodeQL",
+              "codeql": "SAST · CodeQL (python e actions)",
+              "zizmor": "SAST · zizmor (workflows)",
               "secret-scan": "Segredos · gitleaks",
               "pip-audit": "SCA · pip-audit",
               "trivy-fs": "SCA · Trivy (filesystem)",

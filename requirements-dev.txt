@@ -25,3 +25,5 @@ types-jsonschema==4.26.0.20261006
 # O formatter SARIF do bandit é um extra; sem ele `-f sarif` falha.
 bandit[toml,sarif]==1.9.4
 pip-audit==2.10.1
+# Auditoria de segurança dos workflows do GitHub Actions.
+zizmor==1.30.1

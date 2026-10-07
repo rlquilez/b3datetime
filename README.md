@@ -894,7 +894,7 @@ flowchart LR
 | Tipagem | mypy **strict** + plugin do pydantic | em `src/`, `scripts/` e `tests/` |
 | Testes por bloco | pytest em Python 3.14 (o runtime da imagem): unitários, componente e integração (com Redis real), um job cada | ver [`tests/README.md`](tests/README.md) |
 | Cobertura combinada | `coverage combine` dos blocos | gate de 90% sobre a soma; tripwires: caminhos relativos no `coverage.xml` (senão o Sonar reporta 0%), nenhum teste pulado, nenhum bloco vazio |
-| SAST | bandit, CodeQL | |
+| SAST | bandit, CodeQL (Python e os próprios workflows), zizmor | zizmor audita os workflows: injeção de template, permissões, credencial persistida, action sem pin por SHA, cache envenenável, ações com vulnerabilidade conhecida |
 | CVEs em dependências | pip-audit, dependency-review | |
 | Segredos | gitleaks | histórico inteiro |
 | Filesystem e imagem | Trivy | `CRITICAL`/`HIGH` reprovam |

@@ -6,6 +6,11 @@ updates:
       interval: "weekly"
     open-pull-requests-limit: 5
     labels: ["dependencies"]
+    # Cooldown contra cadeia de suprimentos: versão recém-publicada só é proposta depois
+    # de 7 dias, a janela em que releases comprometidas costumam ser descobertas e
+    # retiradas (zizmor: dependabot-cooldown).
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "chore"
       include: "scope"
@@ -23,6 +28,8 @@ updates:
     schedule:
       interval: "weekly"
     labels: ["dependencies", "ci"]
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "ci"
     groups:
@@ -39,6 +46,10 @@ updates:
     schedule:
       interval: "weekly"
     labels: ["dependencies"]
+    # Também 7 dias para o digest da base: as correções de segurança do Alpine já entram
+    # a cada build pelo `apk upgrade` (APK_REFRESH), então o atraso custa pouco.
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "chore"
     ignore:

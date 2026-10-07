@@ -39,7 +39,8 @@ flowchart LR
         infra["Lint · infra<br/><i>actionlint · hadolint · shellcheck</i>"]:::estatica
         mypy["Tipagem · mypy strict"]:::estatica
         bandit["SAST · bandit"]:::estatica
-        codeql["SAST · CodeQL"]:::estatica
+        codeql["SAST · CodeQL<br/><i>python · actions</i>"]:::estatica
+        zizmor["SAST · zizmor<br/><i>workflows</i>"]:::estatica
         gitleaks["Segredos · gitleaks"]:::estatica
         pipaudit["SCA · pip-audit"]:::estatica
         trivyfs["SCA · Trivy (filesystem)"]:::estatica
@@ -96,7 +97,13 @@ Não executa a aplicação; por isso roda primeiro e em paralelo.
 | Lint · infra | actionlint (workflows e o shell de cada `run:`), hadolint (todo `Dockerfile`, limiar `info`), shellcheck (`scripts/*.sh`) | o pipeline e a imagem também são código |
 | Tipagem · mypy | `strict` + plugin do pydantic, em `src/`, `scripts/` **e** `tests/` | um teste mal tipado pode estar testando a coisa errada; dublês passam por `as_redis()` (um `cast` documentado), nunca por `# type: ignore` |
 
-Os demais jobs estáticos (SAST, SCA, segredos) estão no diagrama acima.
+| SAST · bandit | padrões inseguros em `src/` (severidade média ou mais reprova) | o motor clássico de Python, com SARIF no code scanning |
+| SAST · CodeQL | análise de fluxo de dados em Python e **nos workflows** (`actions`), suíte `security-extended` | o pipeline publica em produção: injeção num `run:` seria execução de código com os secrets do registry |
+| SAST · zizmor | auditoria dedicada de GitHub Actions: injeção de template, permissões excessivas, `persist-credentials`, pin por SHA, cache envenenável, gatilhos perigosos, actions com vulnerabilidade conhecida | limpo até no perfil `pedantic`; o que só o perfil `auditor` aponta (secrets fora de *environment*) exigiria configuração no repositório e está registrado como decisão |
+| Segredos · gitleaks | o histórico **inteiro** do git | um segredo removido do código continua no histórico |
+| SCA · pip-audit / Trivy fs / dependency-review | CVEs nas dependências pinadas, no filesystem (inclui misconfig do `Dockerfile`) e nas dependências que um PR introduz | `CRITICAL`/`HIGH` reprovam |
+
+**Semgrep foi avaliado e não adotado:** seria o quarto motor de SAST para Python, ao lado de CodeQL `security-extended`, Sonar e bandit (mais as regras `S` do ruff), com custo de triagem e sem regra exclusiva relevante para este código.
 
 ### Unitários — `tests/unit/`
 
