@@ -452,7 +452,13 @@ jobs:
     # `latest` ir para produção. O docker-verify continua listado pelo output
     # apk-refresh, que garante que a camada amd64 publicada é a escaneada.
     needs: [ci-ok, docker-verify]
-    if: github.event_name == 'push'
+    # Condição explícita, não o success() implícito: este é avaliado sobre a cadeia
+    # TRANSITIVA de needs, e o dependency-review (só em PR) aparece como skipped em todo
+    # push — o publish era pulado mesmo com o ci-ok verde. Quem decide se um pulo é
+    # aceitável é o ci-ok; aqui basta o resultado dele.
+    if: >-
+      !cancelled() && github.event_name == 'push' &&
+      needs.ci-ok.result == 'success' && needs.docker-verify.result == 'success'
     runs-on: ubuntu-latest
     env:
       RUNNER_TOOL_CACHE: /toolcache
@@ -527,7 +533,11 @@ jobs:
     # tests/unit/test_config.py já fazem antes de qualquer publicação (#41).
     # Fica fora do ci-ok: roda depois da publicação.
     needs: [docker-publish]
-    if: github.ref == 'refs/heads/main'
+    # Mesma razão do docker-publish: sem condição explícita, o skipped transitivo do
+    # dependency-review pularia a release.
+    if: >-
+      !cancelled() && github.ref == 'refs/heads/main' &&
+      needs.docker-publish.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -643,6 +653,7 @@ jobs:
     name: Entrega · SBOM
     timeout-minutes: 10
     needs: [docker-publish]
+    if: ${{ !cancelled() && needs.docker-publish.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
