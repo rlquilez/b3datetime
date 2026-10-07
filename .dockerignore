@@ -44,3 +44,5 @@ LICENSE
 
 # Scripts de CI/desenvolvimento: não fazem parte da imagem
 scripts/
+coverage-*.dat
+junit-*.xml

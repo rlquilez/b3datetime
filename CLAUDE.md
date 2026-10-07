@@ -53,8 +53,9 @@ cp .env.example .env
 uvicorn --app-dir src b3datetime.main:app --reload --port 8000   # or: PYTHONPATH=src python -m b3datetime
 
 ruff check . && ruff format --check . && mypy src
-pytest                  # ~240 tests (`pytest --co -q | tail -1`; the e2e ones are deselected), coverage gate at 90% (currently ~99.8%)
-pytest -m "not slow"    # skips the tests that build the real BVMF calendar
+pytest                  # ~330 tests (`pytest --co -q | tail -1`; the e2e ones are deselected), coverage gate at 90% (currently ~99.8%)
+pytest tests/unit --cov-fail-under=0   # one block (each CI job runs one; a single block's coverage is partial)
+pytest -m "not slow"    # skips the tests that build the real BVMF calendar (all in tests/integration)
 
 docker build -t b3datetime:ci . && IMAGE=b3datetime:ci scripts/smoke_image.sh   # the CI smoke test, locally
 
@@ -117,18 +118,21 @@ The API **authenticates nothing** — there is no apikey code here, and there mu
 
 ## Testing
 
-`tests/` splits into `unit/`, `api/`, `integration/`. No `__init__.py`; `--import-mode=importlib`.
+`tests/` splits into **blocks — one directory, one CI job each**: `unit/` (no I/O), `api/` (the "component" block: the whole ASGI app in process, no lifespan, no I/O), `integration/` (real Redis on db 15, the real BVMF calendar, the real lifespan), `e2e/` (the image). **`tests/README.md` is the test-architecture doc** (rationale, Mermaid diagrams, tripwires) — keep it in sync with any change to the suite or to `ci.yml`. No `__init__.py`; `--import-mode=importlib`.
+
+- **Anything that opens a socket or builds the real calendar belongs in `tests/integration/`** (its `conftest.py` owns `real_redis` and `lifespan_app`), so `unit/` and `api/` stay I/O-free. The oracle of B3 calendar rules lives in `tests/e2e/calendario_b3.py` (importable without the `e2e` marker; tested by itself in `tests/unit/test_calendario_b3.py`) and is used both by the e2e suite and by `tests/integration/test_calendario_bvmf.py` (real `exchange_calendars`, 2017–2025).
+- **Each CI block runs `pytest tests/<dir> --cov-fail-under=0` with `COVERAGE_FILE=coverage-<bloco>.dat`** and uploads that plus `junit-<bloco>.xml`. The 90% gate is applied once, to the sum, by the `coverage` job (`coverage combine`), which also runs `scripts/consolidar_testes.py`: no skipped test in any block, no empty block, `src/` paths in `coverage.xml`. Never pass `-m` to a block run without `and not e2e` — a CLI `-m` replaces the one in `addopts`. The data files are not dot-files on purpose: `upload-artifact` skips hidden files.
 
 - **`fakeredis`, not a hand-rolled stub.** A dict stub returns `None` where real Redis returns `""` — it would *agree with* the empty-string bug. `FakeServer.connected` toggled mid-test is the only clean way to express "Redis went down and came back".
 - **Injected clock (`now_fn`) in unit tests.** `RedisCache` captures its time function at construction, so monkeypatching `get_current_datetime` silently misses.
 - **`freezegun` only at the API level**, never around calendar construction (known flake with `pd.Timestamp.now()`).
 - **`Settings(_env_file=None)` in every fixture**, so a developer's local `.env` cannot change results.
-- `ASGITransport` does **not** run lifespan; the `lifespan_app` fixture uses `asgi-lifespan` for the wiring tests.
+- `ASGITransport` does **not** run lifespan; the `lifespan_app` fixture (`tests/integration/conftest.py`) uses `asgi-lifespan` for the wiring tests.
 - **`proxy_mode` / `proxied_client`** (`tests/conftest.py`) parametrize a test over the three proxy shapes (no proxy, Kong stripped, Kong unstripped); `ProxyMode.upstream()` converts a public path into what the app actually receives. With `ROOT_PATH` set, FastAPI overwrites `scope["root_path"]` before the middleware stack, so the bug shape is simply `client.get("/docs")` against an app created with `root_path="/b3datetime"`.
 - `scripts/smoke_image.sh` drives the **built image** (no Redis / Redis + `ROOT_PATH`, both path shapes, trailing slash, negatives, Docker `HEALTHCHECK`); `curl --path-as-is` is what lets the traversal cases reach the app.
 - The performance test asserts **scaling**, not wall time: with `max_range_days` capping the span, even the quadratic version finishes in ~0.1 s, so an absolute threshold would pass with the bug present.
 
-Integration tests against real Redis auto-skip when none is reachable, and use **db 15** because teardown calls `flushdb`.
+Integration tests against real Redis auto-skip when none is reachable (locally), and use **db 15** because teardown calls `flushdb`. In CI the integration job has a Redis service and the `coverage` job fails on any skip.
 
 ### E2E (`tests/e2e/`)
 
@@ -142,11 +146,11 @@ Black-box, against the **real image** with real Redis and the real BVMF calendar
 
 ## CI/CD
 
-`.github/workflows/ci.yml` — lint, mypy, tests (Python 3.14 only — the image's runtime; the 3.11 matrix entry was dropped in #45 — with a Redis service), bandit, pip-audit, dependency-review, gitleaks, CodeQL, Trivy (fs + image), SonarQube with a **blocking** quality gate, multi-arch publish, SBOM, automatic release, and a `ci-ok` aggregator meant to be the single required status check.
+`.github/workflows/ci.yml` — lint, mypy, tests as one job per block (matrix `tests`: unit, component, integration with a Redis service; Python 3.14 only — the image's runtime; the 3.11 entry was dropped in #45), a `coverage` job that combines them and owns the 90% gate and the tripwires, bandit, pip-audit, dependency-review, gitleaks, CodeQL, Trivy (fs + image), SonarQube with a **blocking** quality gate, multi-arch publish, SBOM, automatic release, and a `ci-ok` aggregator meant to be the single required status check.
 
 - **The only workflow, with no `tags:` trigger.** Version tags are *created* by the `release` job after publishing; nothing reacts to a tag push, so double-publishing stays structurally impossible. (`release.yml` used to be triggered by tags and was folded in here in #41.)
 - `latest` is `enable={{is_default_branch}}`. It used to be unconditional, so a push to any branch overwrote production `latest`.
-- The `test` job greps `coverage.xml` for `filename="src/`. Coverage is configured with `include` (not `source`) precisely so paths are root-relative; otherwise SonarQube silently reports **0%**. A second tripwire fails the job if `junit.xml` records any skipped test — with the Redis service up, `slow` and `integration` must actually run.
+- The `coverage` job (via `scripts/consolidar_testes.py`) checks `coverage.xml` for `filename="src/`. Coverage is configured with `include` (not `source`) precisely so paths are root-relative; otherwise SonarQube silently reports **0%**. It also fails if any `junit-<bloco>.xml` records a skipped test — with the Redis service up, `slow` and `integration` must actually run. Sonar reads `junit-*.xml` (Ant pattern).
 - `docker-verify` builds amd64 with `load: true` so Trivy has something to scan, and needs no secrets (works on fork PRs). Its smoke step runs `scripts/smoke_image.sh` against the built image: no Redis (health 503), then real Redis + `ROOT_PATH` in both Kong path shapes, every page/asset/endpoint, trailing slash, negatives and the Docker `HEALTHCHECK`.
 - **The base is `python:3.14-alpine` pinned by digest** (both stages). Dependabot proposes the new digest weekly and the PR's CI scans it before adoption; Python minor/major bumps are ignored in `dependabot.yml` on purpose. The Debian `slim` base carried 173 Trivy alerts in code scanning, 150 of them with no Debian fix, for packages the app never runs (#39). Every compiled dependency ships musllinux cp314 wheels, so the builder has no compiler — a dependency without one fails the build visibly.
 - **`APK_REFRESH` changes on every run.** `docker-verify` exports `run_id-run_attempt` and `docker-publish` reuses that same value, so the published amd64 layer is the scanned one. Without it, the GHA cache served the old `apt-get upgrade` layer for as long as the base digest stayed the same: Debian's patches never landed, and from 2026-09-14 the blocking Trivy failed every build (#39). The heavy dependency layer sits *before* the `ARG` and stays cached.

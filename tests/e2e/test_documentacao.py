@@ -64,15 +64,3 @@ def test_toda_documentacao_anunciada_e_testada(principal: Ambiente) -> None:
     p = principal.prefixo
     cobertos = {nome: p + caminho for nome, caminho in PAGINAS.items()} | {"openapi": p + SCHEMA}
     assert docs == cobertos
-
-
-def test_asset_de_pagina_e_resolvido_como_no_navegador() -> None:
-    """``./static/x`` na página ``<base>/docs`` vira ``<base>/static/x``, com ou sem prefixo."""
-    assert (
-        urljoin("https://h/b3datetime/docs", "./static/a.css")
-        == "https://h/b3datetime/static/a.css"
-    )
-    assert (
-        urljoin("http://127.0.0.1:1234/docs", "./openapi.json")
-        == "http://127.0.0.1:1234/openapi.json"
-    )

@@ -39,6 +39,27 @@ async def test_is_trading_day_em_sabado(client: httpx.AsyncClient) -> None:
     assert r.json() == {"date": "2024-01-13", "is_trading_day": False}
 
 
+@pytest.mark.parametrize(
+    ("instante_utc", "esperado"),
+    [
+        # Sábado 13/01 em UTC, mas ainda sexta 12/01 (22:00) em São Paulo: há pregão.
+        ("2024-01-13 01:00:00", {"date": "2024-01-12", "is_trading_day": True}),
+        # Terça 16/01 em UTC, ainda segunda 15/01 (22:30) em São Paulo.
+        ("2024-01-16 01:30:00", {"date": "2024-01-15", "is_trading_day": True}),
+        # Segunda 15/01 às 02:59 UTC é domingo 14/01 em São Paulo: sem pregão.
+        ("2024-01-15 02:59:00", {"date": "2024-01-14", "is_trading_day": False}),
+    ],
+)
+async def test_is_trading_day_usa_a_data_de_sao_paulo_e_nao_a_utc(
+    client: httpx.AsyncClient, instante_utc: str, esperado: dict[str, object]
+) -> None:
+    """Entre 00:00 e 03:00 UTC a data UTC já virou e a de São Paulo não: "hoje" é o de SP."""
+    with freeze_time(instante_utc):
+        r = await client.get("/v1/is-trading-day")
+    assert r.status_code == 200
+    assert r.json() == esperado
+
+
 @freeze_time("2024-02-12 13:30:00")
 async def test_is_trading_day_em_feriado(client: httpx.AsyncClient) -> None:
     assert (await client.get("/v1/is-trading-day")).json()["is_trading_day"] is False

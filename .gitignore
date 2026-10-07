@@ -220,3 +220,7 @@ junit.xml
 
 # Arquivos de dados do coverage com sufixo numérico (".coverage 2"), gerados por execuções paralelas
 .coverage *
+
+# Relatórios por bloco de teste (CI: um job por bloco, consolidados no job de cobertura)
+coverage-*.dat
+junit-*.xml

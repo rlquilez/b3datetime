@@ -193,15 +193,3 @@ def test_build_bvmf_calendar_preserva_a_causa(monkeypatch: pytest.MonkeyPatch) -
     with pytest.raises(CalendarUnavailableError) as exc:
         build_bvmf_calendar(settings)
     assert exc.value.__cause__ is original
-
-
-@pytest.mark.slow
-def test_calendario_real_da_bvmf() -> None:
-    """Sempre com start/end explícitos: a janela de produção se move todo dia."""
-    calendario = build_bvmf_calendar(Settings(_env_file=None), start="2024-01-01", end="2024-12-31")
-    assert not calendario.is_session(date(2024, 1, 1))  # Confraternização
-    assert not calendario.is_session(date(2024, 2, 12))  # Carnaval
-    assert calendario.is_session(date(2024, 1, 2))
-    inicio, _ = calendario.coverage
-    assert inicio == date(2024, 1, 1)  # a cobertura começa no feriado
-    assert calendario.first_session == date(2024, 1, 2)  # a primeira sessão, não

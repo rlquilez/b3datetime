@@ -800,14 +800,16 @@ pytest -m "not slow"    # pula os testes que constroem o calendário real
 
 ## 🧪 Testes
 
-A suíte tem cerca de 240 casos e cobre 100% das linhas de `src/b3datetime/`. Ela está organizada em quatro camadas:
+A suíte cobre 100% das linhas de `src/b3datetime/` e é organizada em **blocos**: cada bloco é um diretório em `tests/` e um job próprio no pipeline. A arquitetura completa — o racional de cada bloco, os diagramas e os tripwires — está em **[`tests/README.md`](tests/README.md)**.
 
-| Diretório | O que cobre | Como |
-|-----------|-------------|------|
-| `tests/unit/` | `Settings`, `RedisService`/`RedisCache`, `TradingCalendar`, `RootPathPrefixMiddleware`, sincronia da versão | `fakeredis`, relógio injetado (`now_fn`), calendário sintético |
-| `tests/api/` | Todos os endpoints e páginas, com cada código de resposta documentado, contrato do OpenAPI, CORS | `httpx.ASGITransport` sobre a app real, sem I/O |
-| `tests/integration/` | Semântica do Redis real (string vazia, `decode_responses`, `MGET` parcial) | Redis em `localhost:6379`, **db 15**; pula automaticamente se não houver |
-| `tests/e2e/` | **100% dos endpoints publicados**, contra a imagem real: toda resposta documentada de toda operação, as consultas e a documentação | containers com Redis real e o calendário BVMF real; fora da execução padrão (`-m e2e`) |
+| Diretório | Bloco (job no CI) | O que cobre | Como |
+|-----------|-------------------|-------------|------|
+| `tests/unit/` | Testes · unitários | `Settings`, `RedisService`/`RedisCache`, `TradingCalendar`, middleware, tabela-verdade do health, validação de período, scripts de gate | `fakeredis`, relógio injetado (`now_fn`), calendário sintético; sem I/O |
+| `tests/api/` | Testes · componente | Todos os endpoints e páginas, cada código documentado, contrato do OpenAPI, os três modos de proxy, CORS | `httpx.ASGITransport` sobre a app real, sem lifespan e sem I/O |
+| `tests/integration/` | Testes · integração | Redis real, calendário BVMF real (2017–2025 contra as regras da B3), lifespan real e a app inteira com tudo real | Redis em `localhost:6379`, **db 15** |
+| `tests/e2e/` | E2E · contrato 100% | **100% dos endpoints publicados**, contra a imagem real: toda resposta documentada de toda operação, as consultas e a documentação | containers com Redis real e o calendário BVMF real; fora da execução padrão (`-m e2e`) |
+
+A cobertura de cada bloco é parcial; o job **Cobertura · combinada** soma os blocos, aplica o gate de 90% e reprova se qualquer teste tiver sido pulado.
 
 Pontos de desenho que valem conhecer:
 
@@ -869,7 +871,7 @@ flowchart LR
     subgraph paralelo["Sem dependências"]
         lint["lint (ruff)"]
         typecheck["tipagem (mypy)"]
-        test["testes (3.14 + Redis)"]
+        test["testes por bloco<br/>unitários · componente · integração"]
         bandit["bandit"]
         pipaudit["pip-audit"]
         gitleaks["gitleaks"]
@@ -877,11 +879,11 @@ flowchart LR
         trivyfs["Trivy fs"]
         depreview["dependency-review (só PR)"]
     end
-    test --> sonar["SonarQube<br/>quality gate bloqueante"]
-    lint & typecheck & test --> dv["docker-verify<br/>build amd64 · smoke test · Trivy"]
-    lint & typecheck & test --> e2e["e2e<br/>100% dos endpoints · 4 ambientes"]
+    test --> cov["cobertura combinada<br/>≥ 90% · nenhum teste pulado"] --> sonar["SonarQube<br/>quality gate bloqueante"]
+    lint & typecheck & cov --> dv["docker-verify<br/>build amd64 · smoke test · Trivy"]
+    lint & typecheck & cov --> e2e["e2e<br/>100% dos endpoints · 4 ambientes"]
     pub --> rel["release (versão nova)<br/>tag vX.Y.Z · X · X.Y · X.Y.Z · GitHub Release"]
-    lint & typecheck & test & sonar & bandit & pipaudit & gitleaks & codeql & trivyfs & dv & e2e & depreview --> ok["ci-ok<br/>agrega todos os blocos"]
+    lint & typecheck & test & cov & sonar & bandit & pipaudit & gitleaks & codeql & trivyfs & dv & e2e & depreview --> ok["ci-ok<br/>agrega todos os blocos"]
     ok --> pub["docker-publish (push na main)<br/>latest · sha-abc1234"] --> sbom["SBOM"]
 ```
 
@@ -889,7 +891,8 @@ flowchart LR
 |-------|-----------|------------|
 | Lint e formatação | ruff | |
 | Tipagem | mypy | |
-| Testes e coverage | pytest em Python 3.14 (o runtime da imagem), com Redis real | tripwires: caminhos relativos no `coverage.xml` (senão o Sonar reporta 0%) e nenhum teste pulado |
+| Testes por bloco | pytest em Python 3.14 (o runtime da imagem): unitários, componente e integração (com Redis real), um job cada | ver [`tests/README.md`](tests/README.md) |
+| Cobertura combinada | `coverage combine` dos blocos | gate de 90% sobre a soma; tripwires: caminhos relativos no `coverage.xml` (senão o Sonar reporta 0%), nenhum teste pulado, nenhum bloco vazio |
 | SAST | bandit, CodeQL | |
 | CVEs em dependências | pip-audit, dependency-review | |
 | Segredos | gitleaks | histórico inteiro |

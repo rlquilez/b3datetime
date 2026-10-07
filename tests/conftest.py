@@ -13,14 +13,13 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
 import fakeredis.aioredis
 import httpx
 import pytest
-from asgi_lifespan import LifespanManager
 from fastapi import FastAPI
 
 from b3datetime.config import Settings
@@ -218,17 +217,3 @@ def make_client() -> Any:
         )
 
     return _factory
-
-
-@pytest.fixture
-async def lifespan_app(settings: Settings) -> AsyncIterator[FastAPI]:
-    """App com o lifespan real executado — usado só nos testes de wiring."""
-    application = create_app(settings)
-    async with LifespanManager(application, startup_timeout=180):
-        yield application
-
-
-@pytest.fixture
-def today_session(test_calendar: TradingCalendar) -> date:
-    """Uma data que é sessão dentro do calendário de teste."""
-    return date(2024, 1, 15)

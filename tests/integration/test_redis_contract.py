@@ -9,32 +9,11 @@ continua verde localmente.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
-
 import pytest
 import redis.asyncio as aioredis
 from redis.exceptions import RedisError
 
 pytestmark = pytest.mark.integration
-
-# db 15, nunca 0: o teardown faz flushdb.
-REDIS_TEST_URL = "redis://localhost:6379/15"
-
-
-@pytest.fixture
-async def real_redis() -> AsyncIterator[aioredis.Redis]:
-    client = aioredis.from_url(
-        REDIS_TEST_URL, decode_responses=True, socket_connect_timeout=1, socket_timeout=1
-    )
-    try:
-        await client.ping()
-    except RedisError, OSError:
-        await client.aclose()
-        pytest.skip("Redis não disponível em localhost:6379")
-    await client.flushdb()
-    yield client
-    await client.flushdb()
-    await client.aclose()
 
 
 async def test_mget_devolve_str_e_nao_bytes(real_redis: aioredis.Redis) -> None:

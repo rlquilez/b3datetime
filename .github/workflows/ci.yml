@@ -54,17 +54,33 @@ jobs:
       - run: pip install -r requirements-dev.txt
       - run: mypy src
 
-  test:
-    # Só o 3.14: é o runtime da imagem e a única versão declarada em requires-python.
-    # A matriz com o 3.11 foi removida em #45 — testar uma versão que nenhum ambiente
-    # usa custava um job inteiro por push sem proteger nada que é entregue.
-    name: Testes · pytest (Python 3.14)
+  tests:
+    # Um job por bloco de teste em processo, cada um com o próprio nome no grafo do run
+    # e o próprio relatório. A cobertura de cada bloco é parcial por definição; o gate
+    # de 90% é aplicado uma vez só, sobre a soma, no job "Cobertura · combinada".
+    # Só o 3.14: é o runtime da imagem e a única versão declarada em requires-python
+    # (a matriz com o 3.11 foi removida em #45).
+    name: ${{ matrix.nome }}
     timeout-minutes: 15
     runs-on: ubuntu-latest
+    strategy:
+      # Todos os blocos reportam, mesmo quando um falha: o diagnóstico precisa do quadro todo.
+      fail-fast: false
+      matrix:
+        include:
+          - bloco: unit
+            nome: Testes · unitários
+            dir: tests/unit
+          - bloco: component
+            nome: Testes · componente (API em processo)
+            dir: tests/api
+          - bloco: integration
+            nome: Testes · integração (Redis e calendário reais)
+            dir: tests/integration
     services:
-      # Cobre os testes de contrato contra Redis real, que são a única defesa
-      # contra drift do fakeredis exatamente na semântica que corrigimos
-      # (string vazia devolvida como "" e não None, decode_responses).
+      # Só a integração usa; nos outros blocos o service fica ocioso. É a única defesa
+      # contra drift do fakeredis exatamente na semântica que corrigimos (string vazia
+      # devolvida como "" e não None, decode_responses).
       redis:
         image: redis:7.4-alpine
         ports: ["6379:6379"]
@@ -83,46 +99,72 @@ jobs:
           cache: pip
       - run: pip install -r requirements-dev.txt
 
+      # --cov-fail-under=0: a cobertura de um bloco sozinho é parcial; o gate é o da soma.
+      # Sem -m na linha de comando: o `-m "not e2e"` do addopts continua valendo (um -m
+      # aqui o substituiria).
       - name: pytest
-        run: python -m pytest
+        env:
+          COVERAGE_FILE: coverage-${{ matrix.bloco }}.dat
+          DIRETORIO: ${{ matrix.dir }}
+          JUNIT: junit-${{ matrix.bloco }}.xml
+        run: python -m pytest "$DIRETORIO" --cov-fail-under=0 --junitxml="$JUNIT"
 
-      # Tripwire permanente do 0% de coverage no SonarQube: se os caminhos do
-      # coverage.xml deixarem de ser relativos à raiz, o Sonar não casa com
-      # sonar.sources e reporta 0% silenciosamente.
-      - name: Verificar caminhos do coverage.xml
+      - name: Publicar relatórios do bloco
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: testes-${{ matrix.bloco }}
+          path: |
+            coverage-${{ matrix.bloco }}.dat
+            junit-${{ matrix.bloco }}.xml
+          if-no-files-found: error
+
+  coverage:
+    name: Cobertura · combinada (≥ 90%)
+    timeout-minutes: 10
+    needs: [tests]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: testes-*
+          merge-multiple: true
+          path: .
+
+      # O gate de 90% é o fail_under do pyproject, aplicado sobre a soma dos blocos.
+      - name: Combinar a cobertura dos blocos
         run: |
-          if ! grep -q 'filename="src/' coverage.xml; then
-            echo "::error::coverage.xml sem caminhos 'src/...'; o SonarQube reportaria 0%"
-            grep -o 'filename="[^"]*"' coverage.xml | head -5
-            exit 1
-          fi
-          echo "OK: $(grep -c 'filename="src/' coverage.xml) arquivos com caminho relativo à raiz"
+          coverage combine --keep coverage-*.dat
+          coverage xml -o coverage.xml
+          coverage report
 
-      # Tripwire: com o service de Redis disponível, nada pode ser pulado — os testes
-      # `slow` e `integration` precisam ter executado de fato, senão "suíte completa"
-      # vira só uma intenção.
-      - name: Nenhum teste pulado no CI
-        run: |
-          if grep -qE 'skipped="[1-9][0-9]*"' junit.xml; then
-            echo "::error::junit.xml registra testes pulados; a suíte completa não executou"
-            grep -oE 'skipped="[0-9]+"' junit.xml | sort | uniq -c
-            exit 1
-          fi
-          echo "OK: nenhum teste pulado ($(grep -oE 'tests="[0-9]+"' junit.xml | head -1))"
+      # Tripwires: nenhum teste pulado em nenhum bloco (no CI todo recurso existe) e
+      # caminhos src/ no coverage.xml (sem eles o SonarQube reporta 0% em silêncio).
+      # Também escreve a tabela de testes por bloco no resumo do run.
+      - name: Consolidar os blocos (tripwires)
+        run: python scripts/consolidar_testes.py coverage.xml junit-*.xml
 
-      - name: Publicar relatórios
+      - name: Publicar relatórios consolidados
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-report
           path: |
             coverage.xml
-            junit.xml
+            junit-*.xml
           if-no-files-found: error
 
   sonar:
     name: Qualidade · SonarQube
     timeout-minutes: 20
-    needs: [test]
+    needs: [coverage]
     runs-on: ubuntu-latest
     # PRs de fork e PRs do Dependabot não têm acesso aos secrets (SONAR_HOST_URL chega
     # vazio); sem este guard o job falharia de forma confusa em vez de ser pulado, e
@@ -146,7 +188,7 @@ jobs:
 
       # Tripwire: sem os relatórios, o scanner roda e o Sonar reporta 0% em silêncio.
       - name: Relatórios de coverage e testes presentes
-        run: ls -l coverage.xml junit.xml
+        run: ls -l coverage.xml junit-*.xml
 
       # Gate bloqueante. A primeira análise (commit 4cdd874) estabeleceu o baseline
       # e passou com new_coverage 100%, duplicação 0% e 0 violations, e o projeto
@@ -304,7 +346,7 @@ jobs:
   docker-verify:
     name: Imagem · build, smoke e Trivy
     timeout-minutes: 30
-    needs: [lint, typecheck, test]
+    needs: [lint, typecheck, coverage]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -394,7 +436,7 @@ jobs:
     # Roda em paralelo ao docker-verify, a partir do mesmo Dockerfile e da mesma chave
     # APK_REFRESH. Lê o cache do escopo verify e não grava nenhum, para não disputar o
     # índice com ele.
-    needs: [lint, typecheck, test]
+    needs: [lint, typecheck, coverage]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -674,7 +716,8 @@ jobs:
     needs:
       - lint
       - typecheck
-      - test
+      - tests
+      - coverage
       - sonar
       - bandit
       - pip-audit
@@ -715,7 +758,8 @@ jobs:
               "pip-audit": "SCA · pip-audit",
               "trivy-fs": "SCA · Trivy (filesystem)",
               "dependency-review": "SCA · dependency-review",
-              "test": "Testes · pytest",
+              "tests": "Testes · unitários, componente e integração",
+              "coverage": "Cobertura · combinada (≥ 90%)",
               "sonar": "Qualidade · SonarQube",
               "docker-verify": "Imagem · build, smoke e Trivy",
               "e2e": "E2E · contrato 100%",
