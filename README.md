@@ -96,19 +96,72 @@ print("Hoje tem pregão" if today["is_trading_day"] else "Hoje não tem pregão"
 ### Visão de contexto
 
 ```mermaid
-%%{init: {"flowchart": {"wrappingWidth": 480}}}%%
-flowchart LR
-    C["Cliente<br/>curl · Python · browser"] -->|"HTTPS"| K["Kong Gateway<br/>rota /b3datetime · strip_path · X-Forwarded-*"]
-    subgraph app["Container b3datetime"]
-        A["FastAPI + uvicorn<br/>--proxy-headers"]
-        L[("Cache local<br/>TTL 1 h")]
-        X["exchange_calendars<br/>calendário BVMF em processo"]
+---
+config:
+  theme: base
+  look: neo
+  layout: dagre
+  fontFamily: "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans, Helvetica, Arial, sans-serif"
+  htmlLabels: false
+  themeCSS: ".edgeLabel rect { opacity: 1 !important; } .edge-thickness-normal { stroke-width: 1.5px !important; }"
+  themeVariables:
+    fontFamily: "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans, Helvetica, Arial, sans-serif"
+    fontSize: 15px
+    primaryColor: "#FFFFFF"
+    primaryTextColor: "#334155"
+    primaryBorderColor: "#DCE4EC"
+    nodeBorder: "#DCE4EC"
+    lineColor: "#8895A9"
+    textColor: "#475569"
+    edgeLabelBackground: "#FFFFFF"
+    clusterBkg: "#F8FCFA"
+    clusterBorder: "#C8E5DA"
+    titleColor: "#257361"
+  flowchart:
+    curve: basis
+    nodeSpacing: 50
+    rankSpacing: 60
+    padding: 18
+    wrappingWidth: 400
+    diagramPadding: 24
+---
+flowchart TB
+    cliente("`**Cliente**
+    curl · Python · navegador`")
+    kong("`**Kong Gateway**
+    rota /b3datetime`")
+    subgraph container["Container b3datetime"]
+        api("`**FastAPI / Uvicorn**
+        --proxy-headers`")
+        cache[("`**Cache local**
+        TTL 1 h`")]
+        bvmf("`**Exchange Calendars**
+        calendário BVMF`")
     end
-    K -->|"ROOT_PATH=/b3datetime"| A
-    A -->|"MGET"| R[("Redis<br/>b3:trading:hours:open · close")]
-    A <--> L
-    A --> X
-    W["Escritor dos horários<br/>(fora deste repositório)"] -->|"SET"| R
+    escritor("`**Escritor de horários**
+    fora deste repositório`")
+    redis[("`**Redis**
+    b3:trading:hours:*`")]
+
+    cliente -- "HTTPS" --> kong
+    kong -- "ROOT_PATH=/b3datetime" --> api
+    api <--> cache
+    api --> bvmf
+    api -- "MGET" --> redis
+    escritor -- "SET" --> redis
+    classDef dados fill:#FFFAF4,stroke:#E6CEB1,stroke-width:1.5px,color:#8B623C
+    classDef entrada fill:#FFFFFF,stroke:#DCE4EC,stroke-width:1.5px,color:#334155
+    classDef externo fill:#FFFFFF,stroke:#DCE4EC,stroke-width:1.5px,color:#64748B
+    classDef gateway fill:#F8FAFD,stroke:#B9CBDF,stroke-width:1.5px,color:#344C68
+    classDef principal fill:#E8F7F2,stroke:#0F9F87,stroke-width:2.5px,color:#075E50
+    classDef servico fill:#FFFFFF,stroke:#B9DCD1,stroke-width:1.5px,color:#356C60
+    class cliente entrada
+    class kong gateway
+    class api principal
+    class cache,bvmf servico
+    class redis dados
+    class escritor externo
+    style container fill:#F8FCFA,stroke:#C8E5DA,stroke-width:1.5px,color:#257361
 ```
 
 **Características**
@@ -119,34 +172,95 @@ flowchart LR
 - **Exchange Calendars**: calendário oficial BVMF, com janela de cobertura móvel e consultável
 - **Proxy-aware**: funciona atrás de um prefixo de gateway nos dois modos do Kong (`strip_path` `true` e `false`)
 - **Docker multi-arch** (linux/amd64, linux/arm64), usuário sem privilégios, sem `pip` na imagem
-- **CI/CD** com testes em dois Pythons, análise estática, varreduras de segurança, smoke test da imagem real e quality gate bloqueante do SonarQube
+- **CI/CD** com testes por bloco em Python 3.14, análise estática, varreduras de segurança, smoke test, E2E, DAST e carga na imagem real, diagramas verificados como o GitHub os desenha e quality gate bloqueante do SonarQube
 
 ### Mapa de módulos
 
 ```mermaid
-%%{init: {"flowchart": {"wrappingWidth": 480}}}%%
+---
+config:
+  theme: base
+  look: neo
+  layout: dagre
+  fontFamily: "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans, Helvetica, Arial, sans-serif"
+  htmlLabels: false
+  themeCSS: ".edgeLabel rect { opacity: 1 !important; } .edge-thickness-normal { stroke-width: 1.5px !important; }"
+  themeVariables:
+    fontFamily: "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans, Helvetica, Arial, sans-serif"
+    fontSize: 15px
+    primaryColor: "#FFFFFF"
+    primaryTextColor: "#334155"
+    primaryBorderColor: "#DCE4EC"
+    nodeBorder: "#DCE4EC"
+    lineColor: "#8895A9"
+    textColor: "#475569"
+    edgeLabelBackground: "#FFFFFF"
+    clusterBkg: "#F8FCFA"
+    clusterBorder: "#C8E5DA"
+    titleColor: "#257361"
+  flowchart:
+    curve: basis
+    nodeSpacing: 26
+    rankSpacing: 45
+    padding: 18
+    wrappingWidth: 400
+    diagramPadding: 24
+---
 flowchart TB
-    main["src/b3datetime/main.py<br/>create_app() · lifespan · handlers de exceção · B3DateTimeAPI"]
-    cfg["src/b3datetime/config.py<br/>Settings · get_current_datetime · redact_url"]
-    mw["src/b3datetime/middleware.py<br/>RootPathPrefixMiddleware"]
-    dep["src/b3datetime/dependencies.py<br/>RedisDep · CalendarDep · SettingsDep"]
-    subgraph routers["src/b3datetime/routers"]
-        root["root.py · GET /"]
-        hours["hours.py · /v1/hours · /open · /close"]
-        dates["dates.py · /v1/is-trading-day · /v1/trading-days · /v1/calendar-info"]
-        health["health.py · /v1/health"]
-        ex["openapi_examples.py · tags · segurança · exemplos"]
+    entry("`**Entrada do pacote**
+    python -m b3datetime`")
+    main("`**main.py**
+    create_app · lifespan · handlers`")
+    mw("`**middleware.py**
+    RootPathPrefixMiddleware`")
+    docs("`**documentacao.py**
+    Swagger UI · ReDoc`")
+    static("`**static/**
+    assets servidos em /static`")
+    subgraph routers["routers"]
+        direction LR
+        root("`**root.py**
+        GET /`")
+        hours("`**hours.py**
+        /v1/hours`")
+        dates("`**dates.py**
+        /v1/trading-days …`")
+        health("`**health.py**
+        /v1/health`")
+        ex("`**openapi_examples.py**
+        exemplos compartilhados`")
     end
-    subgraph services["src/b3datetime/services"]
-        redis["redis_service.py<br/>RedisService · RedisCache"]
-        cal["calendar_service.py<br/>TradingCalendar · build_bvmf_calendar"]
+    dep("`**dependencies.py**
+    RedisDep · CalendarDep`")
+    subgraph services["services"]
+        direction TB
+        redis("`**redis_service.py**
+        RedisService · RedisCache`")
+        cal("`**calendar_service.py**
+        TradingCalendar`")
     end
-    static["src/b3datetime/static/assets<br/>Swagger UI · ReDoc · favicon"]
-    entry["src/b3datetime/__main__.py<br/>PYTHONPATH=src python -m b3datetime"]
-    main --> mw & routers & static & services & cfg
-    routers --> dep --> services
-    routers --> ex
+    cfg("`**config.py**
+    Settings · relógio · redact_url`")
+
     entry --> main
+    main --> mw & docs & routers
+    mw ~~~ docs --> static
+    routers --> dep --> services --> cfg
+    main --> services
+    classDef dados fill:#FFFAF4,stroke:#E6CEB1,stroke-width:1.5px,color:#8B623C
+    classDef entrada fill:#FFFFFF,stroke:#DCE4EC,stroke-width:1.5px,color:#334155
+    classDef externo fill:#FFFFFF,stroke:#DCE4EC,stroke-width:1.5px,color:#64748B
+    classDef gateway fill:#F8FAFD,stroke:#B9CBDF,stroke-width:1.5px,color:#344C68
+    classDef principal fill:#E8F7F2,stroke:#0F9F87,stroke-width:2.5px,color:#075E50
+    classDef servico fill:#FFFFFF,stroke:#B9DCD1,stroke-width:1.5px,color:#356C60
+    class entry,dep entrada
+    class main principal
+    class mw,docs gateway
+    class static,ex externo
+    class root,hours,dates,health,redis,cal servico
+    class cfg dados
+    style routers fill:#F8FCFA,stroke:#C8E5DA,stroke-width:1.5px,color:#257361
+    style services fill:#F8FCFA,stroke:#C8E5DA,stroke-width:1.5px,color:#257361
 ```
 
 **Nada faz I/O em tempo de import.** Os serviços são construídos no `lifespan` e ficam em `app.state`; os routers os recebem via `Depends`. Uma falha na construção do calendário não derruba o processo: a API sobe, os endpoints de data respondem `503` e `/v1/health` torna o estado visível.
@@ -154,48 +268,117 @@ flowchart TB
 ### Leitura dos horários (`/v1/hours`)
 
 ```mermaid
+---
+config:
+  theme: base
+  look: neo
+  fontFamily: "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans, Helvetica, Arial, sans-serif"
+  themeCSS: ".messageText, .loopText, .loopText tspan, .sectionTitle, .sectionTitle tspan { paint-order: stroke; stroke: #F8FAFC; stroke-width: 12px; stroke-linejoin: round; }"
+  themeVariables:
+    fontFamily: "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans, Helvetica, Arial, sans-serif"
+    fontSize: 15px
+    actorBkg: "#FFFFFF"
+    actorBorder: "#B9CBDF"
+    actorTextColor: "#334155"
+    actorLineColor: "#8895A9"
+    signalColor: "#8895A9"
+    signalTextColor: "#334155"
+    labelBoxBkgColor: "#F8FAFD"
+    labelBoxBorderColor: "#B9CBDF"
+    labelTextColor: "#344C68"
+    loopTextColor: "#344C68"
+    noteBkgColor: "#FFFAF4"
+    noteBorderColor: "#E6CEB1"
+    noteTextColor: "#8B623C"
+    activationBkgColor: "#E8F7F2"
+    activationBorderColor: "#0F9F87"
+  sequence:
+    mirrorActors: false
+    actorMargin: 50
+    boxMargin: 12
+    messageMargin: 42
+    noteMargin: 12
+    diagramMarginX: 24
+---
 sequenceDiagram
-    autonumber
     participant C as Cliente
     participant K as Kong
     participant A as API /v1/hours
     participant L as Cache local
     participant R as Redis
+    rect rgb(248, 250, 252)
     C->>K: GET /b3datetime/v1/hours
-    K->>A: GET /v1/hours (root_path=/b3datetime)
+    K->>A: GET /v1/hours
     A->>R: MGET open, close
     alt Redis respondeu
-        R-->>A: [open, close]
-        A->>L: grava valores + timestamp
+        R-->>A: open, close
+        A->>L: grava valores e horário
         alt alguma chave ausente
-            A-->>C: 404 Not Found (key)
+            A-->>C: 404 Not Found
         else valor fora de HH:MM
             A-->>C: 502 Bad Gateway
         else
-            A-->>C: 200 {open, close}
+            A-->>C: 200 open, close
         end
     else Redis indisponível
         A->>L: idade do cache?
-        alt cache presente e idade <= TTL
-            A-->>C: 200 (cache local)
+        alt cache presente e dentro do TTL
+            A-->>C: 200 do cache local
         else sem cache ou expirado
-            A-->>C: 503 Service Unavailable (cache_age_seconds)
+            A-->>C: 503 Service Unavailable
         end
+    end
     end
 ```
 
 ### Estados do health check
 
 ```mermaid
+---
+config:
+  theme: base
+  look: neo
+  layout: dagre
+  fontFamily: "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans, Helvetica, Arial, sans-serif"
+  htmlLabels: true
+  themeCSS: ".edgeLabel rect { opacity: 1 !important; } .labelBkg, .edgeLabel p { background-color: #FFFFFF !important; }"
+  themeVariables:
+    fontFamily: "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans, Helvetica, Arial, sans-serif"
+    fontSize: 15px
+    primaryColor: "#FFFFFF"
+    primaryTextColor: "#334155"
+    primaryBorderColor: "#DCE4EC"
+    nodeBorder: "#DCE4EC"
+    lineColor: "#8895A9"
+    textColor: "#475569"
+    edgeLabelBackground: "#FFFFFF"
+    transitionColor: "#8895A9"
+    transitionLabelColor: "#475569"
+    noteBkgColor: "#F8FAFD"
+    noteBorderColor: "#B9CBDF"
+    noteTextColor: "#344C68"
+  state:
+    nodeSpacing: 60
+    rankSpacing: 70
+---
 stateDiagram-v2
-    [*] --> healthy: Redis conectado e calendário carregado
-    healthy --> degraded: Redis caiu, cache das duas chaves ainda válido
-    degraded --> healthy: Redis voltou (reconexão lazy, com throttle)
-    degraded --> unhealthy: cache expirou ou só uma chave em cache
+    state "healthy<br>HTTP 200" as healthy
+    state "degraded<br>HTTP 200" as degraded
+    state "unhealthy<br>HTTP 503" as unhealthy
+
+    [*] --> healthy: Redis e calendário prontos
+    healthy --> degraded: Redis caiu, cache válido
+    degraded --> healthy: Redis voltou
+    degraded --> unhealthy: cache expirou ou incompleto
     healthy --> unhealthy: calendário indisponível
     unhealthy --> healthy: Redis e calendário de volta
-    note right of degraded: HTTP 200
-    note right of unhealthy: HTTP 503 — detectado pelo HEALTHCHECK e por probes
+
+    classDef saudavel fill:#E8F7F2,stroke:#0F9F87,stroke-width:2px,color:#075E50
+    classDef degradado fill:#FFFAF4,stroke:#E6CEB1,stroke-width:1.5px,color:#8B623C
+    classDef falha fill:#FDF3F4,stroke:#EBC4CB,stroke-width:1.5px,color:#9B3B4D
+    class healthy saudavel
+    class degraded degradado
+    class unhealthy falha
 ```
 
 ## 🔌 Endpoints
@@ -644,17 +827,70 @@ Quando o Kong Gateway passar a exigir o header `apikey` (plugin key-auth), a API
 A API é publicada atrás do Kong Gateway sob o prefixo `/b3datetime`, informado à aplicação pela variável `ROOT_PATH`.
 
 ```mermaid
-%%{init: {"flowchart": {"wrappingWidth": 480}}}%%
-flowchart TD
-    B["Browser: GET https://api.quilez.cloud/b3datetime/docs"] --> K{"Kong<br/>strip_path?"}
-    K -->|"true (padrão)"| S1["path = /docs<br/>root_path = /b3datetime (ROOT_PATH)"]
-    K -->|"false"| S2["path = /b3datetime/docs<br/>root_path = /b3datetime"]
-    S1 --> M1["RootPathPrefixMiddleware<br/>path não começa com root_path → prefixa"]
-    S2 --> M2["RootPathPrefixMiddleware<br/>já prefixado → não altera"]
-    M1 --> R["Router: get_route_path() remove /b3datetime → /docs"]
-    M2 --> R
-    R --> D["Página com links relativos<br/>./static/… e ./openapi.json"]
-    D --> B2["Browser resolve contra /b3datetime/docs<br/>→ /b3datetime/static/…"] --> K
+---
+config:
+  theme: base
+  look: neo
+  layout: dagre
+  fontFamily: "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans, Helvetica, Arial, sans-serif"
+  htmlLabels: false
+  themeCSS: ".edgeLabel rect { opacity: 1 !important; } .edge-thickness-normal { stroke-width: 1.5px !important; }"
+  themeVariables:
+    fontFamily: "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans, Helvetica, Arial, sans-serif"
+    fontSize: 15px
+    primaryColor: "#FFFFFF"
+    primaryTextColor: "#334155"
+    primaryBorderColor: "#DCE4EC"
+    nodeBorder: "#DCE4EC"
+    lineColor: "#8895A9"
+    textColor: "#475569"
+    edgeLabelBackground: "#FFFFFF"
+    clusterBkg: "#F8FCFA"
+    clusterBorder: "#C8E5DA"
+    titleColor: "#257361"
+  flowchart:
+    curve: basis
+    nodeSpacing: 60
+    rankSpacing: 70
+    padding: 18
+    wrappingWidth: 400
+    diagramPadding: 24
+---
+flowchart TB
+    browser("`**Navegador**
+    GET /b3datetime/docs`")
+    kong{"`**Kong**
+    strip_path?`"}
+    s1("`**path = /docs**
+    root_path = /b3datetime`")
+    s2("`**path = /b3datetime/docs**
+    root_path = /b3datetime`")
+    m1("`**Middleware**
+    prefixa o path`")
+    m2("`**Middleware**
+    já prefixado, não altera`")
+    router("`**Router**
+    get_route_path → /docs`")
+    pagina("`**Página**
+    links relativos ./static e ./openapi.json`")
+    assets("`**Navegador**
+    resolve contra /b3datetime/docs`")
+
+    browser --> kong
+    kong -- "true, o padrão" --> s1 --> m1 --> router
+    kong -- "false" --> s2 --> m2 --> router
+    router --> pagina --> assets
+    assets -- "busca os assets" --> kong
+    classDef entrada fill:#FFFFFF,stroke:#DCE4EC,stroke-width:1.5px,color:#334155
+    classDef externo fill:#FFFFFF,stroke:#DCE4EC,stroke-width:1.5px,color:#64748B
+    classDef gateway fill:#F8FAFD,stroke:#B9CBDF,stroke-width:1.5px,color:#344C68
+    classDef principal fill:#E8F7F2,stroke:#0F9F87,stroke-width:2.5px,color:#075E50
+    classDef servico fill:#FFFFFF,stroke:#B9DCD1,stroke-width:1.5px,color:#356C60
+    class browser,assets entrada
+    class kong gateway
+    class s1,s2 externo
+    class m1,m2 principal
+    class router,pagina servico
 ```
 
 - **`ROOT_PATH`** deve conter o prefixo (ex.: `/b3datetime`). Barra final é normalizada. O prefixo não pode coincidir com uma rota da própria API (`/v1`, `/docs`, `/redoc`, `/static`, `/openapi.json`).
@@ -801,6 +1037,10 @@ ruff format .           # formatação
 mypy                    # tipagem strict em src/, scripts/ e tests/ (alvos e modo vêm do pyproject)
 pytest                  # testes + coverage (mínimo de 90%)
 pytest -m "not slow"    # pula os testes que constroem o calendário real
+
+# Diagramas Mermaid (job "Documentação · diagramas"): Node ≥ 22 e o Chromium do Playwright
+npm ci --prefix tests/docs --ignore-scripts      # o mermaid.js da versão do GitHub e o Agentic Mermaid
+pytest tests/docs -m "not e2e" --no-cov          # design system, Agentic Mermaid e render claro/escuro
 ```
 
 ## 🧪 Testes
@@ -816,6 +1056,7 @@ A suíte cobre 100% das linhas de `src/b3datetime/` e é organizada em **blocos*
 | `tests/architecture/` | Arquitetura · import-linter + regras | Camadas e dependências entre módulos, import sem I/O (audit hook) e as convenções do projeto sobre a AST | import-linter e pytest |
 | `tests/e2e/` | E2E · contrato 100% | **100% dos endpoints publicados**, contra a imagem real: toda resposta documentada de toda operação, as consultas e a documentação | containers com Redis real e o calendário BVMF real; fora da execução padrão (`-m e2e`) |
 | `tests/dast/` | DAST · OWASP ZAP | **Varredura ativa** da imagem real: toda operação do contrato, `/docs`, `/redoc` e os assets JavaScript vendorizados | ZAP (Automation Framework) na rede de `tests/stack/compose.yaml`, com Redis semeado e `ROOT_PATH` |
+| `tests/docs/` | Documentação · diagramas | **Todo diagrama Mermaid** dos `.md` e os modelos da skill: design system no código-fonte, Agentic Mermaid e o render fiel ao GitHub nos modos claro e escuro | mermaid.js na versão do GitHub (12.1) no Chromium, contraste medido contra a superfície pintada; fora da execução padrão (`-m diagramas`) |
 | `tests/load/` | Performance · k6 | **Carga concorrente** na imagem real: todas as operações a taxa constante, o pior caso de `/v1/trading-days` em paralelo e o health medido durante os dois | k6 na mesma stack; o health sob carga não pode ficar mais de 5× mais lento que o ocioso |
 
 A cobertura de cada bloco é parcial; o job **Cobertura · combinada** soma os blocos, aplica o gate de 90% e reprova se qualquer teste tiver sido pulado.
@@ -876,47 +1117,97 @@ E2E_BASE_URL=https://api.quilez.cloud/b3datetime python -m pytest -m e2e tests/e
 Pipeline em [`.github/workflows/ci.yml`](.github/workflows/ci.yml), disparado em push na `main`, em pull request e manualmente.
 
 ```mermaid
-%%{init: {"flowchart": {"wrappingWidth": 480}}}%%
-flowchart LR
-    classDef estatica fill:#e8f1fb,stroke:#1d76db,color:#0b3d75
-    classDef processo fill:#e9f7ef,stroke:#0e8a16,color:#0b4d14
-    classDef consolida fill:#fff6e0,stroke:#d4a017,color:#5c4500
-    classDef imagem fill:#f3e8fb,stroke:#5319e7,color:#2d0c80
-    classDef gate fill:#ffffff,stroke:#24292f,color:#24292f,stroke-width:2px
-    classDef entrega fill:#fdecea,stroke:#d93f0b,color:#7a1f05
-    classDef producao fill:#e6f6f4,stroke:#0f766e,color:#134e4a
+---
+config:
+  theme: base
+  look: neo
+  layout: dagre
+  fontFamily: "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans, Helvetica, Arial, sans-serif"
+  htmlLabels: false
+  themeCSS: ".edgeLabel rect { opacity: 1 !important; } .edge-thickness-normal { stroke-width: 1.5px !important; }"
+  themeVariables:
+    fontFamily: "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans, Helvetica, Arial, sans-serif"
+    fontSize: 15px
+    primaryColor: "#FFFFFF"
+    primaryTextColor: "#334155"
+    primaryBorderColor: "#DCE4EC"
+    nodeBorder: "#DCE4EC"
+    lineColor: "#8895A9"
+    textColor: "#475569"
+    edgeLabelBackground: "#FFFFFF"
+    clusterBkg: "#F8FCFA"
+    clusterBorder: "#C8E5DA"
+    titleColor: "#257361"
+  flowchart:
+    curve: basis
+    nodeSpacing: 28
+    rankSpacing: 50
+    padding: 18
+    wrappingWidth: 400
+    diagramPadding: 24
+---
+flowchart TB
+    subgraph estatica["Estática"]
+        direction LR
+        lint("`**Lint e tipagem**
+        ruff · infra · mypy strict`") ~~~ arq("`**Arquitetura**
+        import-linter · código morto`")
+        sast("`**Segurança**
+        SAST · SCA · segredos`") ~~~ seg("`**Contrato e documentação**
+        oasdiff · diagramas`")
+    end
+    subgraph processo["Testes em processo"]
+        blocos("`**Blocos**
+        unitários · componente
+        integração · property`")
+    end
+    subgraph consolidacao["Consolidação"]
+        direction LR
+        cov("`**Cobertura**
+        combinada ≥ 90% · tripwires`") --> sonar("`**SonarQube**
+        quality gate`")
+        mut("`**Mutação**
+        mutmut ≥ 99%`") ~~~ sonar
+    end
+    subgraph imagem["A imagem"]
+        direction LR
+        dv("`**Build**
+        smoke · Trivy`") --> e2e("`**E2E**
+        100% do contrato`")
+        dv --> dast("`**DAST**
+        ZAP ativo`")
+        dv --> perf("`**Performance**
+        k6`")
+    end
+    subgraph entrega["Entrega"]
+        direction LR
+        ok(["`**ci-ok**`"]) --> pub("`**docker-publish**
+        latest · sha-abc1234`")
+        pub --> rel("`**Release**
+        versão nova`")
+        pub --> sbom("`**SBOM**`")
+        pub --> pos("`**Pós-deploy**
+        build · E2E · ZAP · headers`")
+    end
 
-    subgraph s1["① Estática"]
-        direction LR
-        lint["lint (ruff) · lint de infra"]:::estatica
-        tipos["tipagem (mypy strict)"]:::estatica
-        arq["arquitetura · código morto"]:::estatica
-        sast["SAST: bandit · CodeQL · zizmor"]:::estatica
-        sca["SCA: pip-audit · Trivy fs<br/>dependency-review (PR)"]:::estatica
-        seg["segredos (gitleaks)<br/>contrato (oasdiff × SemVer)"]:::estatica
-    end
-    subgraph s2["② Testes em processo"]
-        direction LR
-        blocos["unitários · componente<br/>integração · property-based"]:::processo
-    end
-    subgraph s3["③ Consolidação"]
-        direction LR
-        cov["cobertura combinada ≥ 90%"]:::consolida --> sonar["SonarQube<br/>quality gate"]:::consolida
-        mut["mutação (mutmut) ≥ 99%"]:::consolida
-    end
-    subgraph s4["④ A imagem"]
-        direction LR
-        dv["build · smoke · Trivy"]:::imagem --> e2e["E2E · 100% do contrato"]:::imagem
-        dv --> dast["DAST (ZAP, ativo)"]:::imagem
-        dv --> perf["performance (k6)"]:::imagem
-    end
-    ok{{"ci-ok"}}:::gate
-    pub["docker-publish (push na main)<br/>latest · sha-abc1234"]:::entrega
-    rel["release (versão nova)"]:::entrega
-    sbom["SBOM"]:::entrega
-    pos["pós-deploy (produção)<br/>build = SHA · E2E de leitura<br/>ZAP passivo · headers da borda"]:::producao
-
-    s1 & s2 --> s3 --> s4 --> ok --> pub --> rel & sbom & pos
+    estatica & processo --> consolidacao --> imagem --> entrega
+    classDef dados fill:#FFFAF4,stroke:#E6CEB1,stroke-width:1.5px,color:#8B623C
+    classDef externo fill:#FFFFFF,stroke:#DCE4EC,stroke-width:1.5px,color:#64748B
+    classDef gate fill:#FFFFFF,stroke:#334155,stroke-width:2px,color:#334155
+    classDef gateway fill:#F8FAFD,stroke:#B9CBDF,stroke-width:1.5px,color:#344C68
+    classDef principal fill:#E8F7F2,stroke:#0F9F87,stroke-width:2.5px,color:#075E50
+    classDef servico fill:#FFFFFF,stroke:#B9DCD1,stroke-width:1.5px,color:#356C60
+    class lint,arq,sast,seg gateway
+    class blocos servico
+    class cov,sonar,mut dados
+    class dv,e2e,dast,perf,pub,rel,sbom principal
+    class ok gate
+    class pos externo
+    style estatica fill:#F8FAFD,stroke:#B9CBDF,stroke-width:1.5px,color:#344C68
+    style processo fill:#F8FCFA,stroke:#C8E5DA,stroke-width:1.5px,color:#257361
+    style consolidacao fill:#FFFAF4,stroke:#E6CEB1,stroke-width:1.5px,color:#8B623C
+    style imagem fill:#F8FCFA,stroke:#C8E5DA,stroke-width:1.5px,color:#257361
+    style entrega fill:#F8FCFA,stroke:#C8E5DA,stroke-width:1.5px,color:#257361
 ```
 
 | Etapa | Ferramenta | Observação |
@@ -932,6 +1223,7 @@ flowchart LR
 | SAST | bandit, CodeQL (Python e os próprios workflows), zizmor | zizmor audita os workflows: injeção de template, permissões, credencial persistida, action sem pin por SHA, cache envenenável, ações com vulnerabilidade conhecida |
 | CVEs em dependências | pip-audit, dependency-review | |
 | Segredos | gitleaks | histórico inteiro |
+| Diagramas | `tests/docs`: mermaid.js 12.1 no Chromium e Agentic Mermaid | todo diagrama dos `.md` renderizado como o GitHub renderiza, no fundo claro e no escuro: texto ≥ 4,5:1 contra a superfície pintada, linhas ≥ 3:1, corpo efetivo ≥ 13 px, nada cortado; frontmatter e paleta do design system ([skill `mermaid-design`](.claude/skills/mermaid-design/SKILL.md)); capturas publicadas como artefato |
 | Contrato | oasdiff | `tests/contract/openapi.json` (snapshot do contrato, versionado) contra o da última release: breaking change sem bump de MAJOR reprova |
 | Filesystem e imagem | Trivy | `CRITICAL`/`HIGH` reprovam |
 | Smoke test | `scripts/smoke_image.sh` | container real, com e sem prefixo, Redis real e `HEALTHCHECK` |
@@ -943,7 +1235,7 @@ flowchart LR
 | Release | tag, retag da imagem e GitHub Release | automática quando a `api_version` do commit publicado ainda não tem Release |
 | Pós-deploy | `GET /` (`build`), E2E em modo URL, ZAP passivo, `scripts/cabecalhos_da_borda.py` | depois do pull automático: espera a produção servir o commit, roda a suíte de leitura e a varredura passiva contra a URL pública e confere os headers de segurança da borda; fora do `ci-ok` |
 
-- `ci-ok` é o único check agregador, e o `docker-publish` depende dele: nenhuma imagem é publicada sem **todos** os blocos aprovados — lint, tipagem, testes, SAST, SCA, segredos, smoke, E2E, DAST, performance, scan da imagem e quality gate. Em push, um bloco pulado também reprova; o resumo do run traz a tabela de blocos com o resultado de cada um.
+- `ci-ok` é o único check agregador, e o `docker-publish` depende dele: nenhuma imagem é publicada sem **todos** os blocos aprovados — lint, tipagem, testes, diagramas, SAST, SCA, segredos, smoke, E2E, DAST, performance, scan da imagem e quality gate. Em push, um bloco pulado também reprova; o resumo do run traz a tabela de blocos com o resultado de cada um.
 - Actions fixadas por SHA de commit (com a versão em comentário, atualizada pelo Dependabot), `persist-credentials: false` em todo checkout e `timeout-minutes` em todo job.
 - É o **único workflow** do repositório: não há gatilho de tag. A release é um job do próprio `ci.yml` que roda depois da publicação (ver [Versionamento e Release](#️-versionamento-e-release)).
 - Em PRs do Dependabot o job do SonarQube é pulado (o PR não recebe os secrets); o restante roda normalmente.
@@ -956,12 +1248,67 @@ O projeto segue [SemVer](https://semver.org/lang/pt-BR/) e [Keep a Changelog](ht
 A versão vive em `src/b3datetime/config.py` (`api_version`) e é copiada em três lugares que precisam concordar: `pyproject.toml`, o cabeçalho deste README e a seção do `CHANGELOG.md`. Os testes de `tests/unit/test_config.py` impõem a sincronia e exigem que a seção do CHANGELOG da versão não esteja vazia — no job `test`, antes de qualquer publicação.
 
 ```mermaid
-%%{init: {"flowchart": {"wrappingWidth": 480}}}%%
-flowchart LR
-    v["1. Sincronizar a versão<br/>config.py · pyproject.toml · README · CHANGELOG"] --> c["2. chore(release): vX.Y.Z"] --> p["3. push na main"]
-    p --> pub["ci.yml: testes · scan · docker-publish"] --> rel["job release: versão sem Release?"]
-    rel -->|sim| cria["tag vX.Y.Z no commit · retag X · X.Y · X.Y.Z pelo digest · GitHub Release com as notas"]
-    rel -->|não| nada["nada a fazer"]
+---
+config:
+  theme: base
+  look: neo
+  layout: dagre
+  fontFamily: "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans, Helvetica, Arial, sans-serif"
+  htmlLabels: false
+  themeCSS: ".edgeLabel rect { opacity: 1 !important; } .edge-thickness-normal { stroke-width: 1.5px !important; }"
+  themeVariables:
+    fontFamily: "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans, Helvetica, Arial, sans-serif"
+    fontSize: 15px
+    primaryColor: "#FFFFFF"
+    primaryTextColor: "#334155"
+    primaryBorderColor: "#DCE4EC"
+    nodeBorder: "#DCE4EC"
+    lineColor: "#8895A9"
+    textColor: "#475569"
+    edgeLabelBackground: "#FFFFFF"
+    clusterBkg: "#F8FCFA"
+    clusterBorder: "#C8E5DA"
+    titleColor: "#257361"
+  flowchart:
+    curve: basis
+    nodeSpacing: 36
+    rankSpacing: 50
+    padding: 18
+    wrappingWidth: 400
+    diagramPadding: 24
+---
+flowchart TB
+    subgraph manual["Na máquina de quem publica"]
+        direction LR
+        versao("`**Sincronizar a versão**
+        config · pyproject
+        README · CHANGELOG`") --> commit("`**Commit de release**
+        chore(release): vX.Y.Z`") --> push("`**Push na main**`")
+    end
+    subgraph automatico["No CI, sem intervenção"]
+        direction LR
+        pipeline("`**CI**
+        testes · scan · docker-publish`") --> nova{"`**Versão nova?**`"}
+        nova -- "sim" --> cria("`**Job release**
+        tag · retag · Release`")
+        nova -- "não" --> nada("`**Nada a fazer**`")
+    end
+
+    manual --> automatico
+    classDef entrada fill:#FFFFFF,stroke:#DCE4EC,stroke-width:1.5px,color:#334155
+    classDef externo fill:#FFFFFF,stroke:#DCE4EC,stroke-width:1.5px,color:#64748B
+    classDef gate fill:#FFFFFF,stroke:#334155,stroke-width:2px,color:#334155
+    classDef gateway fill:#F8FAFD,stroke:#B9CBDF,stroke-width:1.5px,color:#344C68
+    classDef principal fill:#E8F7F2,stroke:#0F9F87,stroke-width:2.5px,color:#075E50
+    classDef servico fill:#FFFFFF,stroke:#B9DCD1,stroke-width:1.5px,color:#356C60
+    class versao,commit entrada
+    class push gateway
+    class pipeline servico
+    class nova gate
+    class cria principal
+    class nada externo
+    style manual fill:#F8FAFD,stroke:#B9CBDF,stroke-width:1.5px,color:#344C68
+    style automatico fill:#F8FCFA,stroke:#C8E5DA,stroke-width:1.5px,color:#257361
 ```
 
 **Não existe tag manual.** O commit de release na `main` basta: o job `release` do CI lê a `api_version`, e se ela ainda não tem Release cria a tag `vX.Y.Z` naquele commit, adiciona `X.Y.Z`, `X.Y` e `X` ao manifest que o `docker-publish` acabou de enviar (pelo digest, sem rebuild) e publica a Release com a seção do CHANGELOG. Em qualquer outro push, a versão já tem Release e o job não faz nada. Se ele falhar no meio, "Re-run failed jobs" retoma do ponto em que parou: todos os passos são idempotentes. O passo a passo completo está na skill [`release`](.claude/skills/release/SKILL.md).
@@ -1021,6 +1368,7 @@ A v2.0.0 corrige respostas que antes eram silenciosamente erradas. As mudanças 
 3. **Barra de qualidade**: `ruff check`, `ruff format --check`, `mypy` (strict) e `pytest` verdes; nenhuma issue nova no SonarQube; toda correção de defeito vem com um teste de regressão nomeado.
 4. **Idioma**: docstrings, comentários, textos do OpenAPI e mensagens de commit em pt-BR; identificadores em inglês.
 5. **Mudança de contrato** (código HTTP, campo removido ou renomeado) exige entrada `**BREAKING**` no CHANGELOG e guia de migração neste README.
+6. **Diagramas** seguem a skill [`mermaid-design`](.claude/skills/mermaid-design/SKILL.md): parta de um modelo de `.claude/skills/mermaid-design/modelos/` e rode `pytest tests/docs -m "not e2e" --no-cov` (precisa de `npm ci` em `tests/docs` e do Chromium do Playwright) antes do push.
 
 ## 📄 Licença
 
@@ -1033,6 +1381,8 @@ Rodrigo Quilez ([@rlquilez](https://github.com/rlquilez))
 ## 📚 Documentação adicional
 
 - [CHANGELOG.md](CHANGELOG.md)
+- [Arquitetura dos testes](tests/README.md)
+- [Design system dos diagramas](.claude/skills/mermaid-design/SKILL.md)
 - [Documentação FastAPI](https://fastapi.tiangolo.com/)
 - [Exchange Calendars](https://github.com/gerrymanoim/exchange_calendars)
 - [Redis Python Client](https://redis-py.readthedocs.io/)

@@ -27,6 +27,7 @@ Cada bloco de teste é **um diretório** em `tests/` e **um job** no [`ci.yml`](
 | `tests/integration/` | **Integração** | o encontro com o mundo real: Redis real, calendário BVMF real, lifespan real, a app inteira com tudo real | Redis em `localhost:6379` (db 15) |
 | `tests/property/` | **Property-based** | propriedades que valem para **toda** entrada gerada, não só para os exemplos escolhidos: nunca levanta, nunca vaza, é idempotente, preserva o resto | nenhuma — Hypothesis |
 | `tests/architecture/` | **Arquitetura** | as regras de desenho: camadas e dependências entre módulos (import-linter), import sem I/O (audit hook) e as convenções do CLAUDE.md sobre a AST | nenhuma |
+| `tests/docs/` | **Documentação · diagramas** | todo diagrama Mermaid dos `.md` (e os modelos da skill) **como o GitHub o desenha**, nos modos claro e escuro: design system, Agentic Mermaid, contraste e escala | Node ≥ 22 (`npm ci` em `tests/docs`) e o Chromium do Playwright |
 | `tests/e2e/` | **E2E** | a **imagem Docker** publicável, caixa-preta: 100% das respostas documentadas, consultas de domínio, documentação, resiliência | Docker (4 ambientes de containers) |
 | `tests/dast/` | **DAST** | a mesma imagem **sob ataque**: varredura ativa do OWASP ZAP em toda operação do contrato, nas páginas de documentação e nos assets JavaScript vendorizados | Docker (`tests/stack/compose.yaml` + ZAP) |
 | `tests/load/` | **Performance** | a mesma imagem **sob carga concorrente**: todas as operações a taxa constante, o pior caso de `/v1/trading-days` em paralelo e o health medido durante os dois | Docker (`tests/stack/compose.yaml` + k6) |
@@ -36,23 +37,62 @@ Cada bloco de teste é **um diretório** em `tests/` e **um job** no [`ci.yml`](
 A pirâmide clássica (muitos unitários, poucos E2E) continua valendo na **quantidade**: 310 unitários contra 61 E2E. Mas cada camada aqui existe porque **enxerga algo que as de baixo não enxergam**, e cada uma pegou ao menos um defeito real que as outras deixavam passar.
 
 ```mermaid
-%%{init: {"flowchart": {"wrappingWidth": 480}}}%%
+---
+config:
+  theme: base
+  look: neo
+  layout: dagre
+  fontFamily: "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans, Helvetica, Arial, sans-serif"
+  htmlLabels: false
+  themeCSS: ".edgeLabel rect { opacity: 1 !important; } .edge-thickness-normal { stroke-width: 1.5px !important; }"
+  themeVariables:
+    fontFamily: "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans, Helvetica, Arial, sans-serif"
+    fontSize: 15px
+    primaryColor: "#FFFFFF"
+    primaryTextColor: "#334155"
+    primaryBorderColor: "#DCE4EC"
+    nodeBorder: "#DCE4EC"
+    lineColor: "#8895A9"
+    textColor: "#475569"
+    edgeLabelBackground: "#FFFFFF"
+    clusterBkg: "#F8FCFA"
+    clusterBorder: "#C8E5DA"
+    titleColor: "#257361"
+  flowchart:
+    curve: basis
+    nodeSpacing: 20
+    rankSpacing: 10
+    padding: 18
+    wrappingWidth: 600
+    diagramPadding: 24
+---
 flowchart TB
-    classDef estatica fill:#e8f1fb,stroke:#1d76db,color:#0b3d75
-    classDef processo fill:#e9f7ef,stroke:#0e8a16,color:#0b4d14
-    classDef meta fill:#fff6e0,stroke:#d4a017,color:#5c4500
-    classDef imagem fill:#f3e8fb,stroke:#5319e7,color:#2d0c80
-    classDef producao fill:#e6f6f4,stroke:#0f766e,color:#134e4a
+    prod("`**Produção**
+    pós-deploy`")
+    img("`**Imagem**
+    smoke · E2E · DAST · k6`")
+    mut("`**Mutação**
+    os testes percebem um defeito?`")
+    real("`**Integração · property-based**
+    Redis e calendário reais · Hypothesis`")
+    comp("`**Componente**
+    o app ASGI inteiro, em processo, nos 3 proxies`")
+    unit("`**Unitários**
+    cada peça isolada, sem I/O, relógio injetado, fakeredis`")
+    est("`**Estática**
+    lint · tipos · arquitetura · código morto · SAST · SCA · oasdiff`")
 
-    prod["🌐 Produção · pós-deploy<br/><i>a resposta depois do Kong e do Cloudflare: build, contrato, headers da borda</i>"]:::producao
-    img["📦 Imagem · smoke · E2E · DAST · k6<br/><i>o container real: caixa-preta, sob ataque e sob carga</i>"]:::imagem
-    mut["🧬 Mutação<br/><i>os testes percebem um defeito? (não só: a linha rodou?)</i>"]:::meta
-    real["🔌 Integração · 🎲 Property-based<br/><i>dependências reais · toda entrada gerada, não só os exemplos</i>"]:::processo
-    comp["🧩 Componente<br/><i>a aplicação ASGI inteira, em processo, nos três formatos de proxy</i>"]:::processo
-    unit["🔬 Unitários<br/><i>cada peça isolada, sem I/O, relógio injetado</i>"]:::processo
-    est["📐 Estática<br/><i>lint · tipos · arquitetura · código morto · SAST · SCA · contrato</i>"]:::estatica
-
-    prod --- img --- mut --- real --- comp --- unit --- est
+    prod ~~~ img ~~~ mut ~~~ real ~~~ comp ~~~ unit ~~~ est
+    classDef dados fill:#FFFAF4,stroke:#E6CEB1,stroke-width:1.5px,color:#8B623C
+    classDef externo fill:#FFFFFF,stroke:#DCE4EC,stroke-width:1.5px,color:#64748B
+    classDef gateway fill:#F8FAFD,stroke:#B9CBDF,stroke-width:1.5px,color:#344C68
+    classDef principal fill:#E8F7F2,stroke:#0F9F87,stroke-width:2.5px,color:#075E50
+    classDef servico fill:#FFFFFF,stroke:#B9DCD1,stroke-width:1.5px,color:#356C60
+    class prod externo
+    class img principal
+    class mut dados
+    class real,comp,unit servico
+    class est gateway
 ```
 
 | Camada | O que só ela viu |
@@ -69,64 +109,120 @@ flowchart TB
 ## O pipeline, bloco a bloco
 
 ```mermaid
-%%{init: {"flowchart": {"wrappingWidth": 480}}}%%
-flowchart LR
-    classDef estatica fill:#e8f1fb,stroke:#1d76db,color:#0b3d75
-    classDef processo fill:#e9f7ef,stroke:#0e8a16,color:#0b4d14
-    classDef consolida fill:#fff6e0,stroke:#d4a017,color:#5c4500
-    classDef imagem fill:#f3e8fb,stroke:#5319e7,color:#2d0c80
-    classDef gate fill:#ffffff,stroke:#24292f,color:#24292f,stroke-width:2px
-    classDef entrega fill:#fdecea,stroke:#d93f0b,color:#7a1f05
-    classDef producao fill:#e6f6f4,stroke:#0f766e,color:#134e4a
-
-    subgraph E1["① Análise estática · 13 jobs"]
+---
+config:
+  theme: base
+  look: neo
+  layout: dagre
+  fontFamily: "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans, Helvetica, Arial, sans-serif"
+  htmlLabels: false
+  themeCSS: ".edgeLabel rect { opacity: 1 !important; } .edge-thickness-normal { stroke-width: 1.5px !important; }"
+  themeVariables:
+    fontFamily: "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans, Helvetica, Arial, sans-serif"
+    fontSize: 15px
+    primaryColor: "#FFFFFF"
+    primaryTextColor: "#334155"
+    primaryBorderColor: "#DCE4EC"
+    nodeBorder: "#DCE4EC"
+    lineColor: "#8895A9"
+    textColor: "#475569"
+    edgeLabelBackground: "#FFFFFF"
+    clusterBkg: "#F8FCFA"
+    clusterBorder: "#C8E5DA"
+    titleColor: "#257361"
+  flowchart:
+    curve: basis
+    nodeSpacing: 28
+    rankSpacing: 50
+    padding: 18
+    wrappingWidth: 400
+    diagramPadding: 24
+---
+flowchart TB
+    subgraph estatica["Estática · 14 jobs"]
         direction LR
-        lint["Lint · ruff<br/>Lint · infra<br/><i>actionlint · hadolint · shellcheck</i>"]:::estatica
-        mypy["Tipagem · mypy strict"]:::estatica
-        arq["Arquitetura · import-linter + regras<br/>Código morto · vulture · deptry · fixtures"]:::estatica
-        sast["SAST · bandit<br/>SAST · CodeQL <i>python · actions</i><br/>SAST · zizmor <i>workflows</i>"]:::estatica
-        sca["SCA · pip-audit<br/>SCA · Trivy (filesystem)<br/>SCA · dependency-review <i>só em PR</i>"]:::estatica
-        seg["Segredos · gitleaks"]:::estatica
-        contract["Contrato · oasdiff<br/><i>breaking × SemVer</i>"]:::estatica
+        lint("`**Lint**
+        ruff · actionlint
+        hadolint · shellcheck`") ~~~ tipos("`**Tipagem**
+        mypy strict
+        src · scripts · tests`")
+        arq("`**Arquitetura**
+        import-linter
+        regras de AST`") ~~~ morto("`**Código morto**
+        vulture · deptry
+        fixtures sem uso`")
+        sast("`**SAST**
+        bandit · CodeQL
+        zizmor`") ~~~ sca("`**SCA**
+        pip-audit · Trivy fs
+        dependency-review`")
+        seg("`**Segredos · contrato**
+        gitleaks
+        oasdiff`") ~~~ docs("`**Documentação**
+        diagramas Mermaid
+        no Chromium`")
+    end
+    subgraph processo["Testes em processo"]
+        direction LR
+        unit("`**Unitários**`")
+        comp("`**Componente**`")
+        integ("`**Integração**
+        Redis e calendário reais`")
+        prop("`**Property-based**
+        Hypothesis · 500 exemplos`")
+    end
+    subgraph consolidacao["Consolidação"]
+        direction LR
+        cov("`**Cobertura**
+        combinada ≥ 90% · tripwires`") --> sonar("`**SonarQube**
+        quality gate`")
+        mut("`**Mutação**
+        mutmut ≥ 99%`") ~~~ sonar
+    end
+    subgraph imagem["A imagem"]
+        direction LR
+        dv("`**Build**
+        smoke · Trivy`") --> e2e("`**E2E**
+        100% do contrato`")
+        dv --> dast("`**DAST**
+        ZAP ativo`")
+        dv --> perf("`**Performance**
+        k6`")
+    end
+    subgraph entrega["Entrega"]
+        direction LR
+        ok(["`**ci-ok**`"]) --> pub("`**docker-publish**
+        latest · sha-abc1234`")
+        pub --> rel("`**Release**
+        versão nova`")
+        pub --> sbom("`**SBOM**`")
+        pub --> pos("`**Pós-deploy**
+        build · E2E · ZAP · headers`")
     end
 
-    subgraph E2["② Testes em processo"]
-        direction LR
-        unit["Testes · unitários"]:::processo
-        comp["Testes · componente"]:::processo
-        integ["Testes · integração<br/><i>Redis + calendário reais</i>"]:::processo
-        prop["Testes · property-based<br/><i>Hypothesis · 500 exemplos</i>"]:::processo
-    end
-
-    subgraph E3["③ Consolidação"]
-        direction LR
-        cov["Cobertura · combinada<br/>≥ 90% + tripwires"]:::consolida
-        sonar["Qualidade · SonarQube<br/>quality gate"]:::consolida
-        mut["Mutação · mutmut<br/>score ≥ 99%"]:::consolida
-    end
-
-    subgraph E4["④ Imagem"]
-        direction LR
-        dv["Imagem · build, smoke e Trivy"]:::imagem
-        e2e["E2E · contrato 100%"]:::imagem
-        dast["DAST · OWASP ZAP<br/><i>varredura ativa</i>"]:::imagem
-        perf["Performance · k6<br/><i>carga concorrente</i>"]:::imagem
-    end
-
-    ok{{"CI OK"}}:::gate
-    pub["Entrega · publicar imagem"]:::entrega
-    rel["Entrega · release"]:::entrega
-    sbom["Entrega · SBOM"]:::entrega
-    pos["Produção · pós-deploy<br/><i>build = SHA · E2E de leitura<br/>ZAP passivo · headers da borda</i>"]:::producao
-
-    cov --> sonar
-    dv --> e2e & dast & perf
-    E1 & E2 --> E3 --> E4 --> ok --> pub --> rel & sbom & pos
+    estatica & processo --> consolidacao --> imagem --> entrega
+    classDef dados fill:#FFFAF4,stroke:#E6CEB1,stroke-width:1.5px,color:#8B623C
+    classDef externo fill:#FFFFFF,stroke:#DCE4EC,stroke-width:1.5px,color:#64748B
+    classDef gate fill:#FFFFFF,stroke:#334155,stroke-width:2px,color:#334155
+    classDef gateway fill:#F8FAFD,stroke:#B9CBDF,stroke-width:1.5px,color:#344C68
+    classDef principal fill:#E8F7F2,stroke:#0F9F87,stroke-width:2.5px,color:#075E50
+    classDef servico fill:#FFFFFF,stroke:#B9DCD1,stroke-width:1.5px,color:#356C60
+    class lint,tipos,arq,sast,sca,seg,docs,morto gateway
+    class unit,comp,integ,prop servico
+    class cov,sonar,mut dados
+    class dv,e2e,dast,perf,pub,rel,sbom principal
+    class ok gate
+    class pos externo
+    style estatica fill:#F8FAFD,stroke:#B9CBDF,stroke-width:1.5px,color:#344C68
+    style processo fill:#F8FCFA,stroke:#C8E5DA,stroke-width:1.5px,color:#257361
+    style consolidacao fill:#FFFAF4,stroke:#E6CEB1,stroke-width:1.5px,color:#8B623C
+    style imagem fill:#F8FCFA,stroke:#C8E5DA,stroke-width:1.5px,color:#257361
+    style entrega fill:#F8FCFA,stroke:#C8E5DA,stroke-width:1.5px,color:#257361
 ```
 
 | Estágio | Por que nesta posição |
 |---|---|
-| ① Estática | Não executa nada da aplicação: é o mais barato e falha mais cedo. Roda em paralelo com ②, sem dependências. |
+| ① Estática | Não executa nada da aplicação: é o mais barato e falha mais cedo. Roda em paralelo com ②, sem dependências. Inclui a documentação: os diagramas são renderizados e medidos aqui. |
 | ② Em processo | Testes rápidos, sem container. Cada bloco publica a sua cobertura parcial e o seu `junit`. |
 | ③ Consolidação | A cobertura só faz sentido somada: o gate de 90% é aplicado **uma vez**, sobre os blocos combinados. O Sonar consome o resultado. |
 | ④ Imagem | Só se constrói e se testa a imagem depois de o código passar em processo — testar a imagem de um código que já falhou é desperdício. E2E, DAST e performance carregam o artefato do `docker-verify` e exercitam, em paralelo, exatamente os bits que passaram no smoke e no Trivy. |
@@ -149,6 +245,7 @@ Não executa a aplicação; por isso roda primeiro e em paralelo.
 | SAST · zizmor | auditoria dedicada de GitHub Actions: injeção de template, permissões excessivas, `persist-credentials`, pin por SHA, cache envenenável, gatilhos perigosos, actions com vulnerabilidade conhecida | limpo até no perfil `pedantic`; o que só o perfil `auditor` aponta (secrets fora de *environment*) exigiria configuração no repositório e está registrado como decisão |
 | Segredos · gitleaks | o histórico **inteiro** do git | um segredo removido do código continua no histórico |
 | SCA · pip-audit / Trivy fs / dependency-review | CVEs nas dependências pinadas, no filesystem (inclui misconfig do `Dockerfile`) e nas dependências que um PR introduz | `CRITICAL`/`HIGH` reprovam |
+| Documentação · diagramas | todo bloco ```` ```mermaid ```` dos `.md` rastreados e os modelos da skill: design system no código-fonte, `am verify` do Agentic Mermaid e o render no Chromium com o mermaid.js do GitHub | o README é a porta de entrada do projeto; um diagrama ilegível no modo escuro ou encolhido a 7 px passava em toda revisão de código (ver [Diagramas](#diagramas--testsdocs)) |
 | Contrato · oasdiff | `tests/contract/openapi.json` contra o snapshot da última release | breaking change no contrato só passa com bump de MAJOR — e como todo push vai para produção, a quebra e o bump chegam juntos |
 
 **O contrato é um artefato versionado.** `tests/contract/openapi.json` é o `/openapi.json` que a API serve atrás do Kong, gerado em processo por `scripts/gerar_openapi.py`. Um teste do bloco de componente exige que ele esteja em dia: mudar o contrato sem regenerar reprova, e regenerar faz a mudança aparecer no diff do commit. A sabotagem de referência — remover o campo obrigatório `close` de `/v1/hours` — é barrada pelo oasdiff como `response-required-property-removed`.
@@ -162,16 +259,64 @@ O desenho da aplicação, verificado em vez de descrito. Duas camadas:
 **Contratos de dependência** (import-linter, `lint-imports`), sobre o grafo de imports:
 
 ```mermaid
-%%{init: {"flowchart": {"wrappingWidth": 480}}}%%
+---
+config:
+  theme: base
+  look: neo
+  layout: dagre
+  fontFamily: "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans, Helvetica, Arial, sans-serif"
+  htmlLabels: false
+  themeCSS: ".edgeLabel rect { opacity: 1 !important; } .edge-thickness-normal { stroke-width: 1.5px !important; }"
+  themeVariables:
+    fontFamily: "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans, Helvetica, Arial, sans-serif"
+    fontSize: 15px
+    primaryColor: "#FFFFFF"
+    primaryTextColor: "#334155"
+    primaryBorderColor: "#DCE4EC"
+    nodeBorder: "#DCE4EC"
+    lineColor: "#8895A9"
+    textColor: "#475569"
+    edgeLabelBackground: "#FFFFFF"
+    clusterBkg: "#F8FCFA"
+    clusterBorder: "#C8E5DA"
+    titleColor: "#257361"
+  flowchart:
+    curve: basis
+    nodeSpacing: 60
+    rankSpacing: 70
+    padding: 18
+    wrappingWidth: 400
+    diagramPadding: 24
+---
 flowchart TB
-    classDef camada fill:#e8f1fb,stroke:#1d76db,color:#0b3d75
-    classDef folha fill:#f6f8fa,stroke:#8c959f,color:#24292f
-    entry["__main__"]:::camada --> main["main<br/><i>composição: lifespan, handlers</i>"]:::camada
-    main --> routers["routers<br/><i>hours · dates · health · root (independentes)</i>"]:::camada
-    routers --> deps["dependencies"]:::camada --> services["services<br/><i>redis_service · calendar_service</i>"]:::camada --> config["config"]:::camada
-    main -.-> mw["middleware"]:::folha
-    main -.-> static["static"]:::folha
-    routers -.-> ex["openapi_examples"]:::folha
+    entry("`**Entrada do pacote**
+    python -m b3datetime`")
+    main("`**main**
+    composição: lifespan, handlers`")
+    routers("`**routers**
+    hours · dates · health · root`")
+    deps("`**dependencies**`")
+    services("`**services**
+    redis_service · calendar_service`")
+    config("`**config**`")
+    mw("`**middleware**`")
+    static("`**static**`")
+    ex("`**openapi_examples**`")
+
+    entry --> main --> routers --> deps --> services --> config
+    main -.-> mw
+    main -.-> static
+    routers -.-> ex
+    classDef dados fill:#FFFAF4,stroke:#E6CEB1,stroke-width:1.5px,color:#8B623C
+    classDef entrada fill:#FFFFFF,stroke:#DCE4EC,stroke-width:1.5px,color:#334155
+    classDef externo fill:#FFFFFF,stroke:#DCE4EC,stroke-width:1.5px,color:#64748B
+    classDef principal fill:#E8F7F2,stroke:#0F9F87,stroke-width:2.5px,color:#075E50
+    classDef servico fill:#FFFFFF,stroke:#B9DCD1,stroke-width:1.5px,color:#356C60
+    class entry entrada
+    class main principal
+    class routers,deps,services servico
+    class config dados
+    class mw,static,ex externo
 ```
 
 | Contrato | Regra |
@@ -203,6 +348,20 @@ Código que ninguém chama ainda é lido, revisado, mantido e — no caso deste 
 O código comentado (o código morto que sobrevive como comentário) é pego pelo ruff (`ERA`).
 
 **O que o bloco removeu ao nascer** (#64): `TradingCalendar._sessions`, um atributo nunca lido que segurava o `DatetimeIndex` inteiro da janela de 10 anos em memória; `RedisCache.get`, `RedisCache.clear` e `RedisService.timezone`, API que só os testes chamavam; a fixture `today_session`; e o literal `favicon.png` duplicado em `main.py` (agora a constante `FAVICON`). As constantes de versão dos assets vendorizados ganharam um teste que as confere contra os próprios arquivos — eram o único registro de versão de bibliotecas JS que nem o Dependabot nem o Trivy enxergam.
+
+### Diagramas — `tests/docs/`
+
+Os diagramas são documentação que o leitor **vê**, e o que ele vê depende de um renderizador que não está neste repositório: o iframe do GitHub, com o mermaid.js da versão dele, o `initialize` dele e um fundo `#0d1117` no modo escuro que nenhuma revisão de código enxerga. O bloco reproduz esse renderizador e mede o resultado. O design system que ele impõe — e o porquê de cada regra — está na skill [`mermaid-design`](../.claude/skills/mermaid-design/SKILL.md).
+
+| Camada | Onde | O que reprova |
+|---|---|---|
+| Design system no código-fonte | `test_estilo.py` (roda sempre, sem Node) | frontmatter diferente do canônico da família (`tests/docs/design.py`), cor fora da paleta, `%%{init}%%`, tag além de `<br>`, emoji, linha de rótulo com mais de 64 caracteres, `__` em markdown string, `linkStyle`, sequência sem o painel ou com `autonumber`, transição de estado que quebra linha |
+| Agentic Mermaid | `test_agentic.py` (`am verify`, canal local) | erro de nível 1 (`RENDER_FAILED`, `GROUP_BREACH`…) e todo aviso fora dos tolerados, inclusive `LABEL_OVERFLOW` e `LOW_CONTRAST`; e um layout vazio — com markdown strings o `am` marca o fluxograma como opaco e "passa" sem modelar nada, por isso o diagrama é convertido antes (`tests/docs/agentic.py`) |
+| Render fiel ao GitHub | `test_render.py` + `renderizador.py` (Chromium) | erro de render, rótulo cortado ou fora da forma, tag visível, nós sobrepostos, **texto abaixo de 4,5:1 contra a superfície realmente pintada** (`elementsFromPoint`, com transparências compostas), linha abaixo de 3:1 contra o fundo, **corpo efetivo abaixo de 13 px** depois de o GitHub encolher o SVG até caber na coluna |
+
+`diagramas.py` extrai os blocos de todo `.md` que o `git ls-files` lista: um arquivo novo com diagrama entra na verificação sozinho, sem lista para manter. As duas camadas que precisam de Node e Chromium têm o marcador `diagramas`, fora da execução padrão como o `e2e`; o job roda `pytest tests/docs -m "not e2e"` e publica as capturas (claro e escuro de cada diagrama) como artefato `diagramas`.
+
+**Visto reprovando:** contra os 13 diagramas anteriores ao redesenho (#79–#83), 62 falhas — os 13 com frontmatter fora do padrão, `<i>` e emoji, oito encolhidos a 6,6–11 px efetivos e textos a 2,x:1 no modo escuro (`#cccccc` sobre `#585858`).
 
 ### Unitários — `tests/unit/`
 
@@ -320,20 +479,69 @@ SAST e SCA leem código e manifestos; o DAST **ataca a aplicação rodando**. É
 **Já pagou o investimento na primeira varredura.** O Swagger UI 5.17.14 servido em `/docs` embutia o **DOMPurify 3.1.4**, com 19 CVEs de XSS conhecidos. O ZAP o apontou pela regra 10003 (*Vulnerable JS Library*, base do retire.js), e os assets foram atualizados para Swagger UI 5.33.0 e ReDoc 2.5.4 (#69).
 
 ```mermaid
-%%{init: {"flowchart": {"wrappingWidth": 480}}}%%
+---
+config:
+  theme: base
+  look: neo
+  layout: dagre
+  fontFamily: "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans, Helvetica, Arial, sans-serif"
+  htmlLabels: false
+  themeCSS: ".edgeLabel rect { opacity: 1 !important; } .edge-thickness-normal { stroke-width: 1.5px !important; }"
+  themeVariables:
+    fontFamily: "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans, Helvetica, Arial, sans-serif"
+    fontSize: 15px
+    primaryColor: "#FFFFFF"
+    primaryTextColor: "#334155"
+    primaryBorderColor: "#DCE4EC"
+    nodeBorder: "#DCE4EC"
+    lineColor: "#8895A9"
+    textColor: "#475569"
+    edgeLabelBackground: "#FFFFFF"
+    clusterBkg: "#F8FCFA"
+    clusterBorder: "#C8E5DA"
+    titleColor: "#257361"
+  flowchart:
+    curve: basis
+    nodeSpacing: 40
+    rankSpacing: 30
+    padding: 18
+    wrappingWidth: 400
+    diagramPadding: 24
+---
 flowchart LR
-    classDef ci fill:#f3e8fb,stroke:#5319e7,color:#2d0c80
-    classDef zap fill:#fdecea,stroke:#d93f0b,color:#7a1f05
-    classDef gate fill:#ffffff,stroke:#24292f,color:#24292f,stroke-width:2px
-
-    art["artefato <code>imagem</code><br/><i>os bits do smoke e do Trivy</i>"]:::ci --> stack["tests/stack/compose.yaml<br/><i>app + Redis semeado + ROOT_PATH</i>"]:::ci
+    stack("`**tests/stack**
+    a imagem verificada
+    + Redis semeado`")
     subgraph plano["tests/dast/plano-imagem.yaml"]
         direction TB
-        filtros["alertFilter<br/><i>justificados, escopo mínimo</i>"]:::zap --> oa["openapi<br/><i>o contrato servido</i>"]:::zap --> sp["spider<br/><i>/docs e /redoc</i>"]:::zap --> ps["varredura passiva"]:::zap --> as["varredura ativa"]:::zap --> rel["relatórios HTML/JSON<br/>+ árvore de sites"]:::zap
+        filtros("`**alertFilter**
+        justificados, escopo mínimo`")
+        oa("`**openapi**
+        o contrato servido`")
+        sp("`**spider**
+        /docs e /redoc`")
+        ps("`**Varredura passiva**`")
+        ativa("`**Varredura ativa**`")
+        rel("`**Relatórios**
+        HTML · JSON
+        árvore de sites`")
+        filtros --> oa --> sp --> ps --> ativa --> rel
     end
-    stack --> filtros
-    rel --> exit{{"exitStatus<br/>Low ou acima reprova"}}:::gate
-    rel --> trip{{"scripts/dast_resumo.py<br/>toda operação com 2xx"}}:::gate
+    exit(["`**exitStatus**
+    Low ou acima reprova`"])
+    trip(["`**dast_resumo.py**
+    toda operação com 2xx`"])
+
+    stack --> plano
+    plano --> exit
+    plano --> trip
+    classDef gate fill:#FFFFFF,stroke:#334155,stroke-width:2px,color:#334155
+    classDef gateway fill:#F8FAFD,stroke:#B9CBDF,stroke-width:1.5px,color:#344C68
+    classDef principal fill:#E8F7F2,stroke:#0F9F87,stroke-width:2.5px,color:#075E50
+    class stack principal
+    class filtros,oa,sp,ps,ativa,rel gateway
+    class exit,trip gate
+    style plano fill:#F8FAFD,stroke:#B9CBDF,stroke-width:1.5px,color:#344C68
 ```
 
 | Peça | Papel |
@@ -373,24 +581,67 @@ O teste de escala em processo (`tests/unit/test_calendar_service.py::test_custo_
 O [k6](https://grafana.com/docs/k6/) roda `tests/load/smoke.js` contra a imagem verificada, na rede de `tests/stack/compose.yaml`:
 
 ```mermaid
-%%{init: {"flowchart": {"wrappingWidth": 480}}}%%
+---
+config:
+  theme: base
+  look: neo
+  layout: dagre
+  fontFamily: "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans, Helvetica, Arial, sans-serif"
+  htmlLabels: false
+  themeCSS: ".edgeLabel rect { opacity: 1 !important; } .edge-thickness-normal { stroke-width: 1.5px !important; }"
+  themeVariables:
+    fontFamily: "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans, Helvetica, Arial, sans-serif"
+    fontSize: 15px
+    primaryColor: "#FFFFFF"
+    primaryTextColor: "#334155"
+    primaryBorderColor: "#DCE4EC"
+    nodeBorder: "#DCE4EC"
+    lineColor: "#8895A9"
+    textColor: "#475569"
+    edgeLabelBackground: "#FFFFFF"
+    clusterBkg: "#F8FCFA"
+    clusterBorder: "#C8E5DA"
+    titleColor: "#257361"
+  flowchart:
+    curve: basis
+    nodeSpacing: 28
+    rankSpacing: 50
+    padding: 18
+    wrappingWidth: 400
+    diagramPadding: 24
+---
 flowchart LR
-    classDef prep fill:#f6f8fa,stroke:#8c959f,color:#24292f
-    classDef carga fill:#f3e8fb,stroke:#5319e7,color:#2d0c80
-    classDef gate fill:#ffffff,stroke:#24292f,color:#24292f,stroke-width:2px
-
     subgraph setup["setup()"]
         direction TB
-        info["janela de<br/>/v1/calendar-info"]:::prep --> ocioso["health ocioso<br/><i>50× em série → p95</i>"]:::prep
+        info("`**Janela**
+        /v1/calendar-info`") --> ocioso("`**Health ocioso**
+        50 vezes em série, p95`")
     end
-    subgraph carga["30 s de carga simultânea, taxa constante"]
-        direction TB
-        mix["mix · todas as operações<br/><i>10 it/s</i>"]:::carga
-        caro["caro · trading-days<br/><i>span máximo, exclude · 5/s</i>"]:::carga
-        health["health sob carga<br/><i>10/s</i>"]:::carga
+    subgraph carga["30 s de carga simultânea"]
+        direction LR
+        mix("`**mix**
+        todas as operações · 10 it/s`")
+        caro("`**caro**
+        trading-days, span máximo · 5/s`")
+        health("`**health sob carga**
+        10/s`")
     end
-    ocioso --> carga --> lim{{"limiares do k6"}}:::gate
-    carga --> trip{{"scripts/k6_resumo.py<br/>amostras em todo endpoint"}}:::gate
+    lim(["`**Limiares do k6**
+    thresholds por cenário`"])
+    trip(["`**k6_resumo.py**
+    amostras em todo endpoint`"])
+
+    setup --> carga
+    carga --> lim
+    carga --> trip
+    classDef entrada fill:#FFFFFF,stroke:#DCE4EC,stroke-width:1.5px,color:#334155
+    classDef gate fill:#FFFFFF,stroke:#334155,stroke-width:2px,color:#334155
+    classDef principal fill:#E8F7F2,stroke:#0F9F87,stroke-width:2.5px,color:#075E50
+    class info,ocioso entrada
+    class mix,caro,health principal
+    class lim,trip gate
+    style setup fill:#F8FAFD,stroke:#B9CBDF,stroke-width:1.5px,color:#344C68
+    style carga fill:#F8FCFA,stroke:#C8E5DA,stroke-width:1.5px,color:#257361
 ```
 
 | Limiar | Valor | O que pega |
@@ -417,23 +668,56 @@ O k6 (2.3.0) fica fixado por digest em `tests/load/Dockerfile`, no mesmo padrão
 A produção puxa o `latest` sozinha, num mecanismo fora deste repositório. O job **Produção · pós-deploy** confere, de fora e sem nenhum secret, o que só existe depois disso:
 
 ```mermaid
+---
+config:
+  theme: base
+  look: neo
+  fontFamily: "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans, Helvetica, Arial, sans-serif"
+  themeCSS: ".messageText, .loopText, .loopText tspan, .sectionTitle, .sectionTitle tspan { paint-order: stroke; stroke: #F8FAFC; stroke-width: 12px; stroke-linejoin: round; }"
+  themeVariables:
+    fontFamily: "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans, Helvetica, Arial, sans-serif"
+    fontSize: 15px
+    actorBkg: "#FFFFFF"
+    actorBorder: "#B9CBDF"
+    actorTextColor: "#334155"
+    actorLineColor: "#8895A9"
+    signalColor: "#8895A9"
+    signalTextColor: "#334155"
+    labelBoxBkgColor: "#F8FAFD"
+    labelBoxBorderColor: "#B9CBDF"
+    labelTextColor: "#344C68"
+    loopTextColor: "#344C68"
+    noteBkgColor: "#FFFAF4"
+    noteBorderColor: "#E6CEB1"
+    noteTextColor: "#8B623C"
+    activationBkgColor: "#E8F7F2"
+    activationBorderColor: "#0F9F87"
+  sequence:
+    mirrorActors: false
+    actorMargin: 50
+    boxMargin: 12
+    messageMargin: 42
+    noteMargin: 12
+    diagramMarginX: 24
+---
 sequenceDiagram
-    autonumber
-    participant CI as Produção · pós-deploy
+    participant CI as Pós-deploy
     participant CF as Cloudflare + Kong
-    participant API as b3datetime (produção)
-    CI->>CF: GET /b3datetime/ (a cada 15 s, até 15 min)
+    participant API as b3datetime em produção
+    rect rgb(248, 250, 252)
+    CI->>CF: GET /b3datetime/ a cada 15 s
     CF->>API: GET /
-    API-->>CI: build (SHA do commit em execução)
-    Note over CI: segue quando build == GITHUB_SHA<br/>(o pull automático aconteceu)
-    CI->>CF: E2E de leitura (E2E_BASE_URL, E2E_BUILD)
+    API-->>CI: build do commit em execução
+    Note over CI: segue quando build = GITHUB_SHA
+    CI->>CF: E2E de leitura
     CF-->>CI: contrato, consultas, documentação
-    CI->>CF: ZAP passivo: contrato (GETs) + spider em /docs e /redoc
+    CI->>CF: ZAP passivo
     CF-->>CI: respostas como o cliente as recebe
-    Note over CI: 8 de 8 operações com 2xx<br/>nenhum alerta Low ou acima
+    Note over CI: 8 de 8 operações com 2xx
     CI->>CF: GET /, /v1/health, /docs, /redoc
     CF-->>CI: headers de segurança da borda
-    Note over CI: valores conferidos<br/>(aviso ou reprovação, conforme o modo)
+    Note over CI: valores conferidos, nenhum repetido
+    end
 ```
 
 | Passo | O que pega |
@@ -479,6 +763,8 @@ Um teste que deixa de rodar sem ninguém perceber é pior do que um teste que fa
 | Nenhum bloco com **zero** testes | idem | um diretório vazio ou um filtro errado passar despercebido |
 | Caminhos `src/` no `coverage.xml` | idem | o SonarQube reportar 0% em silêncio |
 | Nenhum teste E2E pulado | `E2E · contrato 100%` | uma resposta documentada ficar sem validação |
+| Nenhum teste de diagrama pulado | `Documentação · diagramas` | um diagrama publicado sem render (Chromium ou `node_modules` ausentes viram `importorskip`/falha, nunca "verde por skip") |
+| O Agentic Mermaid modelou nós | `tests/docs/test_agentic.py` | o `am verify` passar sobre um diagrama opaco, sem ter verificado nada |
 | Pares cobertos = pares documentados | `tests/e2e/test_contrato.py` | rota ou código novo sem caso E2E |
 | `ci-ok` só aceita pulo onde ele é o desenho | `CI OK` | um bloco pulado liberar a publicação |
 | Toda operação do contrato alcançada com **2xx** pela varredura | `DAST · OWASP ZAP` (`scripts/dast_resumo.py`) | o ZAP "passar" sem ter atacado a lógica — como no `422` de `/v1/trading-days` |
@@ -543,6 +829,7 @@ Registro curto das escolhas, no formato *contexto → decisão → por quê*.
 | Headers de segurança | **na borda** (Cloudflare), verificados no pós-deploy | Um dono só evita headers duplicados ou divergentes; o DAST da imagem os rebaixa a informativo e o pós-deploy confere os valores |
 | Imagem testada | um artefato só (`docker save`) para smoke, Trivy, E2E, DAST e k6 | Todos exercitam exatamente os mesmos bits. Reconstruir do cache dava os mesmos passos, mas não necessariamente os mesmos bits |
 | Gate | `ci-ok` único, que em push só aceita pulo do `dependency-review` | Um bloco pulado não pode liberar a publicação |
+| Diagramas | mermaid.js **12.1.0** (a versão do bundle do GitHub) no Chromium, com o `initialize` do GitHub; **Agentic Mermaid** para estrutura e fatos | Validar em outra versão aprovou diagramas que o GitHub desenhava diferente. O Agentic Mermaid não reproduz o GitHub (layout próprio), mas lê a semântica de volta e pega estouro de rótulo e de grupo; o render oficial mede o que o leitor vê. O pin do mermaid só sobe quando o bundle do GitHub subir (o Dependabot ignora minor e major dele) |
 | Navegador nos testes | **Playwright** (Chromium headless), num `requirements-browser.txt` à parte | Única forma de provar que uma página *renderiza*: a CSP age no navegador, não no HTTP. Fica fora do `requirements-dev.txt` porque não tem wheel para musl, o que quebraria o `docker run python:3.14-alpine` documentado |
 
 ## Números atuais
@@ -582,6 +869,10 @@ mutmut export-cicd-stats && mutmut results > s.txt && python scripts/mutation_ga
 docker run -d --rm -p 6379:6379 redis:8.10-alpine   # um Redis descartável para a integração
 
 docker build -t b3datetime:e2e . && E2E_IMAGE=b3datetime:e2e python -m pytest -m e2e tests/e2e --no-cov
+
+npm ci --prefix tests/docs --ignore-scripts                  # diagramas: mermaid.js do GitHub + Agentic Mermaid
+python -m pytest tests/docs -m "not e2e" --no-cov            # design system, Agentic Mermaid e render claro/escuro
+python -m tests.docs.renderizador --saida /tmp/diagramas     # só o render: capturas + relatorio.json (escala, contraste)
 ```
 
 DAST e performance, como no CI (o ZAP leva ~3 min, dos quais ~2 de varredura ativa; o k6, ~35 s):

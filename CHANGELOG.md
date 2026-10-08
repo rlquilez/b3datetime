@@ -7,6 +7,15 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ## [Não publicado]
 
+### Adicionado
+
+- Bloco de CI **Documentação · diagramas** (`tests/docs`), bloqueante e no `ci-ok`. Todo diagrama Mermaid dos `.md` é renderizado como o GitHub renderiza: mermaid.js 12.1 (a versão do bundle do GitHub), o `initialize` do GitHub, fundo claro e fundo escuro. Reprova texto abaixo de 4,5:1 contra a superfície realmente pintada, linha abaixo de 3:1, texto encolhido abaixo de 13 px e rótulo cortado. Também verifica o design system no código-fonte e roda o `am verify` do Agentic Mermaid. As capturas dos dois modos são publicadas como artefato. (#80)
+- Skill `mermaid-design` (`.claude/skills/mermaid-design/`): o design system "Neo Editorial / Soft Minimal" dos diagramas. Traz o config canônico por tipo, a paleta por papel com o contraste validado, as regras de layout que cabem na página, a fidelidade à arquitetura real, o fluxo de verificação e quatro modelos prontos (arquitetura, pipeline, sequência e estados), verificados pelo mesmo gate. (#79)
+
+### Alterado
+
+- Os 13 diagramas do `README.md` e do `tests/README.md` foram redesenhados com paleta única por papel, títulos em negrito e subtítulos curtos, sem `<i>` nem emoji. Todos ficam legíveis nos modos claro e escuro e cabem na coluna do GitHub: o texto efetivo vai de 14,4 a 16 px, contra 6,6 a 11 px antes em oito deles. O mapa de módulos passa a mostrar `documentacao.py` e as camadas reais (`services → config`). A pirâmide de testes ganhou forma de pirâmide. (#81, #82)
+
 ## [2.1.1] - 2026-10-07
 
 ### Corrigido
