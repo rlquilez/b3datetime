@@ -19,6 +19,7 @@ import pytest
 
 from scripts import cabecalhos_da_borda as borda
 from scripts.cabecalhos_da_borda import (
+    FONTES_INSEGURAS,
     HSTS_MINIMO_SEGUNDOS,
     avaliar,
     buscar,
@@ -28,8 +29,26 @@ from scripts.cabecalhos_da_borda import (
     verificar,
 )
 
-CSP_API = "default-src 'none'; frame-ancestors 'none'"
-CSP_DOCS = "default-src 'none'; script-src 'self' 'unsafe-inline'; frame-ancestors 'none'"
+# As regras da borda recomendadas no README (seção Segurança).
+CSP_API = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+CSP_DOCS = (
+    "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; "
+    "base-uri 'none'; form-action 'none'; upgrade-insecure-requests"
+)
+# A regra que a borda aplicava à documentação enquanto as páginas tinham script inline.
+CSP_DOCS_ANTIGA = (
+    "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data:; font-src 'self' data:; connect-src 'self'; "
+    "worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+)
+# A primeira CSP global configurada na borda (2026-10-07): estrita, mas sem default-src
+# 'none' — boa para a documentação, não para a API JSON.
+CSP_GLOBAL_DO_USUARIO = (
+    "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
+    "font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; "
+    "form-action 'self'; upgrade-insecure-requests;"
+)
 
 
 def _bons(csp: str = CSP_API) -> dict[str, str]:
@@ -87,14 +106,83 @@ def test_hsts_ausente() -> None:
     assert _reprovados("/", cabecalhos) == ["Strict-Transport-Security"]
 
 
-def test_csp_da_api_exige_default_src_none_e_a_das_docs_nao() -> None:
-    so_frame = "frame-ancestors 'none'"
-    assert _reprovados("/v1/health", _bons(so_frame)) == ["Content-Security-Policy"]
-    assert _reprovados("/redoc", _bons(so_frame)) == []
+def test_csp_da_api_exige_default_src_none() -> None:
+    """A CSP global do usuário (default-src 'self') protege a documentação, mas a API
+    JSON não carrega nada: ali vale default-src 'none'."""
+    assert _reprovados("/", _bons(CSP_GLOBAL_DO_USUARIO)) == ["Content-Security-Policy"]
+    assert _reprovados("/v1/health", _bons(CSP_GLOBAL_DO_USUARIO)) == ["Content-Security-Policy"]
+    # A da API é mais estrita que a da documentação: serve para as duas.
+    assert _reprovados("/redoc", _bons(CSP_API)) == []
+
+
+def test_a_csp_global_do_usuario_serve_para_a_documentacao() -> None:
+    assert _reprovados("/docs", _bons(CSP_GLOBAL_DO_USUARIO)) == []
+
+
+def test_a_regra_antiga_da_documentacao_reprova() -> None:
+    """'unsafe-inline' em scripts e worker blob: só existiam pelo script inline e pela
+    busca do ReDoc, que saíram em #75."""
+    assert _reprovados("/docs", _bons(CSP_DOCS_ANTIGA)) == ["Content-Security-Policy"]
+    assert _reprovados("/redoc", _bons(CSP_DOCS_ANTIGA)) == ["Content-Security-Policy"]
+
+
+@pytest.mark.parametrize("fonte", sorted(FONTES_INSEGURAS))
+def test_fonte_insegura_em_script_reprova(fonte: str) -> None:
+    csp = CSP_DOCS.replace("script-src 'self'", f"script-src 'self' {fonte}")
+    assert _reprovados("/docs", _bons(csp)) == ["Content-Security-Policy"]
+
+
+@pytest.mark.parametrize(
+    ("trecho", "pagina"),
+    [
+        # worker-src cai para script-src, que cai para default-src
+        ("worker-src blob:", "/redoc"),
+        ("worker-src 'self' 'unsafe-eval'", "/docs"),
+    ],
+)
+def test_worker_inseguro_reprova(trecho: str, pagina: str) -> None:
+    assert _reprovados(pagina, _bons(f"{CSP_DOCS}; {trecho}")) == ["Content-Security-Policy"]
+
+
+def test_script_sem_diretiva_cai_no_default_src() -> None:
+    csp = "default-src 'self' 'unsafe-inline'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'"
+    assert _reprovados("/docs", _bons(csp)) == ["Content-Security-Policy"]
+    assert _reprovados("/docs", _bons(csp.replace(" 'unsafe-inline'", ""))) == []
+
+
+def test_sem_nenhuma_restricao_de_script_reprova() -> None:
+    assert _reprovados("/redoc", _bons("frame-ancestors 'none'; base-uri 'none'")) == [
+        "Content-Security-Policy"
+    ]
+
+
+@pytest.mark.parametrize(
+    "csp",
+    [
+        "default-src 'self'; frame-ancestors 'none'; base-uri 'self'",  # object-src vira 'self'
+        "default-src 'none'; object-src 'self'; frame-ancestors 'none'; base-uri 'none'",
+    ],
+)
+def test_object_src_efetivo_precisa_ser_none(csp: str) -> None:
+    assert _reprovados("/docs", _bons(csp)) == ["Content-Security-Policy"]
+
+
+@pytest.mark.parametrize("base", ["", "; base-uri https://outro.example"])
+def test_base_uri_precisa_ser_restrito(base: str) -> None:
+    csp = "default-src 'none'; frame-ancestors 'none'" + base
+    assert _reprovados("/docs", _bons(csp)) == ["Content-Security-Policy"]
+
+
+def test_estilo_inline_e_aceito_na_documentacao() -> None:
+    """O ReDoc injeta estilos em tempo de execução: é o único 'unsafe-inline' aceito."""
+    assert "style-src 'self' 'unsafe-inline'" in CSP_DOCS
+    assert _reprovados("/redoc", _bons(CSP_DOCS)) == []
 
 
 def test_csp_sem_frame_ancestors_reprova() -> None:
-    assert _reprovados("/docs", _bons("default-src 'none'")) == ["Content-Security-Policy"]
+    assert _reprovados("/docs", _bons("default-src 'none'; base-uri 'none'")) == [
+        "Content-Security-Policy"
+    ]
 
 
 @pytest.mark.parametrize(("valor", "ok"), [("deny", True), (" DENY ", True), ("SAMEORIGIN", False)])

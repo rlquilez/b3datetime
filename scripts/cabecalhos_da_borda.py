@@ -37,6 +37,13 @@ REFERRER_ACEITOS = frozenset(
 PAGINAS_API = ("/", "/v1/health")
 PAGINAS_DOCS = ("/docs", "/redoc")
 TEMPO_LIMITE_SEGUNDOS = 15
+# Fontes que deixam executar código que não veio de um arquivo do próprio host. Nenhuma
+# página precisa delas: a documentação não tem script inline e o ReDoc roda sem a busca,
+# que criava um worker a partir de blob: (#75).
+FONTES_INSEGURAS = frozenset(
+    {"'unsafe-inline'", "'unsafe-eval'", "*", "http:", "https:", "data:", "blob:"}
+)
+BASE_URI_RESTRITO = frozenset({"'none'", "'self'"})
 
 Buscador = Callable[[str], Mapping[str, str]]
 
@@ -64,6 +71,32 @@ def _diretivas_csp(csp: str) -> dict[str, str]:
     return diretivas
 
 
+def _efetiva(diretivas: Mapping[str, str], *cadeia: str) -> set[str]:
+    """Fontes da primeira diretiva presente na cadeia de fallback da CSP (por exemplo,
+    ``worker-src`` → ``script-src`` → ``default-src``). Sem nenhuma, nada é restrito."""
+    for nome in cadeia:
+        if nome in diretivas:
+            return {fonte.lower() for fonte in diretivas[nome].split()}
+    return {"*"}
+
+
+def _csp_ok(pagina: str, diretivas: Mapping[str, str]) -> bool:
+    """A política que vale para toda página: nada de enquadramento, nenhum script ou
+    worker de fora de um arquivo do próprio host, nenhum plugin, ``<base>`` restrito; na
+    API JSON, além disso, ``default-src 'none'``. Estilo inline é aceito nas páginas de
+    documentação: o ReDoc injeta estilos em tempo de execução."""
+    scripts = _efetiva(diretivas, "script-src", "default-src") | _efetiva(
+        diretivas, "worker-src", "script-src", "default-src"
+    )
+    return (
+        diretivas.get("frame-ancestors") == "'none'"
+        and not scripts & FONTES_INSEGURAS
+        and _efetiva(diretivas, "object-src", "default-src") == {"'none'"}
+        and diretivas.get("base-uri") in BASE_URI_RESTRITO
+        and (pagina not in PAGINAS_API or diretivas.get("default-src") == "'none'")
+    )
+
+
 def avaliar(pagina: str, cabecalhos: Mapping[str, str]) -> list[Verificacao]:
     """Confere os headers de uma resposta. ``cabecalhos`` com nomes em minúsculas."""
     hsts = cabecalhos.get("strict-transport-security")
@@ -73,7 +106,12 @@ def avaliar(pagina: str, cabecalhos: Mapping[str, str]) -> list[Verificacao]:
     xfo = cabecalhos.get("x-frame-options")
     nosniff = cabecalhos.get("x-content-type-options")
     referrer = cabecalhos.get("referrer-policy")
-    eh_api = pagina in PAGINAS_API
+    esperado_csp = (
+        "frame-ancestors 'none'; script-src e worker-src sem 'unsafe-inline', 'unsafe-eval', "
+        "blob:, data: nem curingas; object-src 'none'; base-uri 'none' ou 'self'"
+    )
+    if pagina in PAGINAS_API:
+        esperado_csp = "default-src 'none'; " + esperado_csp
 
     verificacoes = [
         Verificacao(
@@ -99,12 +137,7 @@ def avaliar(pagina: str, cabecalhos: Mapping[str, str]) -> list[Verificacao]:
             "no-referrer (ou same-origin, strict-origin, strict-origin-when-cross-origin)",
         ),
         Verificacao(
-            pagina,
-            "Content-Security-Policy",
-            csp,
-            diretivas.get("frame-ancestors") == "'none'"
-            and (not eh_api or diretivas.get("default-src") == "'none'"),
-            "frame-ancestors 'none'" + (" e default-src 'none'" if eh_api else ""),
+            pagina, "Content-Security-Policy", csp, _csp_ok(pagina, diretivas), esperado_csp
         ),
     ]
     if "cf-mitigated" in cabecalhos:
