@@ -5,7 +5,7 @@
 
   <p>API REST em Python para consultar horários de operação e dias de negociação da B3 (Bolsa de Valores de São Paulo)</p>
 
-  <p><strong>Versão atual: 2.1.0</strong></p>
+  <p><strong>Versão atual: 2.1.1</strong></p>
 
   <p>
     <a href="https://api.quilez.cloud/b3datetime/v1/hours"><b>🌐 API em produção</b></a> ·
@@ -465,7 +465,7 @@ curl https://api.quilez.cloud/b3datetime/
 ```json
 {
   "name": "B3 DateTime API",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "build": "4277699f1c2e9b3d5a7c6e8f0a1b2c3d4e5f6a7b",
   "description": "API para consultar horários e dias de operação da B3",
   "docs": {
@@ -706,7 +706,7 @@ Todas as variáveis são lidas do ambiente (ou de um `.env` local) pelo `pydanti
 | `API_KEY_REQUIRED` | Só documentação: declara o esquema `apikey` no OpenAPI e em `GET /` | `false` |
 | `API_TITLE` | Título exibido na documentação | `B3 DateTime API` |
 | `API_DESCRIPTION` | Descrição (Markdown) exibida na documentação | texto padrão |
-| `API_VERSION` | Versão anunciada — **não altere**: é sincronizada pela release | `2.1.0` |
+| `API_VERSION` | Versão anunciada — **não altere**: é sincronizada pela release | `2.1.1` |
 
 `REDIS_URL` é aceito porque é o nome que Heroku, Railway, Render, Fly.io e templates de `docker-compose` injetam automaticamente. Quando as duas estão definidas, **`REDIS_URL_ENV` vence**.
 

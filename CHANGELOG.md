@@ -7,6 +7,8 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ## [Não publicado]
 
+## [2.1.1] - 2026-10-07
+
 ### Corrigido
 
 - `/docs` deixa de ficar em branco e `/redoc` deixa de exibir "Something went wrong" sob uma Content-Security-Policy sem `'unsafe-inline'`, como a que a borda passou a enviar. As páginas de documentação não têm mais script nem estilo inline: o Swagger UI é inicializado por um arquivo estático, e o `/docs` funciona com `script-src 'self'; style-src 'self'`. O `/redoc` ainda exige `style-src 'unsafe-inline'`, porque o ReDoc injeta estilos em tempo de execução, e passa a funcionar **sem a caixa de busca**, que criava um worker a partir de `blob:`. (#75)
@@ -190,7 +192,8 @@ Primeira versão da API, desenvolvida entre 2025-12-26 e 2026-03-12.
 - Imagem Docker multi-arquitetura (`linux/amd64`, `linux/arm64`) publicada por GitHub Actions.
 - Timezone `America/Sao_Paulo` em todas as operações de data e hora.
 
-[Não publicado]: https://github.com/rlquilez/b3datetime/compare/v2.1.0...HEAD
+[Não publicado]: https://github.com/rlquilez/b3datetime/compare/v2.1.1...HEAD
+[2.1.1]: https://github.com/rlquilez/b3datetime/compare/v2.1.0...v2.1.1
 [2.1.0]: https://github.com/rlquilez/b3datetime/compare/v2.0.4...v2.1.0
 [2.0.4]: https://github.com/rlquilez/b3datetime/compare/v2.0.3...v2.0.4
 [2.0.3]: https://github.com/rlquilez/b3datetime/compare/v2.0.2...v2.0.3
