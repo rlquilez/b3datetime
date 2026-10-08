@@ -1,0 +1,44 @@
+---
+config:
+  theme: base
+  look: neo
+  layout: dagre
+  fontFamily: "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans, Helvetica, Arial, sans-serif"
+  htmlLabels: true
+  themeCSS: ".edgeLabel rect { opacity: 1 !important; } .labelBkg, .edgeLabel p { background-color: #FFFFFF !important; }"
+  themeVariables:
+    fontFamily: "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans, Helvetica, Arial, sans-serif"
+    fontSize: 15px
+    primaryColor: "#FFFFFF"
+    primaryTextColor: "#334155"
+    primaryBorderColor: "#DCE4EC"
+    nodeBorder: "#DCE4EC"
+    lineColor: "#8895A9"
+    textColor: "#475569"
+    edgeLabelBackground: "#FFFFFF"
+    transitionColor: "#8895A9"
+    transitionLabelColor: "#475569"
+    noteBkgColor: "#F8FAFD"
+    noteBorderColor: "#B9CBDF"
+    noteTextColor: "#344C68"
+  state:
+    nodeSpacing: 60
+    rankSpacing: 70
+---
+stateDiagram-v2
+    state "saudável<br>HTTP 200" as ok
+    state "degradado<br>HTTP 200" as meio
+    state "fora do ar<br>HTTP 503" as fora
+
+    [*] --> ok: dependências prontas
+    ok --> meio: caiu, com cache válido
+    meio --> ok: dependência voltou
+    meio --> fora: cache expirou
+    fora --> ok: tudo de volta
+
+    classDef saudavel fill:#E8F7F2,stroke:#0F9F87,stroke-width:2px,color:#075E50
+    classDef degradado fill:#FFFAF4,stroke:#E6CEB1,stroke-width:1.5px,color:#8B623C
+    classDef falha fill:#FDF3F4,stroke:#EBC4CB,stroke-width:1.5px,color:#9B3B4D
+    class ok saudavel
+    class meio degradado
+    class fora falha

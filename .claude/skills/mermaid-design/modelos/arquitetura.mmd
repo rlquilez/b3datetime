@@ -1,0 +1,66 @@
+---
+config:
+  theme: base
+  look: neo
+  layout: dagre
+  fontFamily: "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans, Helvetica, Arial, sans-serif"
+  htmlLabels: false
+  themeCSS: ".edgeLabel rect { opacity: 1 !important; } .edge-thickness-normal { stroke-width: 1.5px !important; }"
+  themeVariables:
+    fontFamily: "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans, Helvetica, Arial, sans-serif"
+    fontSize: 15px
+    primaryColor: "#FFFFFF"
+    primaryTextColor: "#334155"
+    primaryBorderColor: "#DCE4EC"
+    nodeBorder: "#DCE4EC"
+    lineColor: "#8895A9"
+    textColor: "#475569"
+    edgeLabelBackground: "#FFFFFF"
+    clusterBkg: "#F8FCFA"
+    clusterBorder: "#C8E5DA"
+    titleColor: "#257361"
+  flowchart:
+    curve: basis
+    nodeSpacing: 50
+    rankSpacing: 60
+    padding: 18
+    wrappingWidth: 400
+    diagramPadding: 24
+---
+flowchart TB
+    cliente("`**Cliente**
+    quem consome a API`")
+    gateway("`**Gateway**
+    rota pública`")
+    subgraph container["Container da aplicação"]
+        app("`**Aplicação**
+        o serviço principal`")
+        cache[("`**Cache local**
+        TTL curto`")]
+        lib("`**Biblioteca**
+        cálculo em processo`")
+    end
+    escritor("`**Sistema externo**
+    fora deste repositório`")
+    banco[("`**Banco**
+    chaves lidas pela API`")]
+
+    cliente -- "HTTPS" --> gateway
+    gateway --> app
+    app <--> cache
+    app --> lib
+    app -- "leitura" --> banco
+    escritor -- "escrita" --> banco
+    classDef dados fill:#FFFAF4,stroke:#E6CEB1,stroke-width:1.5px,color:#8B623C
+    classDef entrada fill:#FFFFFF,stroke:#DCE4EC,stroke-width:1.5px,color:#334155
+    classDef externo fill:#FFFFFF,stroke:#DCE4EC,stroke-width:1.5px,color:#64748B
+    classDef gateway fill:#F8FAFD,stroke:#B9CBDF,stroke-width:1.5px,color:#344C68
+    classDef principal fill:#E8F7F2,stroke:#0F9F87,stroke-width:2.5px,color:#075E50
+    classDef servico fill:#FFFFFF,stroke:#B9DCD1,stroke-width:1.5px,color:#356C60
+    class cliente entrada
+    class gateway gateway
+    class app principal
+    class cache,lib servico
+    class banco dados
+    class escritor externo
+    style container fill:#F8FCFA,stroke:#C8E5DA,stroke-width:1.5px,color:#257361

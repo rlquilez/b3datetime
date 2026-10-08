@@ -1,0 +1,70 @@
+---
+config:
+  theme: base
+  look: neo
+  layout: dagre
+  fontFamily: "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans, Helvetica, Arial, sans-serif"
+  htmlLabels: false
+  themeCSS: ".edgeLabel rect { opacity: 1 !important; } .edge-thickness-normal { stroke-width: 1.5px !important; }"
+  themeVariables:
+    fontFamily: "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans, Helvetica, Arial, sans-serif"
+    fontSize: 15px
+    primaryColor: "#FFFFFF"
+    primaryTextColor: "#334155"
+    primaryBorderColor: "#DCE4EC"
+    nodeBorder: "#DCE4EC"
+    lineColor: "#8895A9"
+    textColor: "#475569"
+    edgeLabelBackground: "#FFFFFF"
+    clusterBkg: "#F8FCFA"
+    clusterBorder: "#C8E5DA"
+    titleColor: "#257361"
+  flowchart:
+    curve: basis
+    nodeSpacing: 28
+    rankSpacing: 50
+    padding: 18
+    wrappingWidth: 400
+    diagramPadding: 24
+---
+flowchart TB
+    subgraph estatica["Estática"]
+        direction LR
+        lint("`**Lint**
+        estilo e tipos`") ~~~ seg("`**Segurança**
+        SAST e SCA`")
+    end
+    subgraph processo["Testes"]
+        blocos("`**Blocos**
+        unitários · integração`")
+    end
+    subgraph consolidacao["Consolidação"]
+        direction LR
+        cov("`**Cobertura**
+        limiar mínimo`") --> gate("`**Quality gate**`")
+    end
+    subgraph entrega["Entrega"]
+        direction LR
+        ok(["`**ci-ok**`"]) --> pub("`**Publicar**
+        imagem`")
+        pub --> prod("`**Produção**
+        verificação pós-deploy`")
+    end
+
+    estatica & processo --> consolidacao --> entrega
+    classDef dados fill:#FFFAF4,stroke:#E6CEB1,stroke-width:1.5px,color:#8B623C
+    classDef externo fill:#FFFFFF,stroke:#DCE4EC,stroke-width:1.5px,color:#64748B
+    classDef gate fill:#FFFFFF,stroke:#334155,stroke-width:2px,color:#334155
+    classDef gateway fill:#F8FAFD,stroke:#B9CBDF,stroke-width:1.5px,color:#344C68
+    classDef principal fill:#E8F7F2,stroke:#0F9F87,stroke-width:2.5px,color:#075E50
+    classDef servico fill:#FFFFFF,stroke:#B9DCD1,stroke-width:1.5px,color:#356C60
+    class lint,seg gateway
+    class blocos servico
+    class cov,gate dados
+    class ok gate
+    class pub principal
+    class prod externo
+    style estatica fill:#F8FAFD,stroke:#B9CBDF,stroke-width:1.5px,color:#344C68
+    style processo fill:#F8FCFA,stroke:#C8E5DA,stroke-width:1.5px,color:#257361
+    style consolidacao fill:#FFFAF4,stroke:#E6CEB1,stroke-width:1.5px,color:#8B623C
+    style entrega fill:#F8FCFA,stroke:#C8E5DA,stroke-width:1.5px,color:#257361

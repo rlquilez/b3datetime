@@ -1,0 +1,46 @@
+---
+config:
+  theme: base
+  look: neo
+  fontFamily: "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans, Helvetica, Arial, sans-serif"
+  themeCSS: ".messageText, .loopText, .loopText tspan, .sectionTitle, .sectionTitle tspan { paint-order: stroke; stroke: #F8FAFC; stroke-width: 12px; stroke-linejoin: round; }"
+  themeVariables:
+    fontFamily: "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans, Helvetica, Arial, sans-serif"
+    fontSize: 15px
+    actorBkg: "#FFFFFF"
+    actorBorder: "#B9CBDF"
+    actorTextColor: "#334155"
+    actorLineColor: "#8895A9"
+    signalColor: "#8895A9"
+    signalTextColor: "#334155"
+    labelBoxBkgColor: "#F8FAFD"
+    labelBoxBorderColor: "#B9CBDF"
+    labelTextColor: "#344C68"
+    loopTextColor: "#344C68"
+    noteBkgColor: "#FFFAF4"
+    noteBorderColor: "#E6CEB1"
+    noteTextColor: "#8B623C"
+    activationBkgColor: "#E8F7F2"
+    activationBorderColor: "#0F9F87"
+  sequence:
+    mirrorActors: false
+    actorMargin: 50
+    boxMargin: 12
+    messageMargin: 42
+    noteMargin: 12
+    diagramMarginX: 24
+---
+sequenceDiagram
+    participant C as Cliente
+    participant A as API
+    participant R as Redis
+    rect rgb(248, 250, 252)
+    C->>A: GET /recurso
+    A->>R: MGET chaves
+    alt Redis respondeu
+        R-->>A: valores
+        A-->>C: 200 com os valores
+    else Redis indisponível
+        A-->>C: 503 Service Unavailable
+    end
+    end
