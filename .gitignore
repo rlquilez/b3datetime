@@ -237,3 +237,6 @@ mutmut-run.log
 zap/
 # Performance (k6): resultado exportado
 k6/
+# Diagramas (tests/docs): ferramentas Node e capturas do render
+tests/docs/node_modules/
+tests/docs/capturas/

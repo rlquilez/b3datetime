@@ -26,7 +26,7 @@ addopts = """
     --cov-report=term-missing
     --cov-report=xml:coverage.xml
     --junitxml=junit.xml
-    -m "not e2e"
+    -m "not e2e and not diagramas"
 """
 asyncio_mode = "auto"
 markers = [
@@ -35,6 +35,7 @@ markers = [
     "api_fuzz: fuzzing da API inteira pelo contrato (Schemathesis); fica fora da mutação",
     "tempo: asserção sobre tempo de execução; fica fora da mutação (com N processos em paralelo, estoura e \"mata\" mutante por engano)",
     "e2e: ponta a ponta contra a imagem (E2E_IMAGE) ou uma URL (E2E_BASE_URL); fora da execução padrão, rode com -m e2e",
+    "diagramas: render dos diagramas Mermaid no Chromium e Agentic Mermaid (precisam de `npm ci` em tests/docs); fora da execução padrão, rode com -m diagramas",
 ]
 # Warnings viram erro: é o que impede deprecações do pydantic de voltarem.
 filterwarnings = [

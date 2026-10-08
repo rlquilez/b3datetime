@@ -1,0 +1,13 @@
+{
+  "name": "b3datetime-docs-diagramas",
+  "private": true,
+  "description": "Ferramentas do bloco 'Documentação · diagramas' (tests/docs): o mermaid.js na versão que o GitHub usa e o Agentic Mermaid. Ver .claude/skills/mermaid-design/SKILL.md.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "agentic-mermaid": "0.4.1",
+    "mermaid": "12.1.0"
+  }
+}

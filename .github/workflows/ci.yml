@@ -139,6 +139,62 @@ jobs:
       - name: pytest-deadfixtures (fixtures órfãs)
         run: python -m pytest --dead-fixtures -m "e2e or not e2e" --no-cov -p no:cacheprovider
 
+  docs:
+    name: Documentação · diagramas
+    timeout-minutes: 15
+    # Todo bloco ```mermaid de todo .md rastreado e os modelos da skill mermaid-design:
+    # o design system no código-fonte (frontmatter canônico, paleta, rótulos), o Agentic
+    # Mermaid (am verify) e o render no Chromium com o mermaid.js da versão do GitHub e o
+    # initialize dele, nos fundos claro (#ffffff) e escuro (#0d1117) do iframe — contraste
+    # de cada texto contra a superfície pintada e corpo efetivo depois da escala.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: tests/docs/package-lock.json
+      - name: Instalar dependências, o Chromium headless e as ferramentas Node
+        run: |
+          pip install -r requirements-dev.txt -r requirements-browser.txt
+          python -m playwright install --with-deps --only-shell chromium
+          # --ignore-scripts: nenhum pacote do lockfile precisa de script de instalação,
+          # e é por eles que um pacote comprometido executa código no runner.
+          npm ci --prefix tests/docs --ignore-scripts --no-audit --no-fund
+
+      - name: pytest tests/docs
+        env:
+          DIAGRAMAS_CAPTURAS: capturas
+        run: python -m pytest tests/docs -m "not e2e" --no-cov --junitxml=docs-junit.xml
+
+      # Tripwire: aqui o Node, o Chromium e o mermaid.js existem — um teste pulado seria
+      # um diagrama publicado sem verificação.
+      - name: Nenhum teste de diagrama pulado
+        run: |
+          if grep -qE 'skipped="[1-9][0-9]*"' docs-junit.xml; then
+            echo "::error::docs-junit.xml registra testes pulados; algum diagrama ficou sem verificação"
+            grep -oE 'skipped="[0-9]+"' docs-junit.xml | sort | uniq -c
+            exit 1
+          fi
+          echo "OK: nenhum teste de diagrama pulado ($(grep -oE 'tests="[0-9]+"' docs-junit.xml | head -1))"
+
+      - name: Publicar capturas dos diagramas
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: diagramas
+          path: |
+            capturas/
+            docs-junit.xml
+          if-no-files-found: ignore
+
   typecheck:
     name: Tipagem · mypy
     timeout-minutes: 10
@@ -1235,6 +1291,7 @@ jobs:
       - typecheck
       - architecture
       - dead-code
+      - docs
       - tests
       - coverage
       - mutation
@@ -1279,6 +1336,7 @@ jobs:
               "typecheck": "Tipagem · mypy",
               "architecture": "Arquitetura · import-linter + regras",
               "dead-code": "Código morto · vulture, deptry e fixtures",
+              "docs": "Documentação · diagramas (render fiel ao GitHub e Agentic Mermaid)",
               "bandit": "SAST · bandit",
               "codeql": "SAST · CodeQL (python e actions)",
               "zizmor": "SAST · zizmor (workflows)",

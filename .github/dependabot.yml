@@ -48,6 +48,26 @@ updates:
     commit-message:
       prefix: "chore"
 
+  # Ferramentas do job "Documentação · diagramas" (tests/docs): o mermaid.js e o Agentic
+  # Mermaid. O mermaid fica na versão que o GitHub usa para renderizar: o PR que a mudar
+  # só entra depois de conferir o bundle do GitHub (.claude/skills/mermaid-design,
+  # seção 2) — por isso minor e major dele são ignorados, e só patch é proposto.
+  - package-ecosystem: "npm"
+    directory: "/tests/docs"
+    schedule:
+      interval: "weekly"
+    labels: ["dependencies"]
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: "chore"
+    groups:
+      diagramas:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: "mermaid"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+
   # A base é python:3.14-alpine fixada por digest: o que chega aqui são os digests
   # novos da mesma tag (patches do Python e do Alpine), testados pelo CI no PR antes
   # de serem adotados. Trocar de Python (3.15) é decisão deliberada — mexe na matriz
