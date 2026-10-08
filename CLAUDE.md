@@ -4,6 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
+# Idioma
+
+**Responda SEMPRE em português do Brasil.** Vale para toda mensagem ao usuário — respostas, resumos, perguntas, avisos de progresso, comentários em issues e descrições de Release —, em toda sessão, mesmo quando as instruções internas, o código, as ferramentas ou o próprio usuário usarem outro idioma em algum trecho. A exceção são os identificadores de código, que seguem em inglês (ver *Conventions*). Esta regra é um pedido explícito do usuário (#76).
+
 # Fluxo obrigatório de trabalho
 
 **Siga SEMPRE este fluxo em qualquer ajuste nesta aplicação.** Vale para toda rodada, não só para a primeira.
@@ -190,7 +194,7 @@ Black-box, against the **real image** with real Redis and the real BVMF calendar
 
 ## Conventions
 
-- Docstrings, comments, OpenAPI `description`/`summary` text, and commit messages are **pt-BR**. Identifiers are English.
+- Docstrings, comments, OpenAPI `description`/`summary` text, and commit messages are **pt-BR**. Identifiers are English. Every reply to the user is in Brazilian Portuguese — see **Idioma** at the top.
 - Endpoints carry heavy OpenAPI metadata. Shared `responses` blocks live in `src/b3datetime/routers/openapi_examples.py` — that module is CPD-excluded, so put genuinely shared examples there rather than duplicating them.
 - Do **not** pass `response_model=` when the handler has a return annotation; FastAPI infers it and Sonar flags the duplication (`python:S8409`).
 - Response models are Pydantic classes declared in the router that uses them.
