@@ -21,7 +21,7 @@ import re
 import sys
 import tomllib
 import urllib.request
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.error import HTTPError
@@ -45,7 +45,18 @@ FONTES_INSEGURAS = frozenset(
 )
 BASE_URI_RESTRITO = frozenset({"'none'", "'self'"})
 
-Buscador = Callable[[str], Mapping[str, str]]
+# O que a busca devolve: os headers como pares, na ordem e com as repetições da resposta.
+Itens = Sequence[tuple[str, str]]
+Buscador = Callable[[str], Itens | Mapping[str, str]]
+# Headers de segurança que a borda envia. Repetido, um deles indica uma regra do Cloudflare
+# com Add em vez de Set ou duas regras sobrepostas — e o navegador aplica TODOS os CSP.
+SEGURANCA = (
+    "strict-transport-security",
+    "content-security-policy",
+    "x-frame-options",
+    "referrer-policy",
+    "x-content-type-options",
+)
 
 
 @dataclass(frozen=True)
@@ -153,8 +164,9 @@ def avaliar(pagina: str, cabecalhos: Mapping[str, str]) -> list[Verificacao]:
     return verificacoes
 
 
-def buscar(url: str) -> Mapping[str, str]:
-    """Headers da resposta (inclusive de erro HTTP), com nomes em minúsculas."""
+def buscar(url: str) -> Itens:
+    """Headers da resposta (inclusive de erro HTTP), com nomes em minúsculas e as
+    repetições preservadas — um dicionário esconderia um segundo CSP."""
     pedido = urllib.request.Request(  # noqa: S310 — URL https fixa, vinda do workflow
         url, headers={"User-Agent": "b3datetime-ci/pos-deploy"}
     )
@@ -165,7 +177,23 @@ def buscar(url: str) -> Mapping[str, str]:
         # A resposta de erro também passou pela borda; o corpo não interessa.
         with erro:
             itens = erro.headers.items()
-    return {nome.lower(): valor for nome, valor in itens}
+    return [(nome.lower(), valor) for nome, valor in itens]
+
+
+def repetidos(pagina: str, itens: Itens) -> list[Verificacao]:
+    """Uma verificação reprovada por header de segurança que aparece mais de uma vez."""
+    return [
+        Verificacao(
+            pagina,
+            f"{nome} (repetido)",
+            " ‖ ".join(valores),
+            False,
+            "um só header: repetido indica regra do Cloudflare com Add em vez de Set, ou "
+            "duas regras sobrepostas — o navegador aplica todos os CSP",
+        )
+        for nome in SEGURANCA
+        if len(valores := [v for n, v in itens if n == nome]) > 1
+    ]
 
 
 def exigido(pyproject: Path) -> bool:
@@ -175,9 +203,12 @@ def exigido(pyproject: Path) -> bool:
 
 def verificar(base: str, busca: Buscador) -> list[Verificacao]:
     base = base.rstrip("/")
-    return [
-        v for pagina in (*PAGINAS_API, *PAGINAS_DOCS) for v in avaliar(pagina, busca(base + pagina))
-    ]
+    verificacoes: list[Verificacao] = []
+    for pagina in (*PAGINAS_API, *PAGINAS_DOCS):
+        resposta = busca(base + pagina)
+        itens = list(resposta.items()) if isinstance(resposta, Mapping) else list(resposta)
+        verificacoes += avaliar(pagina, dict(itens)) + repetidos(pagina, itens)
+    return verificacoes
 
 
 def resumo(verificacoes: list[Verificacao], obrigatorio: bool) -> str:

@@ -461,6 +461,8 @@ Também detecta o desafio do Cloudflare (`cf-mitigated`) e orienta a criar uma r
 - `base-uri` restrito;
 - na API JSON, também `default-src 'none'`.
 
+**Nenhum header de segurança pode vir repetido.** Durante a troca de regras, o `/docs` chegou a receber dois CSP, o antigo (com `'unsafe-inline'`) e o novo, além de `Referrer-Policy` e `X-Frame-Options` em dobro. Era uma regra criada com *Add* em vez de *Set*, com a regra antiga ainda valendo. A checagem guardava só o último valor de cada header e teria aprovado. Hoje a busca preserva as repetições, e cada header de segurança repetido reprova.
+
 A borda envia três regras (API, `/docs`, `/redoc`; valores no README, seção Segurança). Só o `/redoc` tem `style-src 'unsafe-inline'`, exigência do ReDoc. O plano passivo de produção filtra a 10055 do ZAP só nessa URL, e quem vigia o `script-src` dela é esta checagem.
 
 **Uma CSP pode quebrar a página que protege.** A primeira CSP global da borda deixou o `/docs` em branco e o `/redoc` quebrado (#75), e nenhum teste de HTTP percebeu. Por isso o pós-deploy também roda o teste em navegador (`test_documentacao_no_navegador.py`) com os headers reais da borda, e toda regra nova é validada no Chromium antes de ser recomendada.

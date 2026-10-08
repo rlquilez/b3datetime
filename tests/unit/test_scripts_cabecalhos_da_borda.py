@@ -253,7 +253,7 @@ def test_buscar_normaliza_os_nomes(monkeypatch: pytest.MonkeyPatch) -> None:
         yield _Resposta(_mensagem(X_Frame_Options="DENY"))
 
     monkeypatch.setattr(urllib.request, "urlopen", urlopen)
-    assert buscar("https://h/") == {"x-frame-options": "DENY"}
+    assert buscar("https://h/") == [("x-frame-options", "DENY")]
 
 
 def test_buscar_le_os_headers_de_uma_resposta_de_erro(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -264,7 +264,7 @@ def test_buscar_le_os_headers_de_uma_resposta_de_erro(monkeypatch: pytest.Monkey
         raise HTTPError("https://h/", 503, "indisponível", cabecalhos, io.BytesIO())
 
     monkeypatch.setattr(urllib.request, "urlopen", urlopen)
-    assert buscar("https://h/") == {"referrer-policy": "no-referrer"}
+    assert buscar("https://h/") == [("referrer-policy", "no-referrer")]
 
 
 def test_exigido_vem_do_pyproject(tmp_path: Path) -> None:
@@ -323,3 +323,48 @@ def test_main_aprova_com_a_borda_configurada(
 
 def test_main_com_argumentos_errados() -> None:
     assert main([]) == 2
+
+
+def test_buscar_preserva_headers_repetidos(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Um dicionário guardaria só o último CSP e esconderia o outro."""
+    mensagem = _mensagem(X_Frame_Options="DENY")
+    mensagem["Content-Security-Policy"] = "default-src 'self' 'unsafe-inline'"
+    mensagem["Content-Security-Policy"] = "default-src 'none'"
+
+    @contextmanager
+    def urlopen(_pedido: object, timeout: float) -> Iterator[_Resposta]:
+        assert timeout == borda.TEMPO_LIMITE_SEGUNDOS
+        yield _Resposta(mensagem)
+
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    assert buscar("https://h/") == [
+        ("x-frame-options", "DENY"),
+        ("content-security-policy", "default-src 'self' 'unsafe-inline'"),
+        ("content-security-policy", "default-src 'none'"),
+    ]
+
+
+def test_cabecalho_de_seguranca_repetido_reprova() -> None:
+    """O estado real da borda durante a troca de regras: o /docs recebia o CSP antigo
+    (com 'unsafe-inline') e o novo, e só o último era conferido."""
+
+    def busca(url: str) -> list[tuple[str, str]]:
+        csp = CSP_DOCS if url.endswith(("/docs", "/redoc")) else CSP_API
+        itens = list(_bons(csp).items())
+        if url.endswith("/docs"):
+            itens.insert(0, ("content-security-policy", CSP_DOCS_ANTIGA))
+            itens.append(("referrer-policy", "no-referrer"))
+        return itens
+
+    falhas = [v for v in verificar("https://h/b3datetime", busca) if not v.ok]
+    assert [(v.pagina, v.cabecalho) for v in falhas] == [
+        ("/docs", "content-security-policy (repetido)"),
+        ("/docs", "referrer-policy (repetido)"),
+    ]
+    assert falhas[0].valor == f"{CSP_DOCS_ANTIGA} ‖ {CSP_DOCS}"
+    assert "Add em vez de Set" in falhas[0].motivo
+
+
+def test_cabecalho_que_nao_e_de_seguranca_pode_repetir() -> None:
+    itens = [*_bons().items(), ("vary", "Origin"), ("vary", "Accept-Encoding")]
+    assert borda.repetidos("/", itens) == []
