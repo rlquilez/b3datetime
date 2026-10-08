@@ -7,6 +7,10 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ## [Não publicado]
 
+### Corrigido
+
+- `/docs` deixa de ficar em branco e `/redoc` deixa de exibir "Something went wrong" sob uma Content-Security-Policy sem `'unsafe-inline'`, como a que a borda passou a enviar. As páginas de documentação não têm mais script nem estilo inline: o Swagger UI é inicializado por um arquivo estático, e o `/docs` funciona com `script-src 'self'; style-src 'self'`. O `/redoc` ainda exige `style-src 'unsafe-inline'`, porque o ReDoc injeta estilos em tempo de execução, e passa a funcionar **sem a caixa de busca**, que criava um worker a partir de `blob:`. (#75)
+
 ## [2.1.0] - 2026-10-07
 
 ### Adicionado

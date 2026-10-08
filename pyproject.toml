@@ -279,6 +279,7 @@ type = "forbidden"
 source_modules = [
     "b3datetime.middleware",
     "b3datetime.static",
+    "b3datetime.documentacao",
     "b3datetime.routers.openapi_examples",
     "b3datetime.config",
 ]

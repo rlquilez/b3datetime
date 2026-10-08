@@ -294,6 +294,21 @@ Roda contra **os bits exatos** que passaram no smoke e no Trivy: o `docker-verif
 
 Com `E2E_BASE_URL`, a mesma suíte roda contra uma API já no ar, só com o que lê.
 
+**A documentação é aberta num navegador real** (`test_documentacao_no_navegador.py`, Playwright e Chromium headless). Duas vezes o `/docs` ficou em branco em produção com a suíte verde:
+
+1. os assets davam 404 atrás do Kong;
+2. a CSP do Cloudflare bloqueou o script inline do Swagger UI e os estilos do ReDoc (#75).
+
+Conferir que página e assets respondem 200 não pegava nenhum dos dois. Agora o teste abre `/docs` e `/redoc` e exige:
+
+- o título e **toda operação do contrato** visíveis;
+- o *Try it out* executando de fato um `GET /v1/hours` pela página;
+- nenhum erro de JavaScript, de console ou de CSP.
+
+As exceções aceitas são duas, ambas bloqueios desejados: o logo do ReDoc, que vem de `cdn.redoc.ly`, e o beacon do Cloudflare Web Analytics.
+
+Contra a imagem, a **CSP da borda é injetada** em toda resposta, para a documentação sobreviver a ela antes de ser publicada. Contra a produção (pós-deploy), valem os headers reais. Visto reprovando: contra a imagem anterior à correção, o `/docs` não renderiza e o `/redoc` acusa o worker `blob:` bloqueado. O Playwright fica em `requirements-browser.txt`, fora do `requirements-dev.txt`, porque não tem wheel para musl; sem ele, o módulo é pulado (`importorskip`), e no CI o job de E2E reprova qualquer pulo.
+
 ### DAST — `tests/dast/`
 
 SAST e SCA leem código e manifestos; o DAST **ataca a aplicação rodando**. É o único bloco que enxerga três coisas:
@@ -424,7 +439,7 @@ sequenceDiagram
 | Passo | O que pega |
 |---|---|
 | Aguardar `build == GITHUB_SHA` | o pull automático parou, e a imagem nova nunca chegou |
-| E2E em modo URL | contrato, consultas e documentação quebrados **depois** do Kong e do Cloudflare (prefixo, `strip_path`, assets) |
+| E2E em modo URL | contrato, consultas e documentação quebrados **depois** do Kong e do Cloudflare (prefixo, `strip_path`, assets) — inclusive a documentação **renderizada no Chromium** sob a CSP real da borda |
 | ZAP passivo (`tests/dast/plano-producao.yaml`) | o que a borda acrescenta ou estraga: cookies, headers, páginas de desafio, divulgação de informação. Os filtros e justificativas são os do plano da imagem |
 | Headers da borda (`scripts/cabecalhos_da_borda.py`) | HSTS desligado ou curto, ausência de CSP, `X-Frame-Options` ou `Referrer-Policy` |
 
@@ -456,6 +471,7 @@ Um teste que deixa de rodar sem ninguém perceber é pior do que um teste que fa
 | `ci-ok` só aceita pulo onde ele é o desenho | `CI OK` | um bloco pulado liberar a publicação |
 | Toda operação do contrato alcançada com **2xx** pela varredura | `DAST · OWASP ZAP` (`scripts/dast_resumo.py`) | o ZAP "passar" sem ter atacado a lógica — como no `422` de `/v1/trading-days` |
 | A produção serve o commit publicado (`build == GITHUB_SHA`) | `Produção · pós-deploy` | o pull automático do `latest` parar em silêncio |
+| A documentação **renderiza** no navegador, com toda operação visível e sem violação de CSP | `E2E · contrato 100%` e `Produção · pós-deploy` (`test_documentacao_no_navegador.py`) | o `/docs` em branco com a suíte verde — aconteceu duas vezes |
 | Todo endpoint do contrato com cenário **e** com amostras na carga | `Performance · k6` (`scripts/k6_resumo.py`) e `tests/unit/test_scripts_k6_resumo.py` | um limiar de p95 passar sobre um endpoint que nunca foi chamado |
 | Todo arquivo do repositório lido pelos testes está no sandbox da mutação | `tests/architecture/test_convencoes.py` | a execução limpa do mutmut reprovar e derrubar o job antes de avaliar mutante algum (o push de #67) |
 | Toda imagem base fixada por digest e acompanhada pelo Dependabot | `tests/unit/test_imagens_fixadas.py` | uma tag mutável trocar a imagem sem commit, ou um digest fixo congelar as correções de segurança |
@@ -478,6 +494,7 @@ Cada invariante do [`CLAUDE.md`](../CLAUDE.md) nasceu de um bug. Reverter qualqu
 | `scope["path"]` começa com `root_path` | atrás do Kong, todo asset dava 404 e o `/docs` ficava em branco | `api/test_proxy_prefix.py::test_static_atras_do_kong_com_strip_path_true`, `::test_paginas_referenciam_assets_que_respondem` |
 | Sem redirect de barra final | o `Location` expunha o IP interno do upstream | `api/test_proxy_prefix.py::test_barra_final_nao_redireciona_para_host_interno` |
 | O diretório estático só tem assets | montar o pacote servia `__init__.py` | `api/test_static.py::test_static_nao_serve_o_pacote` |
+| Páginas de documentação sem script nem estilo inline | a CSP da borda (`script-src 'self'; style-src 'self'`) deixou o `/docs` em branco e o `/redoc` quebrado em produção (#75) | `api/test_documentacao.py`, `e2e/test_documentacao_no_navegador.py` |
 | Docs nunca afirmam `apikey` obrigatório | a documentação exigia uma chave que a produção não pede | `api/test_openapi.py::test_sem_autenticacao_por_padrao`, `::test_esquema_apikey_quando_exigido` |
 | A janela do calendário é móvel | a constante 2006 discordava da janela real e devolvia dado financeiro errado com 200 | `unit/test_validate_range.py`, os testes de domínio do E2E (nenhum ano fixo) |
 
@@ -514,6 +531,7 @@ Registro curto das escolhas, no formato *contexto → decisão → por quê*.
 | Headers de segurança | **na borda** (Cloudflare), verificados no pós-deploy | Um dono só evita headers duplicados ou divergentes; o DAST da imagem os rebaixa a informativo e o pós-deploy confere os valores |
 | Imagem testada | um artefato só (`docker save`) para smoke, Trivy, E2E, DAST e k6 | Todos exercitam exatamente os mesmos bits. Reconstruir do cache dava os mesmos passos, mas não necessariamente os mesmos bits |
 | Gate | `ci-ok` único, que em push só aceita pulo do `dependency-review` | Um bloco pulado não pode liberar a publicação |
+| Navegador nos testes | **Playwright** (Chromium headless), num `requirements-browser.txt` à parte | Única forma de provar que uma página *renderiza*: a CSP age no navegador, não no HTTP. Fica fora do `requirements-dev.txt` porque não tem wheel para musl, o que quebraria o `docker run python:3.14-alpine` documentado |
 
 ## Números atuais
 
@@ -521,8 +539,8 @@ Medidos em 2026-10-07, no run [37699640613](https://github.com/rlquilez/b3dateti
 
 | Métrica | Valor |
 |---|---|
-| Testes em processo | **571**: unitários 310 · componente 165 · integração 35 · property-based 20 (500 exemplos cada no CI) · arquitetura 41 |
-| Testes E2E | 61 contra a imagem; 45 contra a produção (16 exigem containers) |
+| Testes em processo | **584**: unitários 310 · componente 176 · integração 35 · property-based 20 (500 exemplos cada no CI) · arquitetura 43 |
+| Testes E2E | 65 contra a imagem, 4 deles no navegador; 48 contra a produção (17 exigem containers) |
 | Cobertura de linhas e ramos | **100%** (`src/b3datetime`) |
 | Mutação | **99,59%** (730 de 733; os 3 sobreviventes são equivalentes documentados) |
 | Contrato | 8 operações · 23 pares (operação, código) · 100% com caso E2E |

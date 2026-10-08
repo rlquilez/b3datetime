@@ -6,11 +6,13 @@ import httpx
 import pytest
 
 from b3datetime.static import (
+    DOCS_CSS,
     FAVICON,
     REDOC_JS,
     REDOC_VERSION,
     STATIC_DIR,
     SWAGGER_CSS,
+    SWAGGER_INIT_JS,
     SWAGGER_JS,
     SWAGGER_UI_VERSION,
 )
@@ -23,6 +25,32 @@ CONTENT_TYPES = {
     REDOC_JS: JS_TYPES,
     FAVICON: {"image/png"},
 }
+
+
+# Os assets do próprio projeto, que tiraram o script e o estilo inline das páginas (#75).
+# Pequenos por natureza: ficam fora do `> 1000 bytes`, que protege os vendorizados de um
+# download truncado; o que se confere é o conteúdo que a página depende.
+PROPRIOS = {
+    SWAGGER_INIT_JS: (JS_TYPES, "SwaggerUIBundle("),
+    DOCS_CSS: ({"text/css"}, "margin: 0"),
+}
+
+
+@pytest.mark.parametrize("asset", sorted(PROPRIOS))
+async def test_assets_proprios_das_paginas(client: httpx.AsyncClient, asset: str) -> None:
+    tipos, trecho = PROPRIOS[asset]
+    r = await client.get(f"/static/{asset}")
+    assert r.status_code == 200
+    assert r.headers["content-type"].split(";")[0] in tipos
+    assert trecho in r.text
+
+
+def test_inicializacao_do_swagger_le_o_contrato_do_atributo_da_pagina() -> None:
+    """O JS e a página combinam pelo atributo: renomear um lado sem o outro deixaria o
+    Swagger UI sem contrato — e só o teste de navegador perceberia."""
+    js = (STATIC_DIR / SWAGGER_INIT_JS).read_text(encoding="utf-8")
+    assert 'getElementById("swagger-ui")' in js
+    assert 'getAttribute("data-openapi-url")' in js
 
 
 @pytest.mark.parametrize("asset", sorted(CONTENT_TYPES))

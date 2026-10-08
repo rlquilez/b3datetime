@@ -1,0 +1,6 @@
+/* Estilo da página de /redoc, fora do HTML: um <style> inline é bloqueado por uma CSP
+   com style-src 'self' (#75). O ReDoc não mexe nos estilos da página que o hospeda. */
+body {
+  margin: 0;
+  padding: 0;
+}

@@ -122,7 +122,7 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-      - run: pip install -r requirements-dev.txt
+      - run: pip install -r requirements-dev.txt -r requirements-browser.txt
 
       # Funções, classes e atributos sem uso em src/ ([tool.vulture]: confiança 60,
       # handlers por decorador ignorados, whitelist revisada em tests/dead_code/).
@@ -151,7 +151,7 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-      - run: pip install -r requirements-dev.txt
+      - run: pip install -r requirements-dev.txt -r requirements-browser.txt
       # Sem argumentos: os alvos (src, scripts e tests) e o modo strict vêm do pyproject.
       - run: mypy
 
@@ -526,8 +526,8 @@ jobs:
       - uses: pypa/gh-action-pip-audit@1220774d901786e6f652ae159f7b6bc8fea6d266 # v1.1.0
         with:
           # O requirements-dev.txt inclui o requirements.txt por `-r`: auditar os dois
-          # era auditar o runtime duas vezes.
-          inputs: requirements-dev.txt
+          # era auditar o runtime duas vezes. O requirements-browser.txt (Playwright) é à parte.
+          inputs: requirements-dev.txt requirements-browser.txt
 
   dependency-review:
     name: SCA · dependency-review
@@ -758,7 +758,10 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-      - run: pip install -r requirements-dev.txt
+      - name: Instalar dependências e o Chromium headless
+        run: |
+          pip install -r requirements-dev.txt -r requirements-browser.txt
+          python -m playwright install --with-deps --only-shell chromium
 
       - name: E2E contra a imagem
         env:
@@ -1162,7 +1165,10 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-      - run: pip install -r requirements-dev.txt
+      - name: Instalar dependências e o Chromium headless
+        run: |
+          pip install -r requirements-dev.txt -r requirements-browser.txt
+          python -m playwright install --with-deps --only-shell chromium
 
       - name: Aguardar a produção servir este commit
         id: aguardar

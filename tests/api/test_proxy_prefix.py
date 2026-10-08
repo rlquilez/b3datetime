@@ -22,15 +22,41 @@ import pytest
 from b3datetime.config import Settings
 from b3datetime.services.calendar_service import TradingCalendar
 from b3datetime.services.redis_service import RedisService
-from b3datetime.static import FAVICON, REDOC_JS, SWAGGER_CSS, SWAGGER_JS
+from b3datetime.static import (
+    DOCS_CSS,
+    FAVICON,
+    REDOC_JS,
+    SWAGGER_CSS,
+    SWAGGER_INIT_JS,
+    SWAGGER_JS,
+)
 from tests.conftest import PREFIX, ProxyMode, build_app
 
-ASSETS = [SWAGGER_JS, SWAGGER_CSS, REDOC_JS, FAVICON]
+ASSETS = [SWAGGER_JS, SWAGGER_CSS, SWAGGER_INIT_JS, REDOC_JS, DOCS_CSS, FAVICON]
 PAGES = ["/docs", "/redoc"]
 ENDPOINTS = ["/", "/openapi.json", "/v1/hours", "/v1/hours/open", "/v1/calendar-info", "/v1/health"]
 
-# href/src/spec-url="..." no HTML e url: '...' no JS de inicialização do Swagger UI.
-ASSET_REF = re.compile(r"""(?:href|src|spec-url)="([^"]+)"|url:\s*'([^']+)'""")
+# Todo atributo que o navegador (ou o JS de inicialização) resolve contra a URL da página.
+# A URL do contrato do Swagger UI está em data-openapi-url desde que a inicialização saiu
+# do HTML (#75); antes era um `url: '...'` no script inline.
+ASSET_REF = re.compile(r'(?:href|src|spec-url|data-openapi-url)="([^"]+)"')
+# O que cada página tem de referenciar: a lista exata, para uma referência sumida (como a
+# do contrato quando o script inline saiu) reprovar em vez de deixar o teste mais fraco.
+PAGE_REFS = {
+    "/docs": {
+        f"./static/{SWAGGER_CSS}",
+        f"./static/{FAVICON}",
+        "./openapi.json",
+        f"./static/{SWAGGER_JS}",
+        f"./static/{SWAGGER_INIT_JS}",
+    },
+    "/redoc": {
+        f"./static/{DOCS_CSS}",
+        f"./static/{FAVICON}",
+        "./openapi.json",
+        f"./static/{REDOC_JS}",
+    },
+}
 CONTENT_TYPES = {
     ".css": {"text/css"},
     # O mimetypes do Python >= 3.12 (o projeto só roda 3.14) usa text/javascript.
@@ -67,14 +93,14 @@ async def test_static_atras_do_kong_com_strip_path_true(
 async def test_paginas_referenciam_assets_que_respondem(
     proxied_client: httpx.AsyncClient, proxy_mode: ProxyMode, page: str
 ) -> None:
-    """Cada href/src/spec-url/url da página, resolvido como o browser resolve (contra a
+    """Cada href/src/spec-url/data-openapi-url da página, resolvido como o browser resolve (contra a
     URL pública), precisa responder 200 pelo caminho que o Kong entrega ao app."""
     public_page = proxy_mode.root_path + page
     r = await proxied_client.get(proxy_mode.upstream(public_page))
     assert r.status_code == 200
 
-    refs = [a or b for a, b in ASSET_REF.findall(r.text)]
-    assert len(refs) >= 3, f"nenhuma referência encontrada em {page}"
+    refs = ASSET_REF.findall(r.text)
+    assert set(refs) == PAGE_REFS[page]
     for ref in refs:
         public_path = urlsplit(urljoin(f"http://test{public_page}", ref)).path
         assert public_path.startswith(proxy_mode.root_path + "/"), ref

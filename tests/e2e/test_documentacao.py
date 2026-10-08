@@ -19,8 +19,9 @@ pytestmark = pytest.mark.e2e
 PAGINAS = {"swagger": "/docs", "redoc": "/redoc"}
 SCHEMA = "/openapi.json"
 
-# href/src/spec-url="..." no HTML e url: '...' no JS de inicialização do Swagger UI.
-REFERENCIA = re.compile(r"""(?:href|src|spec-url)="([^"]+)"|url:\s*'([^']+)'""")
+# Todo atributo que o navegador (ou o JS de inicialização do Swagger UI) resolve contra a
+# URL da página; a do contrato fica em data-openapi-url desde #75.
+REFERENCIA = re.compile(r'(?:href|src|spec-url|data-openapi-url)="([^"]+)"')
 TIPOS = {
     ".css": "text/css",
     ".js": "text/javascript",
@@ -35,8 +36,9 @@ def test_pagina_e_todos_os_assets_respondem(principal: Ambiente, pagina: str) ->
     assert r.status_code == 200, r.text
     assert r.headers["content-type"].startswith("text/html")
 
-    referencias = [a or b for a, b in REFERENCIA.findall(r.text)]
-    assert referencias, f"{pagina} não referencia nenhum asset"
+    referencias = REFERENCIA.findall(r.text)
+    assert SCHEMA.replace("/", "./", 1) in referencias, f"{pagina} não referencia o contrato"
+    assert len(referencias) >= 4, f"{pagina} referencia poucos assets: {referencias}"
     externas = [ref for ref in referencias if re.match(r"(?:https?:)?//", ref)]
     assert not externas, f"{pagina} depende de recurso externo (CDN): {externas}"
 

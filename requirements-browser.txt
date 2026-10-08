@@ -1,0 +1,8 @@
+# Navegador real para o teste da documentação (tests/e2e/test_documentacao_no_navegador.py).
+# Instale com:  pip install -r requirements-browser.txt && python -m playwright install --only-shell chromium
+#
+# Fora do requirements-dev.txt de propósito: o Playwright não publica wheel para musl, e o
+# `docker run python:3.14-alpine ... pip install -r requirements-dev.txt` documentado
+# quebraria. Sem ele, o módulo do teste é pulado (importorskip); no CI ele é instalado nos
+# jobs que coletam tests/e2e, e o job de E2E reprova qualquer pulo.
+playwright==1.63.0

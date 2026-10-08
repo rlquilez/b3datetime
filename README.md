@@ -633,7 +633,8 @@ Quando o Kong Gateway passar a exigir o header `apikey` (plugin key-auth), a API
 | ReDoc | https://api.quilez.cloud/b3datetime/redoc |
 | Schema OpenAPI 3.1 | https://api.quilez.cloud/b3datetime/openapi.json |
 
-- Os assets (Swagger UI 5.17.14, ReDoc 2.1.5, favicon) são **versionados em `src/b3datetime/static/assets/` e servidos pela própria API** — sem CDN, sem dependência de rede externa, sem risco de supply chain.
+- Os assets (Swagger UI 5.33.0, ReDoc 2.5.4, favicon) são **versionados em `src/b3datetime/static/assets/` e servidos pela própria API** — sem CDN, sem dependência de rede externa, sem risco de supply chain.
+- **Compatíveis com CSP estrita.** As páginas não têm script nem estilo inline: a inicialização do Swagger UI fica em `static/assets/swagger-init.js`. O `/docs` funciona com `script-src 'self'; style-src 'self'`. O `/redoc` precisa de `style-src 'unsafe-inline'`, porque o ReDoc injeta estilos em tempo de execução, e roda **sem busca**, porque ela criava um worker a partir de `blob:`. Um teste em navegador real (Chromium) renderiza as duas páginas sob essa CSP a cada push, e contra a produção depois de cada deploy.
 - As páginas referenciam `./static/…` e `./openapi.json` por caminhos **relativos**: o browser os resolve contra a URL pública, o que funciona atrás de qualquer prefixo de gateway.
 - `openapi.json` traz `servers: [{"url": "/b3datetime"}]` quando `ROOT_PATH` está definido — é isso que faz o "Try it out" do Swagger chamar `/b3datetime/v1/...`.
 - As URLs canônicas não têm barra final: `/docs/` responde `404`, e não um redirect.
@@ -970,6 +971,14 @@ flowchart LR
 - **Sem autenticação na aplicação** por desenho: quem valida chaves é o gateway. `API_KEY_REQUIRED` só documenta.
 - Imagem mínima sobre `python:3.14-alpine` fixada por digest, com usuário sem privilégios, sem `pip`/`setuptools`/`wheel`, patches do sistema (`apk upgrade`) aplicados a cada build e varrida pelo Trivy a cada CI.
 - Assets da documentação versionados e servidos localmente (sem CDN, sem SRI para gerenciar); o diretório servido contém só os assets, nunca código Python. Como nenhum manifesto os declara, quem os vigia é o **DAST** (OWASP ZAP, regra *Vulnerable JS Library*): foi ele que apontou o DOMPurify vulnerável dentro do Swagger UI 5.17.14.
+- **Headers de segurança na borda.** Ficam no Cloudflare (*Transform Rules → Modify Response Header*, ação **Set**), em duas regras:
+
+  | Regra | Caminhos | `Content-Security-Policy` |
+  |---|---|---|
+  | API | tudo em `/b3datetime`, exceto as duas páginas abaixo | `default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'` |
+  | Documentação | `/b3datetime/docs` e `/b3datetime/redoc` | `default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'; upgrade-insecure-requests` |
+
+  Nas duas também vão `Strict-Transport-Security: max-age=15552000; includeSubDomains; preload`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer` e `X-Content-Type-Options: nosniff`. O `'unsafe-inline'` de estilos existe só pelo ReDoc; o `/docs` funciona sem ele.
 - **Varredura dinâmica (DAST)** a cada push: o ZAP ataca a imagem verificada antes de qualquer publicação. Os headers de segurança da resposta (CSP, `X-Frame-Options`, HSTS, `Referrer-Policy`) são responsabilidade da borda (Cloudflare), não da aplicação, e o job de pós-deploy confere os **valores** deles na produção a cada deploy.
 - CORS sem credenciais e só para métodos de leitura; redirecionamentos que expunham o host interno do upstream foram eliminados.
 - A URL do Redis é redigida nos logs (senha nunca aparece); dependências pinadas e auditadas por pip-audit, dependency-review e Dependabot; código analisado por bandit, CodeQL e SonarQube; segredos varridos por gitleaks.

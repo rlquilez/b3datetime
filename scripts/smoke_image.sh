@@ -117,11 +117,15 @@ expect GET / 200 application/json '"required":false'
 # O commit do build (ARG BUILD_SHA → APP_BUILD), que o pós-deploy compara com o do CI.
 expect GET / 200 application/json "\"build\":\"${BUILD_SHA:-local}\""
 expect GET /docs 200 text/html './static/swagger-ui-bundle.js'
-expect GET /docs 200 text/html "url: './openapi.json'"
+# A URL do contrato fica num atributo: desde #75 a página não tem script inline.
+expect GET /docs 200 text/html 'data-openapi-url="./openapi.json"'
+expect GET /docs 200 text/html './static/swagger-init.js'
 expect GET /redoc 200 text/html 'spec-url="./openapi.json"'
 expect GET /static/swagger-ui.css 200 text/css
 expect GET /static/swagger-ui-bundle.js 200 'text/javascript'
 expect GET /static/redoc.standalone.js 200 'text/javascript'
+expect GET /static/swagger-init.js 200 'text/javascript'
+expect GET /static/documentacao.css 200 text/css
 expect GET /static/favicon.png 200 image/png
 expect HEAD /static/swagger-ui.css 200 text/css
 

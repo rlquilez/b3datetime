@@ -25,13 +25,19 @@ SWAGGER_JS = "swagger-ui-bundle.js"
 SWAGGER_CSS = "swagger-ui.css"
 REDOC_JS = "redoc.standalone.js"
 FAVICON = "favicon.png"
+# Do próprio projeto, não vendorizados: a inicialização do Swagger UI e o estilo da página
+# do ReDoc, fora do HTML para as páginas funcionarem sob CSP sem 'unsafe-inline' (#75).
+SWAGGER_INIT_JS = "swagger-init.js"
+DOCS_CSS = "documentacao.css"
 
 __all__ = [
+    "DOCS_CSS",
     "FAVICON",
     "REDOC_JS",
     "REDOC_VERSION",
     "STATIC_DIR",
     "SWAGGER_CSS",
+    "SWAGGER_INIT_JS",
     "SWAGGER_JS",
     "SWAGGER_UI_VERSION",
 ]

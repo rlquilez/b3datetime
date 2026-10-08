@@ -18,11 +18,11 @@ from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from b3datetime.config import Settings, get_settings
+from b3datetime.documentacao import pagina_redoc, pagina_swagger
 from b3datetime.middleware import RootPathPrefixMiddleware
 from b3datetime.routers import dates, health, hours, root
 from b3datetime.routers.openapi_examples import (
@@ -39,7 +39,7 @@ from b3datetime.services.redis_service import (
     RedisService,
     RedisUnavailableError,
 )
-from b3datetime.static import FAVICON, REDOC_JS, STATIC_DIR, SWAGGER_CSS, SWAGGER_JS
+from b3datetime.static import STATIC_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -199,24 +199,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health.router)
     app.include_router(root.router)
 
+    # Páginas próprias, e não as do FastAPI: as dele têm script e estilo inline, que a
+    # CSP da borda bloqueia — o /docs ficou em branco em produção (#75).
     @app.get("/docs", include_in_schema=False)
-    async def swagger_ui() -> object:
-        return get_swagger_ui_html(
-            openapi_url=OPENAPI_RELATIVE_URL,
-            title=f"{settings.api_title} - Swagger UI",
-            swagger_js_url=f"./static/{SWAGGER_JS}",
-            swagger_css_url=f"./static/{SWAGGER_CSS}",
-            swagger_favicon_url=f"./static/{FAVICON}",
+    async def swagger_ui() -> HTMLResponse:
+        return HTMLResponse(
+            pagina_swagger(f"{settings.api_title} - Swagger UI", OPENAPI_RELATIVE_URL)
         )
 
     @app.get("/redoc", include_in_schema=False)
-    async def redoc_ui() -> object:
-        return get_redoc_html(
-            openapi_url=OPENAPI_RELATIVE_URL,
-            title=f"{settings.api_title} - ReDoc",
-            redoc_js_url=f"./static/{REDOC_JS}",
-            redoc_favicon_url=f"./static/{FAVICON}",
-            with_google_fonts=False,
-        )
+    async def redoc_ui() -> HTMLResponse:
+        return HTMLResponse(pagina_redoc(f"{settings.api_title} - ReDoc", OPENAPI_RELATIVE_URL))
 
     return app
