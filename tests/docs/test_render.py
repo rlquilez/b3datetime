@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from tests.docs.diagramas import Diagrama, diagramas
-from tests.docs.renderizador import FUNDOS, LARGURA, MERMAID_JS, medir
+from tests.docs.renderizador import COLUNA, FUNDOS, MERMAID_JS, medir
 
 if TYPE_CHECKING:
     from playwright.sync_api import Page
@@ -35,7 +35,7 @@ def pagina() -> Iterator[Page]:
     with sync_api.sync_playwright() as playwright:
         navegador = playwright.chromium.launch()
         pagina = navegador.new_page(
-            viewport={"width": LARGURA + 32, "height": 900}, device_scale_factor=2
+            viewport={"width": COLUNA + 32, "height": 900}, device_scale_factor=2
         )
         yield pagina
         navegador.close()

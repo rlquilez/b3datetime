@@ -33,18 +33,29 @@ if TYPE_CHECKING:
 PASTA = Path(__file__).resolve().parent
 MERMAID_JS = PASTA / "node_modules" / "mermaid" / "dist" / "mermaid.min.js"
 FUNDOS = {"claro": "#ffffff", "escuro": "#0d1117"}
-# Largura útil do conteúdo de um .md na visualização de arquivo do GitHub.
-LARGURA = 1012
+# Largura do iframe do diagrama no github.com (medida com Playwright em 2026-10-07): 1012 px
+# na visualização de um arquivo .md, mas só 838 px no README da página inicial do
+# repositório — a que mais gente vê. Os modelos da skill usam a mais estreita.
+COLUNA = 1012
+COLUNA_DA_PAGINA_INICIAL = 838
+
+
+def coluna(diagrama: Diagrama) -> int:
+    """A largura em que o GitHub desenha este diagrama."""
+    estreita = diagrama.arquivo == "README.md" or diagrama.arquivo.endswith(".mmd")
+    return COLUNA_DA_PAGINA_INICIAL if estreita else COLUNA
+
+
 CONTRASTE_TEXTO = 4.5
 CONTRASTE_LINHA = 3.0
 # Corpo efetivo mínimo do texto: o GitHub encolhe o SVG até caber na largura da página,
 # então um diagrama largo demais vira letra miúda (15 px nominais vezes a escala).
-FONTE_MINIMA = 13.0
+FONTE_MINIMA = 14.0
 
 PAGINA = """<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>
   html, body {{ margin: 0; background: {fundo}; }}
-  #alvo {{ width: {largura}px; padding: 16px; box-sizing: border-box; }}
+  #alvo {{ width: {largura}px; padding: 16px; box-sizing: content-box; }}
   /* elementsFromPoint só enxerga o que aceita ponteiro: a medição precisa das formas. */
   #alvo svg * {{ pointer-events: visiblePainted !important; }}
 </style></head><body><div id="alvo"></div></body></html>"""
@@ -280,7 +291,9 @@ class Medicao:
 
 def medir(page: Page, diagrama: Diagrama, modo: str, saida: Path | None = None) -> Medicao:
     """Renderiza um diagrama num modo de cor e mede o resultado."""
-    page.set_content(PAGINA.format(fundo=FUNDOS[modo], largura=LARGURA))
+    largura = coluna(diagrama)
+    page.set_viewport_size({"width": largura + 32, "height": 900})
+    page.set_content(PAGINA.format(fundo=FUNDOS[modo], largura=largura))
     page.add_script_tag(path=str(MERMAID_JS))
     page.evaluate(INICIALIZAR, modo)
     medicao = Medicao(diagrama, modo)
@@ -291,7 +304,7 @@ def medir(page: Page, diagrama: Diagrama, modo: str, saida: Path | None = None) 
     altura = page.evaluate(
         "() => Math.ceil(document.getElementById('alvo').getBoundingClientRect().bottom)"
     )
-    page.set_viewport_size({"width": LARGURA + 32, "height": max(900, altura + 32)})
+    page.set_viewport_size({"width": largura + 32, "height": max(900, altura + 32)})
     resultado = page.evaluate(MEDIR, FUNDOS[modo])
     if "erro" in resultado:
         medicao.erro = resultado["erro"]
@@ -328,7 +341,7 @@ def main(argv: list[str]) -> int:
     with sync_playwright() as playwright:
         navegador = playwright.chromium.launch()
         page = navegador.new_page(
-            viewport={"width": LARGURA + 32, "height": 900}, device_scale_factor=2
+            viewport={"width": COLUNA + 32, "height": 900}, device_scale_factor=2
         )
         for diagrama in alvos:
             medicoes += [medir(page, diagrama, modo, opcoes.saida) for modo in FUNDOS]

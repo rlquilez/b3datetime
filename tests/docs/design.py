@@ -154,7 +154,8 @@ def config_sequencia() -> dict[str, Any]:
         },
         "sequence": {
             "mirrorActors": False,
-            "actorMargin": 50,
+            "width": 90,
+            "actorMargin": 30,
             "boxMargin": 12,
             "messageMargin": 42,
             "noteMargin": 12,

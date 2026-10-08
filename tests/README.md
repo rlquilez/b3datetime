@@ -133,7 +133,7 @@ config:
   flowchart:
     curve: basis
     nodeSpacing: 28
-    rankSpacing: 50
+    rankSpacing: 30
     padding: 18
     wrappingWidth: 400
     diagramPadding: 24
@@ -357,7 +357,7 @@ Os diagramas são documentação que o leitor **vê**, e o que ele vê depende d
 |---|---|---|
 | Design system no código-fonte | `test_estilo.py` (roda sempre, sem Node) | frontmatter diferente do canônico da família (`tests/docs/design.py`), cor fora da paleta, `%%{init}%%`, tag além de `<br>`, emoji, linha de rótulo com mais de 64 caracteres, `__` em markdown string, `linkStyle`, sequência sem o painel ou com `autonumber`, transição de estado que quebra linha |
 | Agentic Mermaid | `test_agentic.py` (`am verify`, canal local) | erro de nível 1 (`RENDER_FAILED`, `GROUP_BREACH`…) e todo aviso fora dos tolerados, inclusive `LABEL_OVERFLOW` e `LOW_CONTRAST`; e um layout vazio — com markdown strings o `am` marca o fluxograma como opaco e "passa" sem modelar nada, por isso o diagrama é convertido antes (`tests/docs/agentic.py`) |
-| Render fiel ao GitHub | `test_render.py` + `renderizador.py` (Chromium) | erro de render, rótulo cortado ou fora da forma, tag visível, nós sobrepostos, **texto abaixo de 4,5:1 contra a superfície realmente pintada** (`elementsFromPoint`, com transparências compostas), linha abaixo de 3:1 contra o fundo, **corpo efetivo abaixo de 13 px** depois de o GitHub encolher o SVG até caber na coluna |
+| Render fiel ao GitHub | `test_render.py` + `renderizador.py` (Chromium) | erro de render, rótulo cortado ou fora da forma, tag visível, nós sobrepostos, **texto abaixo de 4,5:1 contra a superfície realmente pintada** (`elementsFromPoint`, com transparências compostas), linha abaixo de 3:1 contra o fundo, **corpo efetivo abaixo de 14 px** depois de o GitHub encolher o SVG até caber na coluna — 838 px no README da página inicial, 1012 px nos demais `.md` (as larguras reais do iframe, medidas no github.com) |
 
 `diagramas.py` extrai os blocos de todo `.md` que o `git ls-files` lista: um arquivo novo com diagrama entra na verificação sozinho, sem lista para manter. As duas camadas que precisam de Node e Chromium têm o marcador `diagramas`, fora da execução padrão como o `e2e`; o job roda `pytest tests/docs -m "not e2e"` e publica as capturas (claro e escuro de cada diagrama) como artefato `diagramas`.
 
@@ -694,7 +694,8 @@ config:
     activationBorderColor: "#0F9F87"
   sequence:
     mirrorActors: false
-    actorMargin: 50
+    width: 90
+    actorMargin: 30
     boxMargin: 12
     messageMargin: 42
     noteMargin: 12

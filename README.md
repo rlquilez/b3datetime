@@ -294,7 +294,8 @@ config:
     activationBorderColor: "#0F9F87"
   sequence:
     mirrorActors: false
-    actorMargin: 50
+    width: 90
+    actorMargin: 30
     boxMargin: 12
     messageMargin: 42
     noteMargin: 12
@@ -303,8 +304,8 @@ config:
 sequenceDiagram
     participant C as Cliente
     participant K as Kong
-    participant A as API /v1/hours
-    participant L as Cache local
+    participant A as API
+    participant L as Cache
     participant R as Redis
     rect rgb(248, 250, 252)
     C->>K: GET /b3datetime/v1/hours
@@ -312,7 +313,7 @@ sequenceDiagram
     A->>R: MGET open, close
     alt Redis respondeu
         R-->>A: open, close
-        A->>L: grava valores e horário
+        A->>L: grava com horário
         alt alguma chave ausente
             A-->>C: 404 Not Found
         else valor fora de HH:MM
@@ -322,9 +323,9 @@ sequenceDiagram
         end
     else Redis indisponível
         A->>L: idade do cache?
-        alt cache presente e dentro do TTL
-            A-->>C: 200 do cache local
-        else sem cache ou expirado
+        alt cache dentro do TTL
+            A-->>C: 200 do cache
+        else cache vazio ou expirado
             A-->>C: 503 Service Unavailable
         end
     end
@@ -1141,7 +1142,7 @@ config:
   flowchart:
     curve: basis
     nodeSpacing: 28
-    rankSpacing: 50
+    rankSpacing: 30
     padding: 18
     wrappingWidth: 400
     diagramPadding: 24
@@ -1149,11 +1150,11 @@ config:
 flowchart TB
     subgraph estatica["Estática"]
         direction LR
-        lint("`**Lint e tipagem**
-        ruff · infra · mypy strict`") ~~~ arq("`**Arquitetura**
-        import-linter · código morto`")
+        lint("`**Lint e tipos**
+        ruff · mypy · infra`") ~~~ arq("`**Arquitetura**
+        camadas · código morto`")
         sast("`**Segurança**
-        SAST · SCA · segredos`") ~~~ seg("`**Contrato e documentação**
+        SAST · SCA · segredos`") ~~~ seg("`**Contrato e docs**
         oasdiff · diagramas`")
     end
     subgraph processo["Testes em processo"]
@@ -1223,7 +1224,7 @@ flowchart TB
 | SAST | bandit, CodeQL (Python e os próprios workflows), zizmor | zizmor audita os workflows: injeção de template, permissões, credencial persistida, action sem pin por SHA, cache envenenável, ações com vulnerabilidade conhecida |
 | CVEs em dependências | pip-audit, dependency-review | |
 | Segredos | gitleaks | histórico inteiro |
-| Diagramas | `tests/docs`: mermaid.js 12.1 no Chromium e Agentic Mermaid | todo diagrama dos `.md` renderizado como o GitHub renderiza, no fundo claro e no escuro: texto ≥ 4,5:1 contra a superfície pintada, linhas ≥ 3:1, corpo efetivo ≥ 13 px, nada cortado; frontmatter e paleta do design system ([skill `mermaid-design`](.claude/skills/mermaid-design/SKILL.md)); capturas publicadas como artefato |
+| Diagramas | `tests/docs`: mermaid.js 12.1 no Chromium e Agentic Mermaid | todo diagrama dos `.md` renderizado como o GitHub renderiza, no fundo claro e no escuro: texto ≥ 4,5:1 contra a superfície pintada, linhas ≥ 3:1, corpo efetivo ≥ 14 px na coluna real do GitHub, nada cortado; frontmatter e paleta do design system ([skill `mermaid-design`](.claude/skills/mermaid-design/SKILL.md)); capturas publicadas como artefato |
 | Contrato | oasdiff | `tests/contract/openapi.json` (snapshot do contrato, versionado) contra o da última release: breaking change sem bump de MAJOR reprova |
 | Filesystem e imagem | Trivy | `CRITICAL`/`HIGH` reprovam |
 | Smoke test | `scripts/smoke_image.sh` | container real, com e sem prefixo, Redis real e `HEALTHCHECK` |
@@ -1288,7 +1289,7 @@ flowchart TB
     subgraph automatico["No CI, sem intervenção"]
         direction LR
         pipeline("`**CI**
-        testes · scan · docker-publish`") --> nova{"`**Versão nova?**`"}
+        testes · scans · imagem`") --> nova{"`**Versão nova?**`"}
         nova -- "sim" --> cria("`**Job release**
         tag · retag · Release`")
         nova -- "não" --> nada("`**Nada a fazer**`")

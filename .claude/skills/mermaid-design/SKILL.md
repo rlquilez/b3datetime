@@ -16,7 +16,8 @@ local (seção 8) e revise as capturas nos dois modos de cor.
 ## 1. Princípios
 
 1. **Legível onde é lido.** O leitor vê o diagrama no GitHub, em claro *ou* escuro, numa
-   coluna de ~1000 px. O que não funciona lá não funciona.
+   coluna de 838 px (README da página inicial) ou 1012 px (demais `.md`). O que não
+   funciona lá não funciona.
 2. **Tudo rastreia ao código.** Cada caixa e cada seta existe no código, no `ci.yml` ou
    na infraestrutura documentada. Agrupamento visual (subgrafo) não inventa relação.
 3. **Hierarquia por tipografia, não por enfeite.** Título em negrito, subtítulo curto.
@@ -57,9 +58,12 @@ grep -o 'mermaid.initialize([^)]*)' bundle.js | head -1
   `#0d1117` no modo escuro. Daí a **regra dual**: todo texto fica sobre uma superfície
   pintada pelo próprio diagrama (nó, subgrafo, fundo do rótulo da aresta, nota, painel), e
   toda linha tem ≥ 3:1 nos dois fundos.
-- **O SVG encolhe até caber na largura.** Um diagrama com 2200 px de largura natural sai
-  a 44% e o texto de 15 px vira 6,6 px. O gate exige corpo efetivo ≥ 13 px numa coluna
-  de 1012 px, o que dá largura natural ≤ ~1170 px. A meta é ≤ 1000 px.
+- **O SVG encolhe até caber na largura do iframe**, que é de **838 px no README da página
+  inicial do repositório** e de 1012 px na visualização de qualquer outro `.md` (medido
+  com Playwright no github.com). Um diagrama com 2200 px de largura natural sai a 44%, e o
+  texto de 15 px vira 6,6 px. O gate exige corpo efetivo ≥ 14 px na coluna do arquivo
+  (`renderizador.coluna`; os modelos usam 838), ou seja, largura natural ≤ ~900 px no
+  `README.md` raiz e ≤ ~1080 px nos demais. A meta é caber sem encolher: ≤ 838 e ≤ 1012.
 - **O `themeCSS` passa por um sanitizador que descarta o CSS inteiro se houver `<` ou
   `>`.** Então nada de seletor filho (`a > b`).
 - **O Mermaid deixa o fundo do rótulo de aresta a 50% de opacidade**
@@ -76,7 +80,7 @@ obsoleto e perde para o frontmatter. Copie de `modelos/`: o bloco é longo e o t
 |---|---|---|
 | `flowchart` | `arquitetura.mmd`, `pipeline.mmd` | `htmlLabels: false` na **raiz** (o `flowchart.htmlLabels` é ignorado nos nós do 12) · `fontFamily` também na raiz (só no `themeVariables` o texto saía em Times) · `nodeBorder` definido (sem ele, o `neo` desenha borda em gradiente) · `wrappingWidth: 400` (o padrão de 120 px quebra todo rótulo) · `themeCSS` com rótulo de aresta opaco e arestas de 1,5 px |
 | `stateDiagram-v2` | `estados.mmd` | `htmlLabels: true` (com `false`, o nome do estado sai alinhado à esquerda) · `themeCSS` pinta de branco o fundo HTML do rótulo da transição |
-| `sequenceDiagram` | `sequencia.mmd` | painel `rect rgb(248, 250, 252)` envolvendo **todas** as mensagens (o texto da mensagem não tem fundo próprio) · `themeCSS` com halo (`paint-order: stroke`, 12 px) que apaga a linha de vida sob o texto · `mirrorActors: false` · sem `autonumber` (o círculo dá 3,04:1) |
+| `sequenceDiagram` | `sequencia.mmd` | painel `rect rgb(248, 250, 252)` envolvendo **todas** as mensagens (o texto da mensagem não tem fundo próprio) · `themeCSS` com halo (`paint-order: stroke`, 12 px) que apaga a linha de vida sob o texto · `mirrorActors: false` · `width: 90` (caixa mínima do ator; cresce com o nome) · sem `autonumber` (o círculo dá 3,04:1) |
 
 Ajustes livres por diagrama (`tests/docs/design.py::AJUSTES`): `layout` (`dagre` ou
 `elk`), `flowchart.nodeSpacing`/`rankSpacing` (10–90), `flowchart.wrappingWidth`
@@ -139,6 +143,9 @@ derivados das famílias de tom existentes, com texto ≥ 7:1.
 
 - **Prefira `TB`.** `LR` só com ≤ 4 colunas e rótulos curtos: cada coluna custa
   ~250 px.
+- **Sequência estreita**: ator com caixa mínima de 90 px (`sequence.width`) e
+  `actorMargin: 30`, nomes curtos (`API`, `Cache`) e mensagens de até ~25 caracteres. A
+  distância entre dois atores vizinhos é a da mensagem mais longa entre eles.
 - **Arestas entre subgrafos vão para o subgrafo** (`estatica --> consolidacao`), não
   para um nó de dentro. Uma aresta de fora para um nó interno faz o dagre **ignorar o
   `direction` do subgrafo**.
@@ -226,7 +233,8 @@ Depois vem o que o Agentic não cobre: o render fiel ao GitHub.
       fora de `design.py`.
 - [ ] Rótulos: negrito + subtítulo, ≤ 64 caracteres por linha, ≤ 3 linhas, sem `__`, sem
       tag além de `<br>`, sem emoji.
-- [ ] Largura natural ≤ ~1000 px (o `relatorio.json` mostra `natural` e `fonte`).
+- [ ] Largura natural ≤ 838 px no `README.md` raiz e ≤ 1012 px nos demais (o
+      `relatorio.json` mostra `natural`, `escala` e `fonte`).
 - [ ] Sequência: painel `rect` em volta de tudo, sem `autonumber`.
 - [ ] Fatos iguais aos de antes, ou mudança intencional registrada.
 - [ ] Gate local verde: `pytest tests/docs -m "not e2e" --no-cov`.

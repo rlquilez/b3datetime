@@ -9,7 +9,7 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ### Adicionado
 
-- Bloco de CI **Documentação · diagramas** (`tests/docs`), bloqueante e no `ci-ok`. Todo diagrama Mermaid dos `.md` é renderizado como o GitHub renderiza: mermaid.js 12.1 (a versão do bundle do GitHub), o `initialize` do GitHub, fundo claro e fundo escuro. Reprova texto abaixo de 4,5:1 contra a superfície realmente pintada, linha abaixo de 3:1, texto encolhido abaixo de 13 px e rótulo cortado. Também verifica o design system no código-fonte e roda o `am verify` do Agentic Mermaid. As capturas dos dois modos são publicadas como artefato. (#80)
+- Bloco de CI **Documentação · diagramas** (`tests/docs`), bloqueante e no `ci-ok`. Todo diagrama Mermaid dos `.md` é renderizado como o GitHub renderiza: mermaid.js 12.1 (a versão do bundle do GitHub), o `initialize` do GitHub, fundo claro e fundo escuro. Reprova texto abaixo de 4,5:1 contra a superfície realmente pintada, linha abaixo de 3:1, texto encolhido abaixo de 14 px na coluna real do GitHub (838 px no README da página inicial, 1012 px nos demais) e rótulo cortado. Também verifica o design system no código-fonte e roda o `am verify` do Agentic Mermaid. As capturas dos dois modos são publicadas como artefato. (#80)
 - Skill `mermaid-design` (`.claude/skills/mermaid-design/`): o design system "Neo Editorial / Soft Minimal" dos diagramas. Traz o config canônico por tipo, a paleta por papel com o contraste validado, as regras de layout que cabem na página, a fidelidade à arquitetura real, o fluxo de verificação e quatro modelos prontos (arquitetura, pipeline, sequência e estados), verificados pelo mesmo gate. (#79)
 
 ### Alterado
