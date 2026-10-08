@@ -453,7 +453,17 @@ sequenceDiagram
 
 Também detecta o desafio do Cloudflare (`cf-mitigated`) e orienta a criar uma regra de skip no WAF.
 
-**Modo de aviso até a borda ser configurada.** Com `[tool.b3datetime.quality] edge_headers_required = false`, o que falta vira `::warning::` e aparece no resumo do run. Depois da configuração no Cloudflare, o valor passa a `true`, e uma regra desfeita na borda quebra o job em vez de passar despercebida. A CSP sugerida para `/docs` e `/redoc` foi validada num proxy local sobre a imagem: as duas páginas renderizam, sem nenhuma violação.
+**Obrigatório desde 2026-10-07** (`[tool.b3datetime.quality] edge_headers_required = true`, #77). Uma regra desfeita no Cloudflare reprova o job, em vez de passar despercebida; antes da configuração, o modo `false` só avisava. A política de CSP conferida vale para toda página:
+
+- `frame-ancestors 'none'`;
+- `script-src` e `worker-src` efetivos sem `'unsafe-inline'`, `'unsafe-eval'`, `blob:`, `data:` ou curingas;
+- `object-src` efetivo `'none'`;
+- `base-uri` restrito;
+- na API JSON, também `default-src 'none'`.
+
+A borda envia três regras (API, `/docs`, `/redoc`; valores no README, seção Segurança). Só o `/redoc` tem `style-src 'unsafe-inline'`, exigência do ReDoc. O plano passivo de produção filtra a 10055 do ZAP só nessa URL, e quem vigia o `script-src` dela é esta checagem.
+
+**Uma CSP pode quebrar a página que protege.** A primeira CSP global da borda deixou o `/docs` em branco e o `/redoc` quebrado (#75), e nenhum teste de HTTP percebeu. Por isso o pós-deploy também roda o teste em navegador (`test_documentacao_no_navegador.py`) com os headers reais da borda, e toda regra nova é validada no Chromium antes de ser recomendada.
 
 **Nunca varredura ativa em produção.** O plano de produção é só passivo (~250 GETs de leitura, ~25 s). A ativa, com milhares de requisições hostis, roda apenas contra o container efêmero do CI.
 

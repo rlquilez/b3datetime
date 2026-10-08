@@ -971,14 +971,15 @@ flowchart LR
 - **Sem autenticação na aplicação** por desenho: quem valida chaves é o gateway. `API_KEY_REQUIRED` só documenta.
 - Imagem mínima sobre `python:3.14-alpine` fixada por digest, com usuário sem privilégios, sem `pip`/`setuptools`/`wheel`, patches do sistema (`apk upgrade`) aplicados a cada build e varrida pelo Trivy a cada CI.
 - Assets da documentação versionados e servidos localmente (sem CDN, sem SRI para gerenciar); o diretório servido contém só os assets, nunca código Python. Como nenhum manifesto os declara, quem os vigia é o **DAST** (OWASP ZAP, regra *Vulnerable JS Library*): foi ele que apontou o DOMPurify vulnerável dentro do Swagger UI 5.17.14.
-- **Headers de segurança na borda.** Ficam no Cloudflare (*Transform Rules → Modify Response Header*, ação **Set**), em duas regras:
+- **Headers de segurança na borda.** Ficam no Cloudflare (*Transform Rules → Modify Response Header*, ação **Set**), em três regras, uma por forma de resposta:
 
   | Regra | Caminhos | `Content-Security-Policy` |
   |---|---|---|
   | API | tudo em `/b3datetime`, exceto as duas páginas abaixo | `default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'` |
-  | Documentação | `/b3datetime/docs` e `/b3datetime/redoc` | `default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'; upgrade-insecure-requests` |
+  | Swagger UI | `/b3datetime/docs` | `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'; upgrade-insecure-requests` |
+  | ReDoc | `/b3datetime/redoc` | a do Swagger UI com `style-src 'self' 'unsafe-inline'` |
 
-  Nas duas também vão `Strict-Transport-Security: max-age=15552000; includeSubDomains; preload`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer` e `X-Content-Type-Options: nosniff`. O `'unsafe-inline'` de estilos existe só pelo ReDoc; o `/docs` funciona sem ele.
+  Nas três também vão `Strict-Transport-Security: max-age=15552000; includeSubDomains; preload`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer` e `X-Content-Type-Options: nosniff`. Nenhuma página executa script inline. O único `'unsafe-inline'` é o de estilos no `/redoc`, porque o ReDoc injeta estilos em tempo de execução. O pós-deploy confere os **valores** a cada deploy (`scripts/cabecalhos_da_borda.py`, obrigatório): uma regra desfeita no Cloudflare reprova o pipeline.
 - **Varredura dinâmica (DAST)** a cada push: o ZAP ataca a imagem verificada antes de qualquer publicação. Os headers de segurança da resposta (CSP, `X-Frame-Options`, HSTS, `Referrer-Policy`) são responsabilidade da borda (Cloudflare), não da aplicação, e o job de pós-deploy confere os **valores** deles na produção a cada deploy.
 - CORS sem credenciais e só para métodos de leitura; redirecionamentos que expunham o host interno do upstream foram eliminados.
 - A URL do Redis é redigida nos logs (senha nunca aparece); dependências pinadas e auditadas por pip-audit, dependency-review e Dependabot; código analisado por bandit, CodeQL e SonarQube; segredos varridos por gitleaks.

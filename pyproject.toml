@@ -355,6 +355,7 @@ pytest_add_cli_args_test_selection = [
 # redirect_slashes=False trocado por None, que também é falso).
 mutation_min_score = 99.0
 # Headers de segurança da borda (Cloudflare) conferidos na produção pelo job de
-# pós-deploy (scripts/cabecalhos_da_borda.py). `false`: o que falta só gera aviso, até a
-# borda ser configurada; `true`: reprova — uma regra desfeita no Cloudflare quebra o job.
-edge_headers_required = false
+# pós-deploy (scripts/cabecalhos_da_borda.py). `true` desde 2026-10-07, quando a borda
+# passou a enviar as três regras do README (#77): uma regra desfeita no Cloudflare reprova
+# o job. `false` só avisaria — o modo usado até a borda ser configurada.
+edge_headers_required = true

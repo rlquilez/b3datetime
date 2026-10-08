@@ -33,6 +33,14 @@ jobs:
         newRisk: Info
       - ruleId: 10035 # Strict-Transport-Security Header (ausente ou max-age=0)
         newRisk: Info
+      # O ReDoc injeta estilos em tempo de execução (styled-components): a regra da borda
+      # para /redoc precisa de style-src 'unsafe-inline' (#75). Só nessa URL. A mesma regra
+      # do ZAP também acusa script-src 'unsafe-inline', que este filtro esconderia em
+      # /redoc — por isso o script-src de toda página é conferido à parte, com precisão,
+      # por scripts/cabecalhos_da_borda.py (#77).
+      - ruleId: 10055 # CSP (style-src unsafe-inline)
+        newRisk: Info
+        url: "https://api.quilez.cloud/b3datetime/redoc"
       - ruleId: 10096 # Timestamp Disclosure - Unix
         newRisk: False Positive
         url: "https://api.quilez.cloud/b3datetime/static/.*\\.js"
