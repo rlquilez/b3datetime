@@ -14,7 +14,7 @@
 # de receber atualizações em silêncio.
 
 # Stage 1: build das dependências
-FROM python:3.14-alpine@sha256:9e9fde4d32eedce0b661d9ab91e826b62dddf28e928c230ec55f1866cac66b01 AS builder
+FROM python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72 AS builder
 
 WORKDIR /app
 
@@ -22,7 +22,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --user -r requirements.txt
 
 # Stage 2: runtime
-FROM python:3.14-alpine@sha256:9e9fde4d32eedce0b661d9ab91e826b62dddf28e928c230ec55f1866cac66b01 AS runtime
+FROM python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72 AS runtime
 
 # Usuário sem privilégios. O container rodava como root, o que o Trivy sinaliza
 # como misconfiguração e amplia o impacto de qualquer execução indevida de código.
