@@ -1,4 +1,4 @@
-fastapi==0.142.3
+fastapi==0.143.0
 # starlette pinado explicitamente: o fastapi declara apenas starlette>=0.46.0, sem
 # limite superior. As versões <1.0.1 têm sete advisories, incluindo SSRF em
 # StaticFiles (PYSEC-2026-2281), que este projeto usa para servir a documentação.
@@ -9,5 +9,5 @@ exchange-calendars==4.13.2
 # Dependência direta (src/b3datetime/services/calendar_service.py, src/b3datetime/routers/dates.py).
 # exchange-calendars não impõe constraint, então o pin explícito é obrigatório.
 pandas==3.0.6
-pydantic==2.13.5
+pydantic==2.14.1
 pydantic-settings==2.15.0
