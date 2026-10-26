@@ -9,15 +9,15 @@ pytest-cov==7.1.0
 coverage[toml]==7.16.2
 httpx==0.28.1
 asgi-lifespan==2.1.0
-fakeredis==2.39.0
+fakeredis==2.40.0
 freezegun==1.5.5
 pytest-randomly==5.0.0
 # Validação das respostas E2E contra o JSON Schema 2020-12 do OpenAPI 3.1 servido.
 jsonschema==4.26.0
 # Testes baseados em propriedades (tests/property).
-hypothesis==6.168.5
+hypothesis==6.170.2
 # Fuzzing da API inteira a partir do contrato OpenAPI (tests/property/test_api_schemathesis.py).
-schemathesis==4.29.4
+schemathesis==4.32.1
 # Oráculo da Páscoa nos testes de propriedade (já vem com o pandas; declarado por ser importado direto).
 python-dateutil==2.9.0.post0
 # Leitura da árvore de sites exportada pelo ZAP (scripts/dast_resumo.py). Já vem com o
@@ -25,7 +25,7 @@ python-dateutil==2.9.0.post0
 PyYAML==6.0.3
 
 # --- qualidade ---
-ruff==0.16.10
+ruff==0.17.1
 # Contratos de arquitetura (dependências entre módulos) — [tool.importlinter] no pyproject.
 import-linter==2.15
 # Código morto: funções/atributos sem uso, dependências sem uso e fixtures órfãs.
@@ -45,4 +45,4 @@ types-PyYAML==6.0.12.20260906
 bandit[toml,sarif]==1.9.4
 pip-audit==2.10.1
 # Auditoria de segurança dos workflows do GitHub Actions.
-zizmor==1.30.1
+zizmor==1.31.1
