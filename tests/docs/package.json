@@ -7,7 +7,7 @@
     "node": ">=22"
   },
   "devDependencies": {
-    "agentic-mermaid": "0.4.1",
+    "agentic-mermaid": "0.5.5",
     "mermaid": "12.1.0"
   }
 }
